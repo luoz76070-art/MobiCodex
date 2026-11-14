@@ -1,65 +1,68 @@
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { AttentionHub } from "../attention/attentionHub.js";
 import type { LiveTurnController } from "../codex/liveTurnController.js";
-import { alternatives, channelOf, continuationEffort, continuationPrompt, modelChoices, quotaResetAt, readContinuation, type ModelChoice, type SwitchOptions } from "../codex/modelSwitch.js";
+import { alternatives, approvalPolicyForTurn, channelOf, modelChoices, quotaResetAt, readCatalog, sandboxPolicyForTurn, switchEffort, threadModelState, type ModelChoice, type SwitchOptions } from "../codex/modelSwitch.js";
 import type { CodexStore } from "../store/codexStore.js";
-import type { SubmissionRegistry } from "./submissions.js";
 
 const switchError = (code: string, statusCode: number) => Object.assign(new Error(code), { statusCode, code });
+type LiveSandbox = "read-only" | "workspace-write" | "danger-full-access";
 
-/** F6: offer the other channels when a Codex thread ran out of quota, and continue there on request. */
+/** Settings for the turn that moves a thread onto another model; everything but the model stays as it was. */
+export type PreparedSwitch = {
+  model: string; effort: string | null; channelLabel: string;
+  /** Desktop follower start-turn: explicit settings, because inherited settings ignore model and effort. */
+  desktop: { model: string; effort: string | null; sandboxPolicy: Record<string, unknown> | null; approvalPolicy: unknown };
+  /** Gateway app-server turn. */
+  live: { sandbox?: LiveSandbox; approvalPolicy?: "never" | "on-request" };
+};
+
+/**
+ * F6: offer the other channels when a Codex thread ran out of quota. The switch itself is an ordinary
+ * send on the same thread (desktop or gateway route) that names the model; `prepare` fills in the rest.
+ */
 export function createModelSwitchRoutes(context: {
-  liveTurns: Pick<LiveTurnController, "listModels" | "startTurn">; store: Pick<CodexStore, "getThreadSummary">;
-  submissions: SubmissionRegistry; owners: WeakMap<FastifyRequest, string>; attention: Pick<AttentionHub, "watch">;
+  liveTurns: Pick<LiveTurnController, "listModels">; store: Pick<CodexStore, "getThreadSummary">; codexHome: string;
   resetAt?: (model: string | null) => Promise<string | null>;
 }) {
-  const { liveTurns, store, submissions, owners, attention, resetAt = quotaResetAt } = context;
+  const { liveTurns, store, codexHome, resetAt = quotaResetAt } = context;
   let cached: { at: number; choices: ModelChoice[] } | null = null;
   async function choices() {
     if (cached && Date.now() - cached.at < 60_000) return cached.choices;
-    const list = modelChoices(await liveTurns.listModels());
+    const list = modelChoices(await liveTurns.listModels(), readCatalog(codexHome));
     cached = { at: Date.now(), choices: list };
     return list;
   }
-  async function source(threadId: string) {
+  async function threadState(threadId: string) {
     const thread = await store.getThreadSummary(threadId);
     if (!thread?.rolloutPath) throw switchError("codex_thread_not_found", 404);
-    return { thread, rolloutPath: thread.rolloutPath };
+    return threadModelState(thread.rolloutPath);
   }
+  const label = (all: ModelChoice[], model: string | null) => model ? all.find(choice => choice.slug === model)?.channelLabel ?? channelOf(model) : null;
+
+  async function prepare(threadId: string, model: string): Promise<PreparedSwitch> {
+    const all = await choices(), choice = all.find(item => item.slug === model);
+    if (!choice) throw switchError("codex_model_unknown", 400);
+    const state = await threadState(threadId);
+    const effort = switchEffort(choice, state.effort);
+    const sandboxPolicy = sandboxPolicyForTurn(state.sandboxPolicy);
+    const liveSandbox = typeof state.sandboxPolicy?.type === "string" && ["read-only", "workspace-write", "danger-full-access"].includes(state.sandboxPolicy.type)
+      ? state.sandboxPolicy.type as LiveSandbox : undefined;
+    const approval = approvalPolicyForTurn(state.approvalPolicy);
+    return { model, effort, channelLabel: choice.channelLabel,
+      desktop: { model, effort, sandboxPolicy, approvalPolicy: approval },
+      live: { sandbox: liveSandbox, approvalPolicy: approval === "never" ? "never" : "on-request" } };
+  }
+
   const params = z.object({ id: z.string().min(1).max(200) });
   return {
+    prepare,
     register(app: FastifyInstance) {
       app.get("/api/codex/models", async () => ({ models: await choices() }));
       app.get("/api/codex/threads/:id/switch-options", async (request): Promise<SwitchOptions> => {
-        const { rolloutPath } = await source(params.parse(request.params).id);
-        const [all, history] = await Promise.all([choices(), readContinuation(rolloutPath)]);
-        const current = history.model ? all.find(choice => choice.slug === history.model) : undefined;
-        return { model: history.model, channel: history.model ? channelOf(history.model) : null, channelLabel: current?.channelLabel ?? (history.model ? channelOf(history.model) : null),
-          resetAt: await resetAt(history.model).catch(() => null), alternatives: alternatives(all, history.model) };
-      });
-      app.post("/api/codex/threads/:id/continue", { bodyLimit: 64 * 1024 }, async request => {
-        const { id } = params.parse(request.params);
-        const body = z.object({
-          model: z.string().min(1).max(200), effort: z.string().max(20).nullable().optional(), message: z.string().max(20_000).optional(),
-          clientMessageId: z.string().uuid(), approvalPolicy: z.enum(["never", "on-request"]).optional(),
-          sandbox: z.enum(["read-only", "workspace-write", "danger-full-access"]).optional(),
-        }).strict().parse(request.body);
-        const owner = owners.get(request)!;
-        return submissions.execute(body.clientMessageId, { route: "codex-continue", threadId: id, owner, ...body }, async () => {
-          const all = await choices(), choice = all.find(item => item.slug === body.model);
-          if (!choice) throw switchError("codex_model_unknown", 400);
-          const { thread, rolloutPath } = await source(id);
-          const history = await readContinuation(rolloutPath);
-          const from = history.model ? all.find(item => item.slug === history.model)?.channelLabel ?? channelOf(history.model) : null;
-          const turn = await liveTurns.startTurn({
-            message: body.message?.trim() || continuationPrompt(from, history.omitted), cwd: thread.cwd,
-            model: choice.slug, effort: continuationEffort(choice, body.effort), inject: history.items,
-            name: `${thread.threadName || "Codex 任务"} · 换到${choice.channelLabel}`, approvalPolicy: body.approvalPolicy, sandbox: body.sandbox,
-          });
-          attention.watch(owner, { source: "live", threadId: turn.threadId, turnId: turn.turnId });
-          return { ...turn, continuedFrom: id, model: choice.slug, channelLabel: choice.channelLabel, carried: history.items.length, omitted: history.omitted };
-        });
+        const state = await threadState(params.parse(request.params).id);
+        const all = await choices(), { usable, blocked } = alternatives(all, state.model, state.contextTokens);
+        return { model: state.model, channel: state.model ? channelOf(state.model) : null, channelLabel: label(all, state.model),
+          resetAt: await resetAt(state.model).catch(() => null), alternatives: usable, blocked };
       });
     },
   };
