@@ -8,7 +8,8 @@ import { randomUUID } from 'node:crypto';
 import { createRelayServer } from '../dist/server/createRelayServer.js';
 import { codexReason } from '../dist/store/lastTurn.js';
 import { turnProgress } from '../dist/store/turnActivity.js';
-import { alternatives, continuationLimits, modelChoices, readContinuation } from '../dist/codex/modelSwitch.js';
+import { alternatives, approvalPolicyForTurn, modelChoices, needsPreviousModel, readCatalog, sandboxPolicyForTurn, switchEffort, threadModelState } from '../dist/codex/modelSwitch.js';
+import { DesktopNativeControl } from '../dist/desktop/desktopNativeControl.js';
 
 const catalog = { data: [
   ['gpt-6.1-sol', 'GPT-6.1-Sol', ['low', 'medium', 'high']], ['gpt-6-astra', 'GPT-6-Astra', ['low', 'medium', 'high']],
@@ -56,72 +57,129 @@ test('a rollout turn that gave up with an error is failed, not completed', () =>
   }
 });
 
-test('choices: channels from slugs and display names; the exhausted channel is left out and the same model elsewhere comes first', () => {
-  const choices = modelChoices(catalog);
+// A catalog like CC Switch writes it: one comp_hash shared by the channels, one model left on another hash.
+async function codexHome(t, hashes = {}) {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), 'switch-home-'));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const models = catalog.data.map(m => ({ slug: m.model, comp_hash: hashes[m.model] ?? 'cc-switch',
+    context_window: m.model.startsWith('ccs-cn/') ? 1_000_000 : 272_000, auto_compact_token_limit: m.model.startsWith('ccs-cn/') ? 900_000 : 244_800 }));
+  await fs.writeFile(path.join(home, 'catalog.json'), JSON.stringify({ models }));
+  await fs.writeFile(path.join(home, 'config.toml'), 'model_provider = "custom"\nmodel_catalog_json = "catalog.json"\n');
+  return home;
+}
+const sandbox = { type: 'workspace-write', writable_roots: ['/work/extra'], network_access: true, exclude_tmpdir_env_var: false, exclude_slash_tmp: false };
+const switchRollout = (id, model, tokens = 50_000) => [
+  line('session_meta', { id, cwd: '/work/project' }),
+  line('turn_context', { model: 'ccs-team/gpt-6.1-sol', effort: 'low', turn_id: 't0', approval_policy: 'on-request', sandbox_policy: { type: 'read-only' } }),
+  line('response_item', message('user', '修复登录页的报错')),
+  line('turn_context', { model, effort: 'high', turn_id: 't1', approval_policy: 'never', sandbox_policy: sandbox }),
+  line('event_msg', { type: 'token_count', info: { last_token_usage: { input_tokens: tokens } } }),
+  line('event_msg', { type: 'task_complete', turn_id: 't1', error: { message: 'exceeded retry limit, last status: 429 Too Many Requests' } }),
+].join('\n') + '\n';
+
+test('choices carry comp_hash from the configured catalog; only models Codex can reach without the exhausted one are offered', async t => {
+  const home = await codexHome(t, { 'gpt-6.1-sol': '3000' });
+  const choices = modelChoices(catalog, readCatalog(home));
   assert.ok(!choices.some(c => /image|hidden/.test(c.slug)), 'image and hidden models are not offered');
-  assert.deepEqual(choices.find(c => c.slug === 'ccs-relay/gpt-6.1-sol'), { slug: 'ccs-relay/gpt-6.1-sol', displayName: 'GPT-6.1-Sol（中转站）', channel: 'ccs-relay', channelLabel: '中转站', efforts: ['low', 'medium'], defaultEffort: 'medium' });
-  assert.equal(choices.find(c => c.slug === 'gpt-6.1-sol').channelLabel, '默认渠道');
-  const offered = alternatives(choices, 'ccs-team/gpt-6-astra').map(c => c.slug);
-  assert.ok(!offered.some(slug => slug.startsWith('ccs-team/')));
-  assert.equal(offered[0], 'gpt-6-astra');
-  assert.deepEqual(alternatives(choices, 'gpt-6.1-sol').map(c => c.slug).slice(0, 3), ['ccs-team/gpt-6.1-sol', 'ccs-relay/gpt-6.1-sol', 'ccs-cn/deepseek-v4.1-flash'], 'same model first, then catalog order');
+  assert.equal(choices.find(c => c.slug === 'ccs-relay/gpt-6.1-sol').channelLabel, '中转站');
+  assert.equal(choices.find(c => c.slug === 'gpt-6.1-sol').compHash, '3000');
+  const { usable, blocked } = alternatives(choices, 'ccs-team/gpt-6-astra');
+  assert.ok(!usable.some(c => c.slug.startsWith('ccs-team/')), 'the exhausted channel is left out');
+  assert.ok(!usable.some(c => c.slug === 'gpt-6.1-sol'), 'another comp_hash means Codex would compact with the exhausted model first');
+  assert.equal(blocked, 1);
+  assert.equal(usable[0].slug, 'gpt-6-astra', 'the same model on another channel comes first');
+  assert.deepEqual(modelChoices(catalog, readCatalog('/nonexistent')).filter(c => c.compHash).length, 0, 'no catalog: nothing known, nothing blocked');
 });
 
-test('continuation history: visible messages and tool calls only; long threads keep their latest part without a dangling output', async t => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'continuation-'));
+test('a smaller window blocks the switch only when the context is already past its limit', () => {
+  const big = { compHash: 'cc-switch', contextWindow: 1_000_000 }, small = { slug: 'x', compHash: 'cc-switch', contextWindow: 272_000, compactLimit: 244_800 };
+  assert.equal(needsPreviousModel(big, small, 100_000), false);
+  assert.equal(needsPreviousModel(big, small, 250_000), true);
+  assert.equal(needsPreviousModel({ compHash: null, contextWindow: null }, small, 900_000), false);
+  assert.equal(needsPreviousModel({ compHash: '3000', contextWindow: 272_000 }, small, 1), true);
+});
+
+test('thread state: last model, effort, permissions and context size; converted for a turn that keeps them', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'switch-state-'));
   t.after(() => fs.rm(dir, { recursive: true, force: true }));
   const file = path.join(dir, 'rollout.jsonl');
-  await fs.writeFile(file, rollout('a', 'ccs-team/gpt-6-astra'));
-  const history = await readContinuation(file);
-  assert.equal(history.model, 'ccs-team/gpt-6-astra');
-  assert.deepEqual(history.items.map(i => i.type), ['message', 'custom_tool_call', 'custom_tool_call_output', 'message']);
-  assert.ok(!JSON.stringify(history.items).includes('secret-from-old-account'));
-  assert.ok(!JSON.stringify(history.items).includes('environment_context'));
-  const saved = continuationLimits.items;
-  continuationLimits.items = 2;
-  try {
-    const cut = await readContinuation(file);
-    assert.deepEqual(cut.items.map(i => i.type), ['message'], 'a tool output whose call was cut off is dropped too');
-    assert.equal(cut.omitted, 3);
-  } finally { continuationLimits.items = saved; }
+  await fs.writeFile(file, switchRollout('a', 'ccs-team/gpt-6-astra', 163_000));
+  const state = await threadModelState(file);
+  assert.deepEqual({ ...state, sandboxPolicy: state.sandboxPolicy?.type }, { model: 'ccs-team/gpt-6-astra', effort: 'high', approvalPolicy: 'never', sandboxPolicy: 'workspace-write', contextTokens: 163_000 });
+  assert.deepEqual(sandboxPolicyForTurn(state.sandboxPolicy), { type: 'workspaceWrite', writableRoots: ['/work/extra'], networkAccess: true, excludeTmpdirEnvVar: false, excludeSlashTmp: false });
+  assert.deepEqual(sandboxPolicyForTurn({ type: 'read-only' }), { type: 'readOnly', networkAccess: false });
+  assert.deepEqual(sandboxPolicyForTurn({ type: 'danger-full-access' }), { type: 'dangerFullAccess' });
+  assert.equal(sandboxPolicyForTurn({ type: 'something-new' }), null);
+  assert.equal(approvalPolicyForTurn('never'), 'never');
+  assert.equal(approvalPolicyForTurn('on-failure'), 'on-request', 'unknown approval asks');
+  const choice = { efforts: ['low', 'medium', 'high'], defaultEffort: 'high' };
+  assert.equal(switchEffort(choice, 'high'), 'high', 'the thread keeps its effort');
+  assert.equal(switchEffort(choice, 'xhigh'), 'medium');
+  assert.equal(switchEffort({ efforts: ['none', 'high'], defaultEffort: 'high' }, 'xhigh'), 'high');
 });
 
-test('routes: switch options for an exhausted thread; continue starts a seeded thread once and is watched for notifications', async t => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'model-switch-'));
-  const threadId = randomUUID(), file = path.join(root, 'rollout.jsonl'), starts = [];
-  await fs.writeFile(file, rollout(threadId, 'ccs-team/gpt-6-astra'));
+test('desktop switch turn names the model and states every setting instead of inheriting them', async () => {
+  const state = { cwd: '/work/project', turnHistory: { kind: 'canonical', history: { entitiesByKey: { a: { turnId: 'old', status: 'failed', params: {}, items: [] } }, islands: [{ entries: [{ value: 'a' }] }] } } };
+  const sent = [];
+  const control = new DesktopNativeControl({ read: () => ({ epoch: 'e1', owner: 'desk', state }), changed() {}, wait: async () => {},
+    request: async (method, params) => { sent.push([method, params]); return { resultType: 'success', method, handledByClientId: 'desk', result: { turn: { id: 'new' } } }; } });
+  const settings = { model: 'ccs-cn/kimi-k3.1-pro', effort: 'high', sandboxPolicy: { type: 'readOnly', networkAccess: false }, approvalPolicy: 'never' };
+  await control.send({ threadId: 'th', controlToken: 'e1', expectedTurnId: null, clientMessageId: randomUUID(), message: '接着做', mode: 'start', turnSettings: settings });
+  const [[method, params]] = sent;
+  assert.equal(method, 'thread-follower-start-turn');
+  assert.equal(params.turnStart.context.inheritThreadSettings, false);
+  assert.deepEqual([params.turnStart.request.model, params.turnStart.request.effort, params.turnStart.request.sandboxPolicy, params.turnStart.request.approvalPolicy],
+    [settings.model, 'high', settings.sandboxPolicy, 'never']);
+  await control.send({ threadId: 'th2', controlToken: 'e1', expectedTurnId: null, clientMessageId: randomUUID(), message: '普通消息', mode: 'start' });
+  assert.equal(sent[1][1].turnStart.context.inheritThreadSettings, true, 'ordinary sends are unchanged');
+  assert.equal(sent[1][1].turnStart.request.model, undefined);
+});
+
+test('routes: switch options, and a switch is an ordinary send on the same thread (desktop or gateway) that names the model', async t => {
+  const home = await codexHome(t, { 'gpt-6.1-sol': '3000' });
+  const threadId = randomUUID(), file = path.join(home, 'rollout.jsonl'), starts = [], desktopSends = [];
+  await fs.writeFile(file, switchRollout(threadId, 'ccs-team/gpt-6-astra'));
+  const bareId = randomUUID(), bare = path.join(home, 'bare.jsonl');
+  await fs.writeFile(bare, [line('session_meta', { id: bareId, cwd: '/work/project' }), line('turn_context', { model: 'ccs-team/gpt-6-astra', effort: 'high', turn_id: 't1' })].join('\n') + '\n');
+  const turn = id => ({ threadId: id, turnId: 'next-turn', status: 'inProgress', messages: [], events: [], approvals: [], userInputs: [], thread: null, error: null, updatedAt: new Date().toISOString(), messageCount: 0, eventCount: 0 });
   const liveTurns = Object.assign(new EventEmitter(), { stop: async () => {}, listModels: async () => catalog, getTurn: () => null,
-    async startTurn(params) { starts.push(params); return { threadId: 'new-thread', turnId: 'new-turn', status: 'inProgress', messages: [], events: [], approvals: [], userInputs: [], thread: null, error: null, updatedAt: new Date().toISOString(), messageCount: 0, eventCount: 0 }; } });
-  const app = await createRelayServer({ logger: false, config: { host: '127.0.0.1', port: 0, token: 'admin', codexHome: path.join(root, 'empty'), defaultCwd: root }, services: {
-    store: { close() {}, getThreadSummary: async id => id === threadId ? { id, threadName: '修复登录页', cwd: '/work/project', source: 'vscode', originator: 'desktop', rolloutPath: file, updatedAt: '' } : null },
+    async startTurn(params) { starts.push(params); return turn(params.threadId ?? 'fresh'); } });
+  const app = await createRelayServer({ logger: false, config: { host: '127.0.0.1', port: 0, token: 'admin', codexHome: home, defaultCwd: home }, services: {
+    store: { close() {}, getThreadSummary: async id => id === threadId || id === bareId ? { id, threadName: '修复登录页', cwd: '/work/project', source: 'vscode', originator: 'Codex Desktop', rolloutPath: id === bareId ? bare : file, updatedAt: '' } : null },
     live: { stop: async () => {} }, liveTurns, quotaResetAt: async model => model === 'ccs-team/gpt-6-astra' ? '2026-11-21T03:05:00.000Z' : null,
-    desktopControl: { stop: async () => {}, messageQueue: { stop: async () => {}, revoke: async () => {} }, onStreamSnapshot: () => () => {}, followThread: () => () => {}, getStreamSnapshot: () => null },
+    desktopControl: { stop: async () => {}, messageQueue: { stop: async () => {}, revoke: async () => {} }, onStreamSnapshot: () => () => {}, followThread: () => () => {}, getStreamSnapshot: () => null,
+      async sendMessage(params) { desktopSends.push(params); return { ok: true, action: 'start-turn', delivery: 'confirmed' }; } },
     agentGateway: { stop: async () => {}, sessions: () => ({}), snapshot: () => [] } } });
-  t.after(async () => { await app.close(); await fs.rm(root, { recursive: true, force: true }); });
+  t.after(() => app.close());
   const request = (method, url, payload) => app.inject({ method, url, payload, headers: { authorization: 'Bearer admin' } });
 
   const options = (await request('GET', `/api/codex/threads/${threadId}/switch-options`)).json();
-  assert.equal(options.model, 'ccs-team/gpt-6-astra');
-  assert.equal(options.channelLabel, '团队账号');
-  assert.equal(options.resetAt, '2026-11-21T03:05:00.000Z');
+  assert.deepEqual([options.model, options.channelLabel, options.resetAt, options.blocked], ['ccs-team/gpt-6-astra', '团队账号', '2026-11-21T03:05:00.000Z', 1]);
   assert.equal(options.alternatives[0].slug, 'gpt-6-astra');
   assert.equal((await request('GET', `/api/codex/threads/${randomUUID()}/switch-options`)).statusCode, 404);
 
-  assert.equal((await request('POST', `/api/codex/threads/${threadId}/continue`, { model: 'no-such-model', clientMessageId: randomUUID() })).statusCode, 400);
-  const body = { model: 'ccs-cn/kimi-k3.1-pro', clientMessageId: randomUUID(), approvalPolicy: 'on-request', sandbox: 'workspace-write' };
-  const first = await request('POST', `/api/codex/threads/${threadId}/continue`, body);
-  assert.equal(first.statusCode, 200, first.body);
-  assert.equal((await request('POST', `/api/codex/threads/${threadId}/continue`, body)).statusCode, 200);
-  assert.equal(starts.length, 1, 'a retried continue does not start a second thread');
-  const [start] = starts;
-  assert.equal(start.model, 'ccs-cn/kimi-k3.1-pro');
-  assert.equal(start.effort, 'max', 'no medium offered: the model default');
-  assert.equal(start.cwd, '/work/project');
-  assert.equal(start.inject.length, 4);
-  assert.match(start.message, /团队账号.*额度用完/);
-  assert.equal(start.name, '修复登录页 · 换到国产模型');
-  assert.equal(start.approvalPolicy, 'on-request');
-  assert.deepEqual({ continuedFrom: first.json().continuedFrom, channelLabel: first.json().channelLabel }, { continuedFrom: threadId, channelLabel: '国产模型' });
-  const watched = (await request('GET', '/api/attention')).json().items;
-  assert.deepEqual(watched.map(i => i.key), ['live:new-thread']);
+  // Desktop: the turn goes through the desktop with the thread's own permissions and effort.
+  const desktopBody = { message: '接着做', clientMessageId: randomUUID(), mode: 'start', controlToken: randomUUID(), expectedTurnId: null, model: 'ccs-cn/kimi-k3.1-pro' };
+  const sent = await request('POST', `/api/desktop/control/threads/${threadId}/messages`, desktopBody);
+  assert.equal(sent.statusCode, 200, sent.body);
+  assert.equal((await request('POST', `/api/desktop/control/threads/${threadId}/messages`, desktopBody)).statusCode, 200);
+  assert.equal(desktopSends.length, 1, 'a retried switch is not sent twice');
+  assert.deepEqual(desktopSends[0].turnSettings, { model: 'ccs-cn/kimi-k3.1-pro', effort: 'high', approvalPolicy: 'never',
+    sandboxPolicy: { type: 'workspaceWrite', writableRoots: ['/work/extra'], networkAccess: true, excludeTmpdirEnvVar: false, excludeSlashTmp: false } });
+  assert.equal((await request('POST', `/api/desktop/control/threads/${threadId}/messages`, { ...desktopBody, clientMessageId: randomUUID(), mode: 'steer' })).statusCode, 400, 'a switch never steers');
+  assert.equal((await request('POST', `/api/desktop/control/threads/${threadId}/messages`, { ...desktopBody, clientMessageId: randomUUID(), model: 'no-such-model' })).statusCode, 400);
+  const plain = await request('POST', `/api/desktop/control/threads/${threadId}/messages`, { ...desktopBody, clientMessageId: randomUUID(), model: undefined });
+  assert.equal(plain.statusCode, 200);
+  assert.equal(desktopSends.at(-1).turnSettings, undefined, 'ordinary desktop sends carry no settings');
+  const unknown = await request('POST', `/api/desktop/control/threads/${bareId}/messages`, { ...desktopBody, clientMessageId: randomUUID() });
+  assert.equal(unknown.statusCode, 409, 'unknown permissions would fall back to the desktop default (full access)');
+  assert.equal(desktopSends.length, 2);
+
+  // Gateway: the same thread is resumed on the new model, keeping its permissions over the phone's defaults.
+  const live = await request('POST', '/api/live/turns', { threadId, message: '接着做', clientMessageId: randomUUID(), approvalPolicy: 'on-request', sandbox: 'read-only', model: 'gpt-6-astra' });
+  assert.equal(live.statusCode, 200, live.body);
+  assert.deepEqual([starts[0].threadId, starts[0].model, starts[0].effort, starts[0].approvalPolicy, starts[0].sandbox], [threadId, 'gpt-6-astra', 'high', 'never', 'workspace-write']);
+  assert.equal(live.json().threadId, threadId, 'no new thread');
+  assert.equal((await request('POST', '/api/live/turns', { message: 'x', clientMessageId: randomUUID(), model: 'gpt-6-astra' })).statusCode, 400, 'a switch needs a thread');
+  assert.deepEqual((await request('GET', '/api/attention')).json().items.map(i => i.key).sort(), [`desktop:${threadId}`, `live:${threadId}`]);
 });

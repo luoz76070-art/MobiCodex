@@ -153,13 +153,10 @@ export class LiveTurnController extends EventEmitter {
     cwd?: string | null;
     approvalPolicy?: "never" | "on-request";
     sandbox?: "read-only" | "workspace-write" | "danger-full-access";
-    /** F6: a new thread on this model, seeded with another thread's visible history. */
+    /** F6: run this turn (and the thread from now on) on another model. */
     model?: string;
     effort?: string | null;
-    inject?: unknown[];
-    name?: string;
   }): Promise<LiveTurnSnapshot> {
-    if (params.inject && params.threadId) throw Object.assign(new Error("History can only seed a new thread"), { statusCode: 400 });
     this.pruneTurns();
     if (this.activeTurnCount() + this.reservedStarts >= 32) throw Object.assign(new Error("Active turn limit reached"), { statusCode: 503 });
     this.reservedStarts++;
@@ -188,12 +185,11 @@ export class LiveTurnController extends EventEmitter {
         persistExtendedHistory: true,
       });
       threadId = started.thread.id;
-      thread = toSummary(started.thread, params.name ?? params.message);
-      if (params.inject?.length) await client.request("thread/inject_items", { threadId, items: params.inject });
+      thread = toSummary(started.thread, params.message);
       await client
         .request("thread/name/set", {
           threadId,
-          name: params.name ?? `手机: ${firstLine(params.message) || "新线程"}`,
+          name: `手机: ${firstLine(params.message) || "新线程"}`,
         })
         .catch(() => undefined);
     }

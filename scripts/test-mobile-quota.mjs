@@ -22,7 +22,7 @@ const service = await fs.readFile('apps/mobile/android/app/src/main/java/com/mob
 const turn = (status, code) => ({ turnId: 't9', status, reason: { code, message: 'x' }, endedAt: '2026-11-14T00:00:00Z', timeSource: 'provider' });
 const catalog = { data: [['gpt-6-astra', 'GPT-6-Astra'], ['ccs-team/gpt-6-astra', 'GPT-6-Astra（团队账号）'], ['ccs-cn/kimi-k3.1-pro', 'kimi-k3.1-pro（国产模型）'], ['ccs-cn/glm-5.3', 'glm-5.3（国产模型）'], ['ccs-relay/gpt-6.1-sol', 'GPT-6.1-Sol（中转站）']]
   .map(([model, displayName]) => ({ model, displayName, hidden: false, defaultReasoningEffort: 'high', supportedReasoningEfforts: [{ reasoningEffort: 'medium' }, { reasoningEffort: 'high' }] })) };
-const options = { model: 'ccs-team/gpt-6-astra', channel: 'ccs-team', channelLabel: '团队账号', resetAt: '2026-11-21T03:05:00Z', alternatives: m.alternatives(m.modelChoices(catalog), 'ccs-team/gpt-6-astra') };
+const options = { model: 'ccs-team/gpt-6-astra', channel: 'ccs-team', channelLabel: '团队账号', resetAt: '2026-11-21T03:05:00Z', alternatives: m.alternatives(m.modelChoices(catalog), 'ccs-team/gpt-6-astra').usable, blocked: 0 };
 
 test('the card shows only for an ended turn that stopped on quota', () => {
   assert.equal(m.needsQuotaSwitch(turn('failed', 'rate_limited'), false), true);
@@ -60,7 +60,9 @@ test('card: a channel picker and the two choices; no channels left means only wa
   assert.match(html, /<optgroup label="默认渠道"><option value="gpt-6-astra" selected="">GPT-6-Astra（默认渠道）<\/option><\/optgroup><optgroup label="国产模型">/);
   assert.match(html, /换到这个模型接着做/);
   assert.match(html, /等恢复再说/);
-  assert.match(html, /原任务保留不动/);
+  assert.match(html, /就在这个线程里换，不开新任务/);
+  assert.doesNotMatch(html, /没有列出/);
+  assert.match(m.renderToStaticMarkup(m.createElement(m.QuotaSwitchCard, { options: { ...options, blocked: 2 }, loading: false, busy: false, error: '', onContinue() {}, onDismiss() {} })), /另有 2 个模型要先用原渠道整理上下文/);
   const none = m.renderToStaticMarkup(m.createElement(m.QuotaSwitchCard, { options: { ...options, alternatives: [] }, loading: false, busy: false, error: '', onContinue() {}, onDismiss() {} }));
   assert.doesNotMatch(none, /换到这个模型接着做|<select/);
   assert.match(none, /只能等额度恢复/);
@@ -78,17 +80,34 @@ test('"wait" hides the card for that turn only and the list stays short', () => 
   assert.equal(m.quotaDismissed('thread-a', 't1'), false, 'the oldest entries go first');
 });
 
-test('continuation notice explains where it went and what was left out', () => {
-  assert.equal(m.continuationNotice('修复登录页', { continuedFrom: 'a', model: 'm', channelLabel: '国产模型', carried: 12, omitted: 0 }), '已换到「国产模型」接着做「修复登录页」，带上了之前的 12 条记录。原任务保留不动。');
-  assert.match(m.continuationNotice('x', { continuedFrom: 'a', model: 'm', channelLabel: '国产模型', carried: 400, omitted: 30 }), /较早的 30 条没有带上/);
+test('switch prompts: the thread carries the context, the message only says what changed', () => {
+  assert.equal(m.switchPrompt('quota', '团队账号', '国产模型'), '（换渠道接着做）上一轮在「团队账号」因为额度用完中断了，现在换到「国产模型」。请先看一下当前进度（必要时检查工作区里的实际改动），然后接着把没做完的部分做完。');
+  assert.match(m.switchPrompt('return', null, '团队账号'), /^（换回原渠道）现在换回「团队账号」。.*只回复“已换回”/);
 });
 
-test('wiring: continue uses the run policy and a retry-safe message id; notifications point at switching', () => {
-  const body = app.slice(app.indexOf('async function continueOnModel'), app.indexOf('async function resolveSendRoute'));
-  assert.match(body, /\/api\/codex\/threads\/\$\{encodeURIComponent\(source\.id\)\}\/continue/);
-  assert.match(body, /approvalPolicy, sandbox: sandboxMode/);
-  assert.match(body, /previous\?\.key === state\.key && previous\.model === model \? previous/);
+test('stand-in records: notice with the reset time, kept per thread, the newest few only', () => {
+  const record = { homeModel: 'ccs-team/gpt-6-astra', homeLabel: '团队账号', toModel: 'ccs-cn/kimi-k3.1-pro', toLabel: '国产模型', resetAt: '2026-11-21T03:05:00Z', at: '2026-11-14T10:00:00Z' };
+  assert.equal(m.standInNotice(record, Date.parse('2026-11-14T10:00:00Z')), '正在用「国产模型」顶替「团队账号」，预计北京时间 11-21 11:05 恢复。');
+  assert.equal(m.standInNotice(record, Date.parse('2026-11-22T00:00:00Z')), '正在用「国产模型」顶替「团队账号」，原渠道应该已经恢复。');
+  assert.equal(m.standInNotice({ ...record, resetAt: null }), '正在用「国产模型」顶替「团队账号」。');
+  let records = m.saveSwitchRecord({}, 'thread-a', record);
+  assert.deepEqual(m.loadSwitchRecords(), { 'thread-a': record });
+  records = m.saveSwitchRecord(records, 'thread-a', null);
+  assert.deepEqual(m.loadSwitchRecords(), {});
+  for (let i = 0; i < 60; i++) records = m.saveSwitchRecord(records, `t${i}`, { ...record, at: new Date(Date.UTC(2026, 10, 14, 0, i)).toISOString() });
+  assert.equal(Object.keys(m.loadSwitchRecords()).length, 50);
+  assert.ok(!('t0' in m.loadSwitchRecords()), 'the oldest go first');
+});
+
+test('wiring: a switch is a send on the same thread with the model named; notifications point at switching', () => {
+  const body = app.slice(app.indexOf('async function switchChannel'), app.indexOf('async function resolveSendRoute'));
+  assert.match(body, /sendDesktopMessage\(threadKey, message, "", \[\], attempt\.clientMessageId, "start", control\.guard, true, model\)/, 'desktop threads: through the desktop, same guard as a send');
+  assert.match(body, /\/api\/live\/turns"\), token,\s*\{ threadId: threadKey, message, clientMessageId: attempt\.clientMessageId, cwd: source\.cwd, approvalPolicy, sandbox: sandboxMode, model \}/, 'otherwise the gateway resumes this thread');
+  assert.doesNotMatch(body, /setSelected|\/continue/, 'no new thread');
+  assert.match(body, /channelAttemptRef\.current\?\.key === key \? channelAttemptRef\.current/, 'retry-safe message id');
   assert.match(body, /attentionAfterSend\(\)/);
+  assert.match(app, /\.\.\.\(switchModel \? \{ model: switchModel \} : \{\}\)/);
+  assert.match(app, /switchChannel\(switchRecords\[selected\.id!\]\.homeModel, "return"\)/, 'the stand-in notice switches back');
   assert.match(app, /switch-options/);
   assert.match(app, /lastTurnError !== activeRuntime\.lastTurn\?\.reason\.message && !\(quotaKey && quotaSwitch\?\.key === quotaKey/, 'the raw upstream error is not repeated under the card');
   assert.match(service, /"rate_limited"\.equals\(reason\.optString\("code"\)\) && !key\.startsWith\("agent:"\)/);

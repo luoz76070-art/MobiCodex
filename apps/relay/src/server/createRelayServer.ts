@@ -78,7 +78,7 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
   const readImage = createProjectImageReader();
   const attention = new AttentionHub({ desktop: desktopControl, liveTurns, gateway: agentGateway, codex: store });
   const attentionRoutes = createAttentionRoutes({ hub: attention, owners, devices, streams, deviceStreams });
-  const modelSwitchRoutes = createModelSwitchRoutes({ liveTurns, store, submissions, owners, attention, resetAt: options.services?.quotaResetAt });
+  const modelSwitchRoutes = createModelSwitchRoutes({ liveTurns, store, codexHome: config.codexHome, resetAt: options.services?.quotaResetAt });
   const agentSessionRoutes = createAgentSessionRoutes({ onMessage: (owner, agentId, sessionId) => attention.watch(owner, { source: "agent", agentId, sessionId }), gateway: agentGateway, owners, devices, streams, deviceStreams, submissions, readImage });
   const captures = new CaptureAssetStore(config.defaultCwd);
   const workItemRoutes = createWorkItemRoutes({ retentionDays: config.retentionDays, root: config.defaultCwd, captures, owners, devices, streams, deviceStreams, openHandoff: openHandoffTarget({ gateway: agentGateway, desktop: desktopControl, codex: store }) });
@@ -275,11 +275,16 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
         cwd: z.string().min(1).nullable().optional(),
         approvalPolicy: z.enum(["never", "on-request"]).optional(),
         sandbox: z.enum(["read-only", "workspace-write", "danger-full-access"]).optional(),
+        /** F6: continue this thread on another model (channel); the thread keeps its own permissions. */
+        model: z.string().min(1).max(200).optional(),
       })
       .parse(request.body);
+    if (body.model && !body.threadId) throw Object.assign(new Error("A model switch needs a thread"), { statusCode: 400, code: "codex_switch_needs_thread" });
     const owner = owners.get(request)!;
     return submissions.execute(body.clientMessageId, { route: "live-turn", ...body }, async () => {
-      const turn = await liveTurns.startTurn(body);
+      const prepared = body.model && body.threadId ? await modelSwitchRoutes.prepare(body.threadId, body.model) : null;
+      const turn = await liveTurns.startTurn(prepared ? { ...body, model: prepared.model, effort: prepared.effort,
+        approvalPolicy: prepared.live.approvalPolicy ?? body.approvalPolicy, sandbox: prepared.live.sandbox ?? body.sandbox } : body);
       attention.watch(owner, { source: "live", threadId: turn.threadId, turnId: turn.turnId });
       return turn;
     });
@@ -577,14 +582,21 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
         mode: z.enum(["auto", "start", "steer", "queue"]).optional(),
         controlToken: z.string().uuid().optional(),
         expectedTurnId: z.string().min(1).max(300).nullable().optional(),
+        /** F6: start this turn on another model (channel); only for a new turn, never a steer or queue. */
+        model: z.string().min(1).max(200).optional(),
       })
       .parse(request.body);
+    if (body.model && body.mode !== "start") throw Object.assign(new Error("A model switch starts a new turn"), { statusCode: 400, code: "codex_switch_needs_start" });
     const owner = owners.get(request)!;
     const fingerprint = body.mode === "queue" ? { route: "desktop-queue", threadId: params.id, message: body.message, owner } : { route: "desktop-message", threadId: params.id, ...body, owner };
-    return submissions.execute(body.clientMessageId, fingerprint, () => {
+    return submissions.execute(body.clientMessageId, fingerprint, async () => {
+      const prepared = body.model ? await modelSwitchRoutes.prepare(params.id, body.model) : null;
+      // Not inheriting means the desktop's defaults (full access) unless the thread's own permissions are known.
+      if (prepared && !prepared.desktop.sandboxPolicy) throw Object.assign(new Error("The thread's permissions are unknown"), { statusCode: 409, code: "codex_switch_permissions_unknown" });
       // F1: watch before sending, so the turn this starts is the first one reported.
       attention.watch(owner, { source: "desktop", threadId: params.id });
       return desktopControl.sendMessage({
+        ...(prepared ? { turnSettings: prepared.desktop } : {}),
         threadId: params.id,
         message: body.message,
         cwd: body.cwd,
