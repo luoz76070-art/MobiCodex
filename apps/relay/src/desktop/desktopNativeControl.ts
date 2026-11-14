@@ -14,6 +14,8 @@ export type DesktopControlCapability = {
 };
 export type NativeThreadView = { epoch: string; owner: string; state: Record<string, unknown> };
 export type NativeControlInput = { threadId: string; controlToken?: string; expectedTurnId?: string | null; clientMessageId?: string };
+/** F6: a turn on another model. Inherited thread settings ignore model and effort, so everything is explicit. */
+export type DesktopTurnSettings = { model: string; effort: string | null; sandboxPolicy: Record<string, unknown> | null; approvalPolicy: unknown };
 export type NativeControlOutcome = {
   ok: boolean;
   action: "start-turn" | "steer-turn" | "interrupt-turn";
@@ -50,18 +52,22 @@ export class DesktopNativeControl {
     return { transport, token: view?.epoch ?? null, activeTurnId: turn.id, canSend: ready, canInterrupt: ready && turn.id !== null, submission: this.receipts.get(threadId) ?? null };
   }
 
-  async send(input: NativeControlInput & { message: string; mode?: "auto" | "start" | "steer" }): Promise<NativeControlOutcome> {
+  async send(input: NativeControlInput & { message: string; mode?: "auto" | "start" | "steer"; turnSettings?: DesktopTurnSettings }): Promise<NativeControlOutcome> {
     const view = this.validate(input);
     const turn = currentTurn(view.state);
     const action = turn.id ? "steer-turn" : "start-turn";
     if ((input.mode === "start" && turn.id) || (input.mode === "steer" && !turn.id)) throw interactionError("desktop_turn_changed");
+    if (input.turnSettings && turn.id) throw interactionError("desktop_turn_changed");
+    const settings = input.turnSettings;
     const messageId = input.clientMessageId!;
     const cwd = typeof view.state.cwd === "string" ? view.state.cwd : null;
     const params = action === "start-turn" ? {
       conversationId: input.threadId,
       turnStart: {
-        request: { threadId: input.threadId, input: desktopTextInput(input.message), clientUserMessageId: messageId },
-        context: { inheritThreadSettings: true, restoreMessage: desktopRestoreMessage(cwd), attachments: [], commentAttachments: [] },
+        request: { threadId: input.threadId, input: desktopTextInput(input.message), clientUserMessageId: messageId,
+          ...(settings ? { model: settings.model, ...(settings.effort ? { effort: settings.effort } : {}),
+            ...(settings.sandboxPolicy ? { sandboxPolicy: settings.sandboxPolicy } : {}), approvalPolicy: settings.approvalPolicy } : {}) },
+        context: { inheritThreadSettings: !settings, restoreMessage: desktopRestoreMessage(cwd), attachments: [], commentAttachments: [] },
       },
     } : {
       conversationId: input.threadId, clientUserMessageId: messageId, input: desktopTextInput(input.message),
