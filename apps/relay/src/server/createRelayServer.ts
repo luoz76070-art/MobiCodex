@@ -25,6 +25,7 @@ import { createAgentGateway, type AgentGateway } from "../agents/agentGateway.js
 import type { GatewayRuntimeStatus } from "../gateway/managedGateway.js";
 import { createAgentSessionRoutes } from "./agentSessionRoutes.js";
 import { createAttentionRoutes } from "./attentionRoutes.js";
+import { createModelSwitchRoutes } from "./modelSwitchRoutes.js";
 import { AttentionHub } from "../attention/attentionHub.js";
 import { authorizeClaudeBridge, registerClaudeBridgeRoutes } from "./claudeBridgeRoutes.js";
 import { claudeConfigSchema } from "../agents/claudeProtocol.js";
@@ -45,6 +46,8 @@ export type RelayServerOptions = {
     uploads: UploadStore;
     agentGateway: AgentGateway;
     voice: VoiceService;
+    /** F6 tests: stand-in for reading the exhausted channel's reset time. */
+    quotaResetAt: (model: string | null) => Promise<string | null>;
   }>;
 };
 
@@ -75,6 +78,7 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
   const readImage = createProjectImageReader();
   const attention = new AttentionHub({ desktop: desktopControl, liveTurns, gateway: agentGateway, codex: store });
   const attentionRoutes = createAttentionRoutes({ hub: attention, owners, devices, streams, deviceStreams });
+  const modelSwitchRoutes = createModelSwitchRoutes({ liveTurns, store, submissions, owners, attention, resetAt: options.services?.quotaResetAt });
   const agentSessionRoutes = createAgentSessionRoutes({ onMessage: (owner, agentId, sessionId) => attention.watch(owner, { source: "agent", agentId, sessionId }), gateway: agentGateway, owners, devices, streams, deviceStreams, submissions, readImage });
   const captures = new CaptureAssetStore(config.defaultCwd);
   const workItemRoutes = createWorkItemRoutes({ retentionDays: config.retentionDays, root: config.defaultCwd, captures, owners, devices, streams, deviceStreams, openHandoff: openHandoffTarget({ gateway: agentGateway, desktop: desktopControl, codex: store }) });
@@ -199,6 +203,7 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
   });
   agentSessionRoutes.register(app);
   attentionRoutes.register(app);
+  modelSwitchRoutes.register(app);
   workItemRoutes.register(app);
 
   app.get("/health", async () => ({

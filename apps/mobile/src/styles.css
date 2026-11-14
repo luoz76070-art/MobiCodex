@@ -2532,3 +2532,8 @@ button.workspace-switch:active, button.workspace-switch:focus-visible { backgrou
 .skeleton-messages .skeleton-bubble { justify-self: end; width: 58%; height: 44px; border-radius: var(--radius-16); }
 .skeleton-messages .skeleton-line { width: 88%; }
 .skeleton-messages .skeleton-line.short { width: 52%; }
+
+/* F6: continue an exhausted Codex task on another channel. */
+.quota-card { border-color: color-mix(in srgb, var(--warning) 40%, transparent); }
+.quota-choice { display: flex; align-items: center; gap: var(--space-8); font-size: var(--font-size-12); color: var(--muted); }
+.quota-choice select { flex: 1; min-width: 0; min-height: 44px; padding: 0 var(--space-8); border: 1px solid var(--hairline); border-radius: var(--radius-8); background: var(--panel-soft); color: var(--text); font: inherit; font-size: var(--font-size-13); }
