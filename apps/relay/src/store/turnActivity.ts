@@ -29,7 +29,8 @@ export function turnProgress(records: Array<{ value: unknown }>, previous?: Last
     if (line.type === "turn_context" || (line.type === "event_msg" && kind === "task_started")) turnId = payload.turn_id ?? payload.turnId;
     if (line.type === "event_msg") {
       if (kind === "task_started") { progress.turnStatus = "inProgress"; progress.activity = "thinking"; }
-      if (kind === "task_complete" || kind === "task_completed") progress.turnStatus = "completed";
+      // Codex ends a turn that gave up (e.g. 429 after retries) with task_complete carrying an error.
+      if (kind === "task_complete" || kind === "task_completed") progress.turnStatus = endedWithError(payload.error) ? "failed" : "completed";
       if (kind === "turn_aborted") progress.turnStatus = "interrupted";
       if (kind === "task_failed" || kind === "turn_failed") progress.turnStatus = "failed";
       if (["task_complete", "task_completed", "turn_aborted", "task_failed", "turn_failed"].includes(String(kind))) {
@@ -65,4 +66,9 @@ export function turnProgress(records: Array<{ value: unknown }>, previous?: Last
   }
   if (progress.turnStatus && progress.turnStatus !== "inProgress") { progress.activity = undefined; progress.activityEvidence = null; progress.activeTurnId = null; }
   return progress;
+}
+
+function endedWithError(error: unknown) {
+  if (typeof error === "string") return error.trim().length > 0;
+  return !!error && typeof error === "object" && Object.keys(error).length > 0;
 }

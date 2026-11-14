@@ -10,7 +10,7 @@ export const turnReasons = {
   invalid_request: "模型服务拒绝了本次请求，请检查模型配置。",
   transport_error: "模型服务连接失败，请检查网络与服务。",
   timeout: "模型服务响应超时。",
-  rate_limited: "模型服务请求受限，请稍后重试。",
+  rate_limited: "这个渠道的额度用完或请求受限。可以换个渠道接着做，或稍后重试。",
   token_limit: "本轮已达到上下文或输出限制，未正常完成。",
   blocked: "本轮被阻止，未正常完成。",
   engine_exited: "执行引擎已退出，本轮未正常完成。",
@@ -34,14 +34,22 @@ export function makeLastTurn(turnId: unknown, status: LastTurnStatus, code: Turn
 }
 
 export function codexReason(error: unknown): TurnReasonCode {
-  const info = error && typeof error === "object" ? (error as Record<string, unknown>).codexErrorInfo : null;
-  const kind = typeof info === "string" ? info : info && typeof info === "object" ? Object.keys(info)[0] : null;
+  const record = error && typeof error === "object" ? error as Record<string, unknown> : null;
+  // The app-server sends camelCase; rollouts store the same error in snake_case.
+  const info = record?.codexErrorInfo ?? record?.codex_error_info;
+  const rawKind = typeof info === "string" ? info : info && typeof info === "object" ? Object.keys(info)[0] : null;
+  const detail = rawKind && info && typeof info === "object" ? (info as Record<string, unknown>)[rawKind] : null;
+  const kind = rawKind?.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase()) ?? null;
+  const httpStatus = detail && typeof detail === "object" ? (detail as { httpStatusCode?: unknown; http_status_code?: unknown }).httpStatusCode ?? (detail as { http_status_code?: unknown }).http_status_code : undefined;
+  // Rollouts keep only the message ("exceeded retry limit, last status: 429 ..."), so match it too (F6).
+  const message = typeof error === "string" ? error : typeof record?.message === "string" ? record.message : "";
   if (kind === "contextWindowExceeded") return "token_limit";
-  if (kind === "usageLimitExceeded") return "rate_limited";
+  if (kind === "usageLimitExceeded" || httpStatus === 429) return "rate_limited";
   if (kind === "serverOverloaded") return "model_unavailable";
   if (kind === "badRequest" || kind === "unauthorized") return "invalid_request";
   if (kind === "cyberPolicy" || kind === "sandboxError") return "blocked";
   if (kind && /^(httpConnectionFailed|responseStreamConnectionFailed|responseStreamDisconnected)$/.test(kind)) return "transport_error";
+  if (!kind && /\b429\b|too many requests|usage limit|quota exceeded|quota_exceeded/i.test(message)) return "rate_limited";
   return "provider_error";
 }
 
