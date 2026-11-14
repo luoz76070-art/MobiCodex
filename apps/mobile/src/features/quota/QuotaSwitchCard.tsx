@@ -17,7 +17,7 @@ export function QuotaSwitchCard({ options, loading, busy, error, onContinue, onD
       <p>{quotaSummary(options)}</p>
       {loading ? <p role="status"><Loader2 size={14} className="spin" aria-hidden="true" /> 正在查看可用的渠道…</p>
         : choices.length ? <>
-          <p>换个渠道接着做：会开一个新任务，带上这次的全部对话和做过的操作，原任务保留不动。</p>
+          <p>换个渠道接着做：就在这个线程里换，不开新任务，原渠道恢复后可以换回。</p>
           <label className="quota-choice">
             <span>换到</span>
             <select value={model} disabled={busy} onChange={event => setModel(event.target.value)}>
@@ -27,6 +27,7 @@ export function QuotaSwitchCard({ options, loading, busy, error, onContinue, onD
             </select>
           </label>
         </> : <p>电脑上没有其他可用的渠道，只能等额度恢复。</p>}
+      {!loading && (options?.blocked ?? 0) > 0 && <small>另有 {options!.blocked} 个模型要先用原渠道整理上下文，额度用完时换不过去，没有列出。</small>}
       {error && <p className="approval-risk" role="alert"><AlertCircle size={14} aria-hidden="true" /><span>{error}</span></p>}
       <div className="approval-actions">
         {choices.length > 0 && <button type="button" className="accept primary" disabled={busy || loading || !model} onClick={() => onContinue(model)}>

@@ -1,17 +1,28 @@
 import { execFile } from "node:child_process";
-import { createReadStream, existsSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
 
 /**
- * F6: when a channel's quota runs out, continue the work on another channel the user picks.
- * Codex cannot switch a thread in place without first calling the exhausted model (its handoff
- * compaction), so the work continues in a new thread that is given the old thread's visible history.
+ * F6: when a channel's quota runs out, the same thread continues on another channel the user picks.
+ * Codex only calls the previous model on a switch when the two models' comp_hash differ, or when the
+ * new window is smaller and already full (it compacts with the previous model first). Within one
+ * comp_hash a switch is a plain model change, so only those models are offered when a channel is out.
  */
-export type ModelChoice = { slug: string; displayName: string; channel: string; channelLabel: string; efforts: string[]; defaultEffort: string | null };
-export type SwitchOptions = { model: string | null; channel: string | null; channelLabel: string | null; resetAt: string | null; alternatives: ModelChoice[] };
-export const continuationLimits = { items: 400, bytes: 1_500_000 };
+export type ModelChoice = {
+  slug: string; displayName: string; channel: string; channelLabel: string; efforts: string[]; defaultEffort: string | null;
+  compHash: string | null; contextWindow: number | null; compactLimit: number | null;
+};
+export type SwitchOptions = {
+  model: string | null; channel: string | null; channelLabel: string | null; resetAt: string | null;
+  alternatives: ModelChoice[]; blocked: number;
+};
+/** The thread's settings as of its last turn, from the rollout. */
+export type ThreadModelState = {
+  model: string | null; effort: string | null; approvalPolicy: unknown; sandboxPolicy: Record<string, unknown> | null; contextTokens: number | null;
+};
+type CatalogEntry = { compHash: string | null; contextWindow: number | null; compactLimit: number | null };
 
 const defaultChannel = "default";
 export function channelOf(slug: string) { return /^ccs-[^/]+\//.test(slug) ? slug.slice(0, slug.indexOf("/")) : defaultChannel; }
@@ -20,9 +31,28 @@ function labelOf(displayName: string, channel: string) {
   const match = displayName.match(/[（(]([^（()）]+)[)）]\s*$/u);
   return match ? match[1].trim() : channel === defaultChannel ? "默认渠道" : channel.replace(/^ccs-/, "");
 }
+const numberOr = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : null;
 
-/** model/list from the gateway's app-server, normalised; hidden models are left out. */
-export function modelChoices(list: unknown): ModelChoice[] {
+/** comp_hash and window per model from the catalog Codex is configured with (config.toml model_catalog_json). */
+export function readCatalog(codexHome: string): Map<string, CatalogEntry> {
+  const entries = new Map<string, CatalogEntry>();
+  try {
+    const config = readFileSync(path.join(codexHome, "config.toml"), "utf8");
+    const file = /^\s*model_catalog_json\s*=\s*"([^"]+)"/m.exec(config)?.[1];
+    if (!file) return entries;
+    const catalog = JSON.parse(readFileSync(path.isAbsolute(file) ? file : path.join(codexHome, file), "utf8")) as { models?: unknown };
+    for (const model of Array.isArray(catalog.models) ? catalog.models : []) {
+      const item = model as Record<string, unknown>;
+      if (typeof item.slug !== "string") continue;
+      entries.set(item.slug, { compHash: typeof item.comp_hash === "string" ? item.comp_hash : null,
+        contextWindow: numberOr(item.context_window), compactLimit: numberOr(item.auto_compact_token_limit) });
+    }
+  } catch { /* No catalog: nothing is known, and Codex then never compacts for a hash change either. */ }
+  return entries;
+}
+
+/** model/list from the gateway's app-server, normalised; hidden and image models are left out. */
+export function modelChoices(list: unknown, catalog: Map<string, CatalogEntry> = new Map()): ModelChoice[] {
   const data = list && typeof list === "object" ? (list as { data?: unknown; models?: unknown }).data ?? (list as { models?: unknown }).models : null;
   if (!Array.isArray(data)) return [];
   const choices: ModelChoice[] = [];
@@ -30,80 +60,86 @@ export function modelChoices(list: unknown): ModelChoice[] {
     if (!entry || typeof entry !== "object") continue;
     const item = entry as Record<string, unknown>;
     const slug = typeof item.model === "string" ? item.model : typeof item.id === "string" ? item.id : typeof item.slug === "string" ? item.slug : null;
-    if (!slug || item.hidden === true) continue;
+    if (!slug || item.hidden === true || /image/i.test(slug)) continue;
     const displayName = typeof item.displayName === "string" && item.displayName ? item.displayName : slug;
     const levels = Array.isArray(item.supportedReasoningEfforts) ? item.supportedReasoningEfforts : [];
     const efforts = levels.map(level => typeof level === "string" ? level : level && typeof level === "object" ? (level as { reasoningEffort?: unknown }).reasoningEffort : null)
       .filter((value): value is string => typeof value === "string");
-    const channel = channelOf(slug);
-    // Image models cannot take over coding work.
-    if (/image/i.test(slug)) continue;
+    const channel = channelOf(slug), known = catalog.get(slug);
     choices.push({ slug, displayName, channel, channelLabel: labelOf(displayName, channel), efforts,
-      defaultEffort: typeof item.defaultReasoningEffort === "string" ? item.defaultReasoningEffort : null });
+      defaultEffort: typeof item.defaultReasoningEffort === "string" ? item.defaultReasoningEffort : null,
+      compHash: known?.compHash ?? null, contextWindow: known?.contextWindow ?? null, compactLimit: known?.compactLimit ?? null });
   }
   return choices;
 }
 
-/** Everything outside the exhausted channel; the same model on another channel comes first. */
-export function alternatives(choices: ModelChoice[], failedModel: string | null): ModelChoice[] {
-  const channel = failedModel ? channelOf(failedModel) : null, base = failedModel ? baseModel(failedModel) : null;
-  return choices.filter(choice => choice.channel !== channel)
-    .map((choice, index) => ({ choice, rank: baseModel(choice.slug) === base ? 0 : 1, index }))
-    .sort((a, b) => a.rank - b.rank || a.index - b.index).map(entry => entry.choice);
+/** Would switching from `from` to `to` make Codex call `from` first (which fails when its quota is gone)? */
+export function needsPreviousModel(from: Pick<ModelChoice, "compHash" | "contextWindow"> | undefined, to: ModelChoice, contextTokens: number | null) {
+  if (!from) return false;
+  if (from.compHash && to.compHash && from.compHash !== to.compHash) return true;
+  const shrinks = from.contextWindow !== null && to.contextWindow !== null && from.contextWindow > to.contextWindow;
+  return shrinks && contextTokens !== null && (contextTokens > (to.compactLimit ?? Infinity) || contextTokens >= (to.contextWindow ?? Infinity));
 }
 
-/** A sensible effort for a continuation: medium when offered, else the model's default. */
-export function continuationEffort(choice: ModelChoice, requested?: string | null) {
-  if (requested && (!choice.efforts.length || choice.efforts.includes(requested))) return requested;
+/** Other channels that can take over without the exhausted model; the same model elsewhere comes first. */
+export function alternatives(choices: ModelChoice[], failedModel: string | null, contextTokens: number | null = null) {
+  const channel = failedModel ? channelOf(failedModel) : null, base = failedModel ? baseModel(failedModel) : null;
+  const from = failedModel ? choices.find(choice => choice.slug === failedModel) : undefined;
+  const others = choices.filter(choice => choice.channel !== channel);
+  const usable = others.filter(choice => !needsPreviousModel(from, choice, contextTokens));
+  const ranked = usable.map((choice, index) => ({ choice, rank: baseModel(choice.slug) === base ? 0 : 1, index }))
+    .sort((a, b) => a.rank - b.rank || a.index - b.index).map(entry => entry.choice);
+  return { usable: ranked, blocked: others.length - usable.length };
+}
+
+/** Keep the thread's reasoning effort when the new model has it; otherwise medium, else the model's default. */
+export function switchEffort(choice: ModelChoice, current?: string | null) {
+  if (current && (!choice.efforts.length || choice.efforts.includes(current))) return current;
   if (choice.efforts.includes("medium")) return "medium";
   return choice.defaultEffort ?? choice.efforts[0] ?? null;
 }
 
-const contextOnly = /^\s*(<environment_context>|<user_instructions>|# AGENTS\.md|<permissions instructions>|<collaboration_mode>|<model_switch>|<turn_aborted>)/;
-/**
- * The old thread's model-visible history as Responses API items: messages and tool calls with
- * their outputs. Encrypted reasoning belongs to the old account and is dropped, as are developer
- * and environment blocks the new thread writes for itself. Long threads keep their latest part.
- */
-export async function readContinuation(rolloutPath: string) {
-  const items: unknown[] = [];
-  let model: string | null = null, effort: string | null = null;
+/** The last turn's model, effort and permissions, plus how full the context was. */
+export async function threadModelState(rolloutPath: string): Promise<ThreadModelState> {
+  const state: ThreadModelState = { model: null, effort: null, approvalPolicy: null, sandboxPolicy: null, contextTokens: null };
   const lines = readline.createInterface({ input: createReadStream(rolloutPath, { encoding: "utf8" }), crlfDelay: Infinity });
   for await (const line of lines) {
-    if (!line.trim()) continue;
+    if (!line.includes('"turn_context"') && !line.includes('"token_count"')) continue;
     let entry: { type?: unknown; payload?: Record<string, unknown> };
     try { entry = JSON.parse(line); } catch { continue; }
     const payload = entry.payload;
-    if (!payload || typeof payload !== "object") continue;
+    if (!payload) continue;
     if (entry.type === "turn_context") {
-      if (typeof payload.model === "string") model = payload.model;
-      if (typeof payload.effort === "string") effort = payload.effort;
-      continue;
+      if (typeof payload.model === "string") state.model = payload.model;
+      state.effort = typeof payload.effort === "string" ? payload.effort : state.effort;
+      if (payload.approval_policy !== undefined) state.approvalPolicy = payload.approval_policy;
+      if (payload.sandbox_policy && typeof payload.sandbox_policy === "object") state.sandboxPolicy = payload.sandbox_policy as Record<string, unknown>;
+    } else if (entry.type === "event_msg" && payload.type === "token_count") {
+      const usage = (payload.info as { last_token_usage?: { input_tokens?: unknown } } | null)?.last_token_usage;
+      if (typeof usage?.input_tokens === "number") state.contextTokens = usage.input_tokens;
     }
-    if (entry.type !== "response_item" || payload.type === "reasoning") continue;
-    if (payload.type === "message") {
-      if (payload.role === "developer" || payload.role === "system") continue;
-      const content = Array.isArray(payload.content) ? payload.content as { text?: unknown }[] : [];
-      if (content.length && content.every(part => contextOnly.test(typeof part.text === "string" ? part.text : ""))) continue;
-    }
-    items.push(payload);
   }
-  let start = Math.max(0, items.length - continuationLimits.items), bytes = 0;
-  for (let index = items.length - 1; index >= start; index--) {
-    bytes += JSON.stringify(items[index]).length;
-    if (bytes > continuationLimits.bytes) { start = index + 1; break; }
-  }
-  // Never begin with a tool output whose call was cut off.
-  while (start < items.length && /_output$/.test(String((items[start] as { type?: unknown }).type))) start++;
-  return { items: items.slice(start), omitted: start, model, effort };
+  return state;
 }
 
-export function continuationPrompt(fromLabel: string | null, omitted: number) {
-  return [
-    `（自动续接）上一轮${fromLabel ? `在「${fromLabel}」` : ""}因为额度用完中断了，现在换到这个模型接着做。`,
-    omitted ? "前面较早的部分对话已省略，下面带过来的是最近的对话和工具记录。" : "前面的对话和工具记录都已经带过来。",
-    "请先看一下当前进度（必要时检查工作区里的实际改动），然后接着完成没做完的部分。",
-  ].join("\n");
+/** A rollout sandbox_policy as the app-server's SandboxPolicy (camelCase), so a switch keeps the thread's access. */
+export function sandboxPolicyForTurn(policy: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (!policy) return null;
+  const network = policy.network_access === true;
+  if (policy.type === "danger-full-access") return { type: "dangerFullAccess" };
+  if (policy.type === "read-only") return { type: "readOnly", networkAccess: network };
+  if (policy.type === "workspace-write") return {
+    type: "workspaceWrite", writableRoots: Array.isArray(policy.writable_roots) ? policy.writable_roots.filter(root => typeof root === "string") : [],
+    networkAccess: network, excludeTmpdirEnvVar: policy.exclude_tmpdir_env_var === true, excludeSlashTmp: policy.exclude_slash_tmp === true,
+  };
+  return null;
+}
+
+/** The approval policy as the app-server accepts it; anything unrecognised asks the user. */
+export function approvalPolicyForTurn(policy: unknown): unknown {
+  if (policy === "never" || policy === "on-request" || policy === "untrusted") return policy;
+  if (policy && typeof policy === "object" && "granular" in policy) return policy;
+  return "on-request";
 }
 
 /**

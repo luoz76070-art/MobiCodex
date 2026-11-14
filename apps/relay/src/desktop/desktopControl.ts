@@ -4,7 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { DesktopIpcClient, getDesktopIpcPipePath, type DesktopIpcClientStatus } from "./desktopIpcClient.js";
 import { MacosUiInjector, type MacosUiInjectorStatus } from "./macosUiInjector.js";
 import { asyncQuestionReply, conversationTurns, desktopQuestionCandidates, interactionError, record, validateQuestionAnswers, type DesktopQuestionCandidate, type UserInputRequest } from "./desktopQuestions.js";
-import { DesktopNativeControl, type DesktopControlCapability, type DesktopTransport, type NativeControlInput, type NativeControlOutcome } from "./desktopNativeControl.js";
+import { DesktopNativeControl, type DesktopControlCapability, type DesktopTransport, type NativeControlInput, type NativeControlOutcome, type DesktopTurnSettings } from "./desktopNativeControl.js";
 import { DesktopApprovals, type DesktopApproval, type DesktopApprovalDecision } from "./desktopApprovals.js";
 import { DesktopMessageQueue } from "./desktopMessageQueue.js";
 import type { DesktopThreadLoad } from "./desktopThreadLoader.js";
@@ -392,11 +392,13 @@ export class DesktopControl {
     controlToken?: string;
     expectedTurnId?: string | null;
     owner?: string;
+    turnSettings?: DesktopTurnSettings;
   }): Promise<DesktopControlResult> {
     const thread = await this.getThread(params.threadId);
 
     if (process.platform === "darwin" && this.transport === "legacy") {
       if (params.mode === "queue") throw interactionError("desktop_queue_unavailable", 409);
+      if (params.turnSettings) throw interactionError("desktop_switch_unavailable", 409);
       return this.sendViaMacosUi(params.threadId, params.message, thread);
     }
     if (params.mode === "queue") {

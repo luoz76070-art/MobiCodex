@@ -2,8 +2,10 @@ import type { LastTurn } from "../../../../../shared/lastTurn";
 
 /** One model the gateway can continue a task on; `channel` groups models that share a quota. */
 export type QuotaModelChoice = { slug: string; displayName: string; channel: string; channelLabel: string; efforts: string[]; defaultEffort: string | null };
-export type QuotaSwitchOptions = { model: string | null; channel: string | null; channelLabel: string | null; resetAt: string | null; alternatives: QuotaModelChoice[] };
-export type QuotaContinuation = { continuedFrom: string; model: string; channelLabel: string; carried: number; omitted: number };
+/** `blocked`: models Codex could only reach by calling the exhausted model first, so they are not offered. */
+export type QuotaSwitchOptions = { model: string | null; channel: string | null; channelLabel: string | null; resetAt: string | null; alternatives: QuotaModelChoice[]; blocked?: number };
+/** A thread running on a stand-in channel, and where it came from. */
+export type ChannelSwitchRecord = { homeModel: string; homeLabel: string; toModel: string; toLabel: string; resetAt: string | null; at: string };
 
 /** The last turn ran out of quota and nothing is running now: offer another channel. */
 export function needsQuotaSwitch(lastTurn: LastTurn | null | undefined, running: boolean) {
@@ -42,9 +44,36 @@ export function quotaSummary(options: QuotaSwitchOptions | null) {
   return `${where}的额度用完了${reset ? `，预计北京时间 ${reset} 恢复` : ""}。`;
 }
 
-export function continuationNotice(from: string, continuation: QuotaContinuation) {
-  const omitted = continuation.omitted > 0 ? `（较早的 ${continuation.omitted} 条没有带上）` : "";
-  return `已换到「${continuation.channelLabel}」接着做「${from}」，带上了之前的 ${continuation.carried} 条记录${omitted}。原任务保留不动。`;
+/** The message that starts the switched turn; the thread itself carries all context. */
+export function switchPrompt(kind: "quota" | "return", from: string | null, to: string) {
+  return kind === "quota"
+    ? `（换渠道接着做）上一轮${from ? `在「${from}」` : ""}因为额度用完中断了，现在换到「${to}」。请先看一下当前进度（必要时检查工作区里的实际改动），然后接着把没做完的部分做完。`
+    : `（换回原渠道）现在换回「${to}」。如果之前的任务还没做完就接着做；已经做完的话只回复“已换回”，不要做别的。`;
+}
+
+export function standInNotice(record: ChannelSwitchRecord, now = Date.now()) {
+  const reset = record.resetAt ? Date.parse(record.resetAt) : NaN;
+  const when = Number.isFinite(reset) ? reset <= now ? "，原渠道应该已经恢复" : `，预计北京时间 ${beijingTime(record.resetAt)} 恢复` : "";
+  return `正在用「${record.toLabel}」顶替「${record.homeLabel}」${when}。`;
+}
+
+const switchesKey = "mobicodexChannelSwitchV1";
+const rememberedSwitches = 50;
+
+export function loadSwitchRecords(): Record<string, ChannelSwitchRecord> {
+  try {
+    const value = JSON.parse(localStorage.getItem(switchesKey) ?? "{}");
+    return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, ChannelSwitchRecord> : {};
+  } catch { return {}; }
+}
+
+/** Remember (record) or forget (null) a thread's stand-in channel; keeps the newest few. */
+export function saveSwitchRecord(records: Record<string, ChannelSwitchRecord>, threadId: string, record: ChannelSwitchRecord | null) {
+  const next = { ...records };
+  if (record) next[threadId] = record; else delete next[threadId];
+  const kept = Object.fromEntries(Object.entries(next).sort(([, a], [, b]) => a.at.localeCompare(b.at)).slice(-rememberedSwitches));
+  try { localStorage.setItem(switchesKey, JSON.stringify(kept)); } catch { /* Storage full or disabled: the notice lasts until reload. */ }
+  return kept;
 }
 
 const dismissedKey = "mobicodexQuotaDismissedV1";
