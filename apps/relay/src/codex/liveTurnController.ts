@@ -153,7 +153,13 @@ export class LiveTurnController extends EventEmitter {
     cwd?: string | null;
     approvalPolicy?: "never" | "on-request";
     sandbox?: "read-only" | "workspace-write" | "danger-full-access";
+    /** F6: a new thread on this model, seeded with another thread's visible history. */
+    model?: string;
+    effort?: string | null;
+    inject?: unknown[];
+    name?: string;
   }): Promise<LiveTurnSnapshot> {
+    if (params.inject && params.threadId) throw Object.assign(new Error("History can only seed a new thread"), { statusCode: 400 });
     this.pruneTurns();
     if (this.activeTurnCount() + this.reservedStarts >= 32) throw Object.assign(new Error("Active turn limit reached"), { statusCode: 503 });
     this.reservedStarts++;
@@ -175,16 +181,19 @@ export class LiveTurnController extends EventEmitter {
         cwd: params.cwd ?? this.defaultCwd,
         approvalPolicy,
         sandbox,
+        ...(params.model ? { model: params.model } : {}),
+        ...(params.effort ? { config: { model_reasoning_effort: params.effort } } : {}),
         sessionStartSource: "startup",
         experimentalRawEvents: false,
         persistExtendedHistory: true,
       });
       threadId = started.thread.id;
-      thread = toSummary(started.thread, params.message);
+      thread = toSummary(started.thread, params.name ?? params.message);
+      if (params.inject?.length) await client.request("thread/inject_items", { threadId, items: params.inject });
       await client
         .request("thread/name/set", {
           threadId,
-          name: `手机: ${firstLine(params.message) || "新线程"}`,
+          name: params.name ?? `手机: ${firstLine(params.message) || "新线程"}`,
         })
         .catch(() => undefined);
     }
@@ -197,6 +206,8 @@ export class LiveTurnController extends EventEmitter {
       threadId,
       input: toInput(params.message),
       approvalPolicy,
+      ...(params.model ? { model: params.model } : {}),
+      ...(params.effort ? { effort: params.effort } : {}),
     }); } finally { this.pendingStarts.delete(threadId); }
 
     const state = this.createState({
@@ -224,6 +235,12 @@ export class LiveTurnController extends EventEmitter {
 
   private activeTurnCount() {
     return [...this.turns.values()].filter(state => state.status === "starting" || state.status === "inProgress").length;
+  }
+
+  /** F6: the models Codex can use here (the configured catalog), straight from app-server. */
+  async listModels(): Promise<unknown> {
+    const client = await this.ensureClient();
+    return client.request("model/list", { limit: 200 });
   }
 
   getTurn(turnId: string): LiveTurnSnapshot | null {

@@ -53,6 +53,8 @@ import { cachedSystemPalette, chatFontScales, loadProductDisplay, saveProductDis
 import { stageHotUpdate } from "../features/updates/hotUpdate";
 import { Bell, ListTodo, Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Loader2, Wifi, Columns3, Rows3, Copy, Activity, AlertCircle, FileUp, Send, ExternalLink, Server, KeyRound, EyeOff, Eye, Clipboard, Sun, Moon, CheckCircle2, Terminal, ChevronDown, Download } from "lucide-react";
 import { UserInputCard } from "../features/chat/UserInputCard";
+import { QuotaSwitchCard } from "../features/quota/QuotaSwitchCard";
+import { continuationNotice, dismissQuota, needsQuotaSwitch, quotaDismissed, type QuotaContinuation, type QuotaSwitchOptions } from "../features/quota/quotaSwitch";
 import { MessageBubble, MessageTimeline, ApprovalCard, AttachmentTray } from "../features/chat/components";
 import { MessageMediaProvider } from "../features/chat/MessageImage";
 import { ComputerComposer } from "../features/chat/ComputerComposer";
@@ -160,6 +162,9 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
   const [splitMode, setSplitMode] = useState<SplitMode>(defaultSplitMode);
   const [approvalPolicy, setApprovalPolicy] = useState<ApprovalPolicy>(defaultApprovalPolicy);
   const [sandboxMode, setSandboxMode] = useState<SandboxMode>(defaultSandboxMode);
+  const [quotaSwitch, setQuotaSwitch] = useState<{ key: string; options: QuotaSwitchOptions | null; loading: boolean; busy: boolean; error: string; unsupported?: boolean } | null>(null);
+  const [continuations, setContinuations] = useState<Record<string, string>>({});
+  const quotaAttemptRef = useRef<{ key: string; model: string; clientMessageId: string } | null>(null);
   const [sidePaneSize, setSidePaneSize] = useState(defaultSidePaneSize);
   const [topPaneSize, setTopPaneSize] = useState(defaultTopPaneSize);
   const [resizingPane, setResizingPane] = useState<"side" | "top" | null>(null);
@@ -252,12 +257,29 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
   const canInterrupt = isDesktopWatch ? Boolean(desktopCapability?.canInterrupt && desktopCapability.token && desktopCapability.activeTurnId) : Boolean(activeRuntime.activeTurnId);
   const isDesktopHistoryOnly = Boolean(isDesktopWatch && selected?.id && !canUseDesktopIpc);
   const isLiveTurnActive = activeRuntime.turnStatus === "starting" || activeRuntime.turnStatus === "inProgress";
+  const quotaTurnId = activeRuntime.lastTurn?.turnId ?? "";
+  const quotaKey = selected?.id && needsQuotaSwitch(activeRuntime.lastTurn, isLiveTurnActive) && !quotaDismissed(selected.id, quotaTurnId) ? `${selected.id}|${quotaTurnId}` : null;
   const canQueue = Boolean(nativeDesktop && desktopCapability?.queue?.available);
   const desktopQueue = desktopCapability?.queue?.items ?? [];
   const queueSummary = desktopQueue.some(item => item.status === "uncertain") ? "结果待确认，请勿重发"
     : desktopQueue.some(item => item.status === "paused") ? "已暂停"
     : desktopQueue.some(item => item.status === "sending") ? "正在提交" : "任务结束后执行";
   useEffect(() => { setQueueCancelling(null); }, [activeThreadKey]);
+  useEffect(() => {
+    if (!quotaKey) return;
+    const threadId = quotaKey.slice(0, quotaKey.indexOf("|"));
+    let cancelled = false;
+    setQuotaSwitch({ key: quotaKey, options: null, loading: true, busy: false, error: "" });
+    apiGet<QuotaSwitchOptions>(buildUrl(endpoint, `/api/codex/threads/${encodeURIComponent(threadId)}/switch-options`), token)
+      .then(options => { if (!cancelled) setQuotaSwitch(current => current?.key === quotaKey ? { ...current, options, loading: false } : current); })
+      .catch(error => {
+        if (cancelled) return;
+        // 404: an older gateway without channel switching, or a thread it cannot read; the failure status still shows.
+        const unsupported = (error as { status?: number }).status === 404;
+        setQuotaSwitch(current => current?.key === quotaKey ? { ...current, loading: false, unsupported, error: unsupported ? "" : toFriendlyFetchError(error) } : current);
+      });
+    return () => { cancelled = true; };
+  }, [quotaKey, endpoint, token]); // eslint-disable-line react-hooks/exhaustive-deps -- apiGet is recreated every render
   const latestAssistantMessage = [...visibleMessages].reverse().find((message) => message.role === "assistant");
   const latestAssistantMessageId = latestAssistantMessage?.id ?? "";
   const smoothLatestAssistant = Boolean(latestAssistantMessageId && activeRuntime.smoothMessageId === latestAssistantMessageId);
@@ -773,6 +795,45 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
         turnStatus: "failed",
         lastTurnError: toFriendlyFetchError(error),
       });
+    }
+  }
+
+  /** F6: the channel ran out of quota; continue in a new thread on the model the user picked. */
+  async function continueOnModel(model: string) {
+    const source = selected, state = quotaSwitch;
+    if (!source?.id || !state || state.busy) return;
+    const previous = quotaAttemptRef.current;
+    const attempt = previous?.key === state.key && previous.model === model ? previous : { key: state.key, model, clientMessageId: crypto.randomUUID() };
+    quotaAttemptRef.current = attempt;
+    setQuotaSwitch(current => current?.key === attempt.key ? { ...current, busy: true, error: "" } : current);
+    try {
+      const next = await apiPost<LiveTurnSnapshot & QuotaContinuation>(buildUrl(endpoint, `/api/codex/threads/${encodeURIComponent(source.id)}/continue`), token,
+        { model, clientMessageId: attempt.clientMessageId, approvalPolicy, sandbox: sandboxMode });
+      quotaAttemptRef.current = null;
+      void attentionAfterSend();
+      const title = source.threadName || "Codex 任务";
+      const createdThread: ThreadSummary = next.thread ?? { id: next.threadId, threadName: `${title} · 换到${next.channelLabel}`, updatedAt: new Date().toISOString(),
+        cwd: source.cwd ?? null, source: "appServer", originator: "Codex app-server" };
+      const running = next.status === "starting" || next.status === "inProgress";
+      patchRuntime(next.threadId, {
+        messages: capMessages(next.messages ?? []), loaded: true, watchMode: "none", watching: false,
+        readonlyReason: "已由手机 Relay 接管；后续发送、引导、打断都会走手机控制通道。",
+        status: turnStatusText(next.status), sending: running, activeTurnId: running ? next.turnId : null,
+        turnStatus: next.status, statusTurnId: next.turnId, sourceConnected: next.connected !== false,
+        activityEvidence: readActivityEvidence(next.activityEvidence),
+        ...(next.lastTurn !== undefined ? { lastTurn: next.lastTurn } : {}),
+        lastEventCount: next.eventCount, lastTurnError: next.error ?? "", approvals: next.approvals ?? [],
+      });
+      setContinuations(current => ({ ...current, [next.threadId]: continuationNotice(title, next) }));
+      setQuotaSwitch(null);
+      setStatus(`已换到「${next.channelLabel}」接着做`);
+      setIsNewThread(false);
+      setSelected(createdThread);
+      void loadThreads();
+    } catch (error) {
+      // The gateway answered: a retry is a new attempt. No answer: retry the same one, so it runs at most once.
+      if ((error as { status?: number }).status) quotaAttemptRef.current = null;
+      setQuotaSwitch(current => current?.key === attempt.key ? { ...current, busy: false, error: toFriendlyFetchError(error) } : current);
     }
   }
 
@@ -1797,7 +1858,11 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
                 ))}
               </div>
             )}
-            {activeRuntime.lastTurnError && activeRuntime.lastTurnError !== activeRuntime.lastTurn?.reason.message && (
+            {selected?.id && continuations[selected.id] && <SystemNotice>{continuations[selected.id]}</SystemNotice>}
+            {quotaKey && quotaSwitch?.key === quotaKey && !quotaSwitch.unsupported && <QuotaSwitchCard options={quotaSwitch.options} loading={quotaSwitch.loading}
+              busy={quotaSwitch.busy} error={quotaSwitch.error} onContinue={model => void continueOnModel(model)}
+              onDismiss={() => { const [threadId, turnId] = quotaKey.split("|"); dismissQuota(threadId, turnId); setQuotaSwitch(null); }} />}
+            {activeRuntime.lastTurnError && activeRuntime.lastTurnError !== activeRuntime.lastTurn?.reason.message && !(quotaKey && quotaSwitch?.key === quotaKey && !quotaSwitch.unsupported) && (
               <div className="control-banner error-control">
                 <AlertCircle size={15} />
                 <span>{activeRuntime.lastTurnError}</span>
