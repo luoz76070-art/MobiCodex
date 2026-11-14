@@ -243,9 +243,12 @@ public class AttentionService extends Service {
         prefs.edit().putString("notifiedTurns", new JSONArray(seen).toString()).apply();
         if (!AttentionConfig.finished || AttentionConfig.watching(key)) return;
         String status = turn.optString("status"), title = item.optString("title", "Codex 任务");
-        String heading = "completed".equals(status) ? "任务完成" : "interrupted".equals(status) ? "任务已中断" : "任务失败";
         JSONObject reason = turn.optJSONObject("reason");
-        String text = "completed".equals(status) || reason == null || reason.optString("message").isEmpty() ? title : title + " · " + reason.optString("message");
+        // A Codex channel out of quota: the app offers the other channels to continue on.
+        boolean quota = !"completed".equals(status) && reason != null && "rate_limited".equals(reason.optString("code")) && !key.startsWith("agent:");
+        String heading = quota ? "额度用完" : "completed".equals(status) ? "任务完成" : "interrupted".equals(status) ? "任务已中断" : "任务失败";
+        String text = quota ? title + " · 点开换个渠道接着做"
+            : "completed".equals(status) || reason == null || reason.optString("message").isEmpty() ? title : title + " · " + reason.optString("message");
         NotificationCompat.Builder builder = AttentionNotifications.builder(this, AttentionNotifications.DONE)
             .setContentTitle(heading).setContentText(text)
             .setStyle(new NotificationCompat.BigTextStyle().bigText(text))

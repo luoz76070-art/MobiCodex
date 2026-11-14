@@ -215,7 +215,8 @@ test('S1 desktop and rollout project only explicit terminal evidence with safe r
     assert.deepEqual(codexLastTurn(native), expected);
     assert.deepEqual(desktopLastTurn({ turns: [native] }), expected);
     const kind = { completed: 'task_completed', failed: 'task_failed', interrupted: 'turn_aborted' }[expected.status];
-    assert.deepEqual(turnProgress([{ value: { type: 'event_msg', timestamp: expected.endedAt, payload: { type: kind, turn_id: expected.turnId, error: native.error } } }]).lastTurn, expected);
+    // A completion that carries an error is a turn that gave up (F6: 429 after retries), so only failures carry one here.
+    assert.deepEqual(turnProgress([{ value: { type: 'event_msg', timestamp: expected.endedAt, payload: { type: kind, turn_id: expected.turnId, ...(expected.status === 'completed' ? {} : { error: native.error }) } } }]).lastTurn, expected);
   }
   for (const status of [undefined, 'idle', 'new-unknown-status', 'inProgress']) assert.equal(codexLastTurn({ id: 't', status }), null);
   assert.equal(desktopLastTurn({ turns: [{ turnId: 'unknown', status: 'unknown' }] }, turnResults[0]), null);
