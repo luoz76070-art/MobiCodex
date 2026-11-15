@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+<!-- Launcher shortcuts exist from Android 7.1 (API 25); older launchers ignore this file. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:targetApi="25">
     <shortcut
         android:shortcutId="new_task"
         android:enabled="true"

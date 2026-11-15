@@ -154,6 +154,9 @@ public class IntakePlugin extends Plugin {
     private JSObject copyImage(Uri uri, String id, int index) throws IOException {
         // An exported activity must not let a sender read our private files via file://.
         if (uri == null || !ContentResolver.SCHEME_CONTENT.equals(uri.getScheme())) throw new IOException("Unsupported image URI");
+        // Nor via our own FileProvider (a sender could name one of our files and have us stage it).
+        String authority = uri.getAuthority();
+        if (authority == null || authority.startsWith(getContext().getPackageName() + ".")) throw new IOException("Unsupported image URI");
         ContentResolver resolver = getContext().getContentResolver();
         String mimeType = resolver.getType(uri);
         if (mimeType == null || !mimeType.startsWith("image/")) throw new IOException("Unsupported image type");
