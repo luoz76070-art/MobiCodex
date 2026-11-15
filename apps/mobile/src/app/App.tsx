@@ -11,6 +11,9 @@ import { SidebarScrim } from "../features/threads/SidebarScrim";
 import { DisclosureSummary } from "../shared/DisclosureSummary";
 import type { HandoffTarget } from '../../../../shared/handoff';
 import { CapturePanel } from '../features/capture/CapturePanel';
+import { Intake, intakeAvailable, shareFiles, shareText, type SharePayload, type ShortcutPayload } from '../features/intake/plugin';
+import { useIntake } from '../features/intake/useIntake';
+import { ShareSheet, type ShareAction } from '../features/intake/ShareSheet';
 import { migrateHandoff } from '../features/product/handoffMigration';
 import { HandoffMigrationNotice } from '../features/product/HandoffMigrationNotice';
 import { useDeviceRevoked } from "../features/connection/useDeviceRevoked";
@@ -19,7 +22,7 @@ import { ComposerSessionStatus } from "../features/chat/SessionStatus";
 import { codexSessionStatus, readActivityEvidence, resultStatus } from "../features/chat/sessionStatusModel";
 import { createPortal } from "react-dom";
 import { ProductRemoteShell } from "../features/product/ProductRemoteShell";
-import { attentionAfterSend, codexAttentionKey, setAttentionViewing, useAttention, useNotifySettings } from "../features/notify/attention";
+import { attentionAfterSend, codexAttentionKey, parseAttentionKey, setAttentionViewing, useAttention, useNotifySettings } from "../features/notify/attention";
 import { isKelivoHost, navigateProduct, productBeforeNavigate, productOpenUpdates, takeProductSettingsLaunch, ProductHost } from "../features/product/host";
 import { productVersionCode, productVersionLabel } from "../features/product/identity";
 import { HandoffCard } from '../features/product/HandoffCard';
@@ -72,6 +75,8 @@ const appVersionCode = isKelivoHost ? productVersionCode : standaloneVersionCode
 const appVersionLabel = isKelivoHost ? productVersionLabel : standaloneVersionLabel;
 const AgentWorkspace = React.lazy(() => import("../features/agents/AgentWorkspace"));
 
+type CaptureInitialDraft = NonNullable<React.ComponentProps<typeof CapturePanel>["initialDraft"]>;
+
 export function App() {
   const [connection, setConnection] = useState<ConnectionProfile>(() => {
     const profiles = loadConnectionProfiles();
@@ -81,6 +86,17 @@ export function App() {
   const [handoffTarget, setHandoffTarget] = useState<HandoffTarget | null>(null);
   const targetOpened = useCallback(() => setHandoffTarget(null), []);
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [intakeShares, setIntakeShares] = useState<SharePayload[]>([]);
+  const [intakeShortcut, setIntakeShortcut] = useState<ShortcutPayload | null>(null);
+  const [initialDraft, setInitialDraft] = useState<CaptureInitialDraft | undefined>();
+  const finishIntakeShare = useCallback((id: string) => {
+    setIntakeShares(current => current.filter(payload => payload.id !== id));
+    if (intakeAvailable()) void Intake.clear({ id }).catch(() => undefined);
+  }, []);
+  const shortcutOpened = useCallback(() => setIntakeShortcut(null), []);
+  const captureIntake = useCallback((draft: CaptureInitialDraft) => {
+    setOpenItemUid(null); setInitialDraft(draft); setCaptureOpen(true);
+  }, []);
   const [itemsOpen, setItemsOpen] = useState(false), [openItemUid, setOpenItemUid] = useState<string | null>(null);
   const recoveredVoice = useVoiceRecovery(scope, normalizeEndpoint(connection.endpoint), connection.token);
   const [agentMode, setAgentMode] = useState(() => { try { return localStorage.getItem("productRemoteMode") === "agent"; } catch { return false; } });
@@ -99,14 +115,14 @@ export function App() {
   }, []);
   useEffect(() => {
     const back = (event: Event) => {
-      if (event.defaultPrevented) return;
+      if (event.defaultPrevented || intakeShares.length) return;
       if (captureOpen) { event.preventDefault(); setCaptureOpen(false); }
       else if (itemsOpen) { event.preventDefault(); setItemsOpen(false); }
     };
     // Capture phase: these sheets sit above the workspace's own back handling.
     window.addEventListener("product-back", back, { capture: true });
     return () => window.removeEventListener("product-back", back, { capture: true });
-  }, [captureOpen, itemsOpen]);
+  }, [captureOpen, itemsOpen, intakeShares.length]);
   const openFromNotification = useCallback((target: { agentId: string; sessionId: string; title: string }) => {
     const agentId = (["codex", "claude", "deepseek", "opencode"].includes(target.agentId) ? target.agentId : "codex") as HandoffTarget["agentId"];
     setCaptureOpen(false); setItemsOpen(false); setHandoffTarget({ agentId, sessionId: target.sessionId, title: target.title, cwd: "" });
@@ -114,12 +130,25 @@ export function App() {
     setAgentMode(agentId !== "codex");
   }, []);
   useAttention(normalizeEndpoint(connection.endpoint), connection.token, openFromNotification);
+  useIntake({
+    onShare: payload => {
+      setAgentMode(false); setCaptureOpen(false); setItemsOpen(false);
+      setIntakeShares(current => current.some(value => value.id === payload.id) ? current : [...current, payload]);
+    },
+    onShortcut: payload => {
+      setAgentMode(false); setCaptureOpen(false); setItemsOpen(false);
+      if (payload.target === "thread") {
+        const target = parseAttentionKey(payload.key ?? "");
+        if (target?.agentId === "codex") openFromNotification({ ...target, title: payload.title ?? "" });
+      } else { setHandoffTarget(null); setIntakeShortcut(payload); }
+    },
+  });
   function openHandoffTarget(target: HandoffTarget) {
     setCaptureOpen(false); setItemsOpen(false); setHandoffTarget(target); selectAgentMode(target.agentId !== 'codex');
   }
-  return <ProductRemoteShell onComputerSettings={openComputerSettings} onHandoff={receiveHandoff}><WorkItemsPage open={itemsOpen} onClose={() => setItemsOpen(false)} onNew={() => { setOpenItemUid(null); setCaptureOpen(true); }} onOpenItem={uid => { setOpenItemUid(uid); setCaptureOpen(true); }} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} /><CapturePanel itemUid={openItemUid} onOpenTarget={openHandoffTarget} open={captureOpen} onClose={() => setCaptureOpen(false)} key={`capture:${scope}:${connection.token}`} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} />{agentMode
+  return <ProductRemoteShell onComputerSettings={openComputerSettings} onHandoff={receiveHandoff}><WorkItemsPage open={itemsOpen} onClose={() => setItemsOpen(false)} onNew={() => { setOpenItemUid(null); setCaptureOpen(true); }} onOpenItem={uid => { setOpenItemUid(uid); setCaptureOpen(true); }} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} /><CapturePanel initialDraft={initialDraft} itemUid={openItemUid} onOpenTarget={openHandoffTarget} open={captureOpen} onClose={() => { setCaptureOpen(false); setInitialDraft(undefined); }} key={`capture:${scope}:${connection.token}`} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} />{agentMode
     ? <React.Suspense fallback={<main className="agent-workspace"><p className="inline-loading">正在打开 Agent…</p></main>}><AgentWorkspace handoffTarget={handoffTarget} onTargetOpened={targetOpened} onCapture={() => setItemsOpen(true)} voiceRecovery={recoveredVoice.recovery} key={scope} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} onBack={() => selectAgentMode(false)} /></React.Suspense>
-    : <Workspace handoffTarget={handoffTarget} onTargetOpened={targetOpened} onCapture={() => setItemsOpen(true)} voiceRecovery={recoveredVoice.recovery} key={scope} connection={connection} scope={scope} onApply={setConnection} onOpenAgents={() => selectAgentMode(true)} handoff={handoff} onHandoff={setHandoff} />}
+    : <Workspace intakeShare={intakeShares[0] ?? null} onShareDone={finishIntakeShare} onCaptureIntake={captureIntake} intakeShortcut={intakeShortcut} onShortcutOpened={shortcutOpened} handoffTarget={handoffTarget} onTargetOpened={targetOpened} onCapture={() => setItemsOpen(true)} voiceRecovery={recoveredVoice.recovery} key={scope} connection={connection} scope={scope} onApply={setConnection} onOpenAgents={() => selectAgentMode(true)} handoff={handoff} onHandoff={setHandoff} />}
     {recoveredVoice.notice && createPortal(<div className="voice-scrim"><section className="voice-sheet" role="dialog" aria-modal="true" aria-label="语音结果已取回">
         <header><strong>语音结果已取回</strong></header>
         <p>{recoveredVoice.notice.message}</p>
@@ -128,7 +157,7 @@ export function App() {
       </section></div>, document.body)}</ProductRemoteShell>;
 }
 
-function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, connection, scope, onApply, onOpenAgents, handoff, onHandoff }: { handoffTarget: HandoffTarget | null; onTargetOpened: () => void; onCapture: () => void; voiceRecovery: VoiceRecoveryPort; connection: ConnectionProfile; scope: string; onApply: (profile: ConnectionProfile) => void; onOpenAgents: () => void; handoff: ProductHandoff | null; onHandoff: (value: ProductHandoff | null) => void }) {
+function Workspace({ intakeShare, onShareDone, onCaptureIntake, intakeShortcut, onShortcutOpened, handoffTarget, onTargetOpened, onCapture, voiceRecovery, connection, scope, onApply, onOpenAgents, handoff, onHandoff }: { intakeShare: SharePayload | null; onShareDone: (id: string) => void; onCaptureIntake: (draft: CaptureInitialDraft) => void; intakeShortcut: ShortcutPayload | null; onShortcutOpened: () => void; handoffTarget: HandoffTarget | null; onTargetOpened: () => void; onCapture: () => void; voiceRecovery: VoiceRecoveryPort; connection: ConnectionProfile; scope: string; onApply: (profile: ConnectionProfile) => void; onOpenAgents: () => void; handoff: ProductHandoff | null; onHandoff: (value: ProductHandoff | null) => void }) {
   const scopeAbortRef = useRef(new AbortController());
   const diagnosticJournalRef = useRef(createConnectionJournal());
   const diagnosticEpochRef = useRef(0);
@@ -165,6 +194,10 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
   const [quotaSwitch, setQuotaSwitch] = useState<{ key: string; options: QuotaSwitchOptions | null; loading: boolean; busy: boolean; error: string; unsupported?: boolean } | null>(null);
   const [switchRecords, setSwitchRecords] = useState(loadSwitchRecords);
   const [switchingChannel, setSwitchingChannel] = useState(false);
+  const [voiceOpenRequest, setVoiceOpenRequest] = useState(0);
+  const recentThreadsRef = useRef("");
+  const voiceRequestSequence = useRef(0);
+  const cancelIntakeShare = useCallback(() => { if (intakeShare) onShareDone(intakeShare.id); }, [intakeShare, onShareDone]);
   const channelAttemptRef = useRef<{ key: string; clientMessageId: string } | null>(null);
   const [sidePaneSize, setSidePaneSize] = useState(defaultSidePaneSize);
   const [topPaneSize, setTopPaneSize] = useState(defaultTopPaneSize);
@@ -483,11 +516,29 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
     const known = threads.find(thread => thread.id === target.sessionId);
     void openThread(known ?? { id: target.sessionId, threadName: target.title, cwd: target.cwd || null, updatedAt: new Date().toISOString(), source: 'vscode', originator: 'desktop' });
   }, [handoffTarget, onTargetOpened]);
+  useEffect(() => {
+    if (!intakeShortcut) return;
+    startNewThread();
+    if (intakeShortcut.target === "voice") setVoiceOpenRequest(++voiceRequestSequence.current);
+    onShortcutOpened();
+    // The shortcut is a one-shot command, independent of subsequent workspace updates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [intakeShortcut, onShortcutOpened]);
+  useEffect(() => {
+    if (!intakeAvailable()) return;
+    const recent = [...threads].sort((a, b) => Date.parse(b.updatedAt || "") - Date.parse(a.updatedAt || "")).slice(0, 3)
+      .map(thread => ({ key: codexAttentionKey(thread.id, isDesktopSource(thread)), title: thread.threadName || "线程" }));
+    const serialized = JSON.stringify(recent);
+    if (recentThreadsRef.current === serialized) return;
+    recentThreadsRef.current = serialized;
+    void Intake.setRecentThreads({ threads: recent }).catch(() => { if (recentThreadsRef.current === serialized) recentThreadsRef.current = ""; });
+  }, [threads]);
   // F1: no notification for the thread that is on screen.
   useEffect(() => { setAttentionViewing(selected ? codexAttentionKey(selected.id, isDesktopSource(selected)) : null); }, [selected?.id, selected?.source, selected?.originator]);
   useEffect(() => () => setAttentionViewing(null), []);
 
   async function openThread(thread: ThreadSummary, options: { closeSidebar?: boolean } = {}) {
+    setVoiceOpenRequest(0);
     setSelected(thread);
     setIsNewThread(false);
     setStatus("读取线程中");
@@ -594,6 +645,7 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
   }
 
   function startNewThread() {
+    setVoiceOpenRequest(0);
     setSelected(null);
     setIsNewThread(true);
     patchRuntime(newThreadId, { messages: [], draft: "", attachments: [], loaded: true, status: "新线程" });
@@ -1117,19 +1169,20 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
     }
   }
 
-  async function uploadFiles(files: FileList | null) {
-    if (!files || files.length === 0) return;
+  async function uploadFiles(files: FileList | File[] | null, targetKey = activeThreadKey || newThreadId, signal = scopeAbortRef.current.signal) {
+    if (!files || files.length === 0) return true;
     if (!token.trim()) {
       setStatus("请先填写 Token");
-      return;
+      return false;
     }
     setUploading(true);
     setStatus("上传文件中");
     let uploadedAttachments: PendingAttachment[] = [];
     try {
-      uploadedAttachments = await uploadAttachments(endpoint, token, Array.from(files));
-      const targetKey = activeThreadKey || newThreadId;
-      if (!activeThreadKey) {
+      uploadedAttachments = await uploadAttachments(endpoint, token, Array.from(files), signal);
+      signal.throwIfAborted();
+      scopeAbortRef.current.signal.throwIfAborted();
+      if (!activeThreadKey && targetKey === newThreadId) {
         setSelected(null);
         setIsNewThread(true);
       }
@@ -1143,14 +1196,37 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
         };
       });
       setStatus(`已上传 ${uploadedAttachments.length} 个文件`);
-      await refreshRelayStatus().catch(() => undefined);
+      void refreshRelayStatus().catch(() => undefined);
+      return true;
     } catch (error) {
       revokeAttachmentPreviews(uploadedAttachments);
-      setStatus(toFriendlyFetchError(error));
+      if (!signal.aborted && !scopeAbortRef.current.signal.aborted) setStatus(toFriendlyFetchError(error));
+      return false;
     } finally {
       setUploading(false);
       if (uploadInputRef.current) uploadInputRef.current.value = "";
     }
+  }
+
+  async function chooseIntakeShare(action: ShareAction, signal: AbortSignal) {
+    if (!intakeShare) return;
+    const payload = intakeShare;
+    const files = await shareFiles(payload, (input, init) => fetch(input, { ...init, signal }));
+    signal.throwIfAborted(); scopeAbortRef.current.signal.throwIfAborted();
+    const detail = shareText(payload);
+    if (action === "capture") {
+      onCaptureIntake({ key: payload.id, detail, files });
+    } else {
+      if (action === "current" && !selected) throw new Error("请先打开一个线程");
+      const targetKey = action === "new-task" ? newThreadId : selected!.id;
+      if (action === "new-task") startNewThread();
+      if (!await uploadFiles(files, targetKey, signal)) throw new Error("附件未能上传，分享内容仍保留，请连接电脑后重试。");
+      signal.throwIfAborted(); scopeAbortRef.current.signal.throwIfAborted();
+      updateRuntime(targetKey, runtime => ({ ...runtime, loaded: true,
+        draft: [runtime.draft, detail].filter(Boolean).join("\n\n") }));
+      setStatus("分享内容已填入草稿，请确认后发送");
+    }
+    onShareDone(payload.id);
   }
 
   function removeAttachment(attachmentId: string) {
@@ -1668,7 +1744,7 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
 
   useEffect(() => {
     void refreshRelayStatus().catch(() => undefined);
-    if (selected) void openThread(selected);
+    if (selected && !intakeShortcut && !handoffTarget) void openThread(selected);
     void loadThreads({ selectLatest: !selected && !isNewThread });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1693,6 +1769,7 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
 
   return (
     <main className={`codex-shell ${layoutClass} ${resizingPane ? "is-resizing" : ""}`} style={shellStyle}>
+      {intakeShare && createPortal(<ShareSheet key={intakeShare.id} payload={intakeShare} currentTitle={selected ? selected.threadName || "线程" : null} onChoose={chooseIntakeShare} onCancel={cancelIntakeShare} />, document.body)}
       {handoff && <HandoffCard key={handoff.id} handoff={handoff} scope={scope} threads={threads} selectedId={selected?.id}
         ready={Boolean(nativeDesktop && desktopSend.ready && !submittingMessage && !uploading && !activeRuntime.pendingMessageId && (!isLiveTurnActive || canQueue))}
         queue={isLiveTurnActive} changed={onHandoff} select={thread => void openThread(thread)}
@@ -1916,7 +1993,7 @@ function Workspace({ handoffTarget, onTargetOpened, onCapture, voiceRecovery, co
                 feedback={!activeRuntime.desktopSubmission ? activeRuntime.desktopSendFeedback : undefined}
                 fallback={`${isDesktopWatch ? "电脑" : "Relay"} · ${isDesktopHistoryOnly ? "历史会话" : "当前会话"}`} />}
               statusTitle={activeRuntime.desktopSendFeedback || (sessionStatus?.detail || controlText)} placeholder="向 Codex 发送消息"
-              voice={<VoiceInput context={{ cwd: selected?.cwd, title: selected?.threadName, messages }} scope={scope} thread={`codex:${activeThreadKey || newThreadId}`} recovery={voiceRecovery} key={`${scope}:codex:${activeThreadKey || newThreadId}`} endpoint={endpoint} token={token} draft={draft}
+              voice={<VoiceInput openRequest={voiceOpenRequest} context={{ cwd: selected?.cwd, title: selected?.threadName, messages }} scope={scope} thread={`codex:${activeThreadKey || newThreadId}`} recovery={voiceRecovery} key={`${scope}:codex:${activeThreadKey || newThreadId}`} endpoint={endpoint} token={token} draft={draft}
                 onDraft={value => { if (!activeThreadKey) setIsNewThread(true); patchRuntime(activeThreadKey || newThreadId, { draft: value, desktopSendFeedback: undefined }); }} />} />
           </footer>
         </section>

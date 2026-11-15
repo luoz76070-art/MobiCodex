@@ -18,7 +18,7 @@ import { joinTranscripts, parseVoiceSegment, transcribeSegment, voiceSegmentMs, 
 type Phase = "idle" | "starting" | "recording" | "transcribing" | "failed" | "refining" | "preview";
 type Piece = { index: number; requestId: string; segment?: VoiceSegment; text?: string; error?: unknown };
 const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, recovery, context, capture = false, onCapture }: { endpoint: string; token: string; draft: string; onDraft: (value: string) => void; scope: string; thread: string; recovery: VoiceRecoveryPort; context?: VoiceContextSource; capture?: boolean; onCapture?: (raw: string) => void }) {
+export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, recovery, context, capture = false, onCapture, openRequest }: { endpoint: string; token: string; draft: string; onDraft: (value: string) => void; scope: string; thread: string; recovery: VoiceRecoveryPort; context?: VoiceContextSource; openRequest?: number; capture?: boolean; onCapture?: (raw: string) => void }) {
   const [open, setOpen] = useState(false), [phase, setPhase] = useState<Phase>("idle");
   const [mode, setMode] = useState<"text" | "prompt">(capture ? "text" : "prompt"), [seconds, setSeconds] = useState(0);
   const [original, setOriginal] = useState(""), [prompt, setPrompt] = useState(""), [error, setError] = useState(""), [notice, setNotice] = useState("");
@@ -30,6 +30,13 @@ export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, rec
   const available = voiceRecordingSupported();
   const busy = ["starting", "recording", "transcribing", "refining"].includes(phase);
   const missingDetails = prompt ? findMissingVoiceDetails(original, prompt) : [];
+
+  function openVoice() { setOpen(true); setOriginal(""); setPrompt(""); setError(""); }
+  useEffect(() => {
+    if (openRequest && endpoint && token) openVoice();
+    // Only a new shortcut request opens the panel, as with a microphone click.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRequest]);
 
   function cancel() {
     const active = session.current; session.current = null;
@@ -220,7 +227,7 @@ export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, rec
   }
 
   return <>
-    <button type="button" className="voice-entry" aria-label="语音输入" title="语音输入" disabled={!token || !endpoint} onClick={() => { setOpen(true); setOriginal(""); setPrompt(""); setError(""); }}><Mic size={20} aria-hidden="true" /></button>
+    <button type="button" className="voice-entry" aria-label="语音输入" title="语音输入" disabled={!token || !endpoint} onClick={openVoice}><Mic size={20} aria-hidden="true" /></button>
     {open && createPortal(<div className={capture ? "voice-scrim capture-voice-scrim" : "voice-scrim"} onClick={event => { if (event.target === event.currentTarget) { cancel(); setOpen(false); setPhase("idle"); } }}>
       <section ref={sheet} className="voice-sheet" role="dialog" aria-modal="true" aria-label={capture ? "语音捕获" : "语音输入与提示词整理"} onKeyDown={event => {
         if (capture) event.stopPropagation();
