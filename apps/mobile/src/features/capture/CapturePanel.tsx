@@ -3,7 +3,7 @@ import { ItemStateActions } from '../handoff/ItemStateActions';
 import type { HandoffTarget } from '../../../../../shared/handoff';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { WorkItem } from '../../../../../shared/workItem';
+import type { WorkItem, WorkItemResponse } from '../../../../../shared/workItem';
 import { voiceDraftHash } from '../voice/recovery';
 import { VoiceInput } from '../voice/VoiceInput';
 import { useDeviceRevoked } from '../connection/useDeviceRevoked';
@@ -12,8 +12,10 @@ import { captureApi, canvasPreview, captureTransaction, type CaptureList, type C
 import { useCaptureVoice } from './useCaptureVoice';
 import './capture.css';
 
-type Props = { itemUid?: string | null; onOpenTarget: (target: HandoffTarget) => void; endpoint: string; token: string; scope: string; open: boolean; onClose: () => void };
-export function CapturePanel({ itemUid = null, endpoint, token, scope, open, onClose, onOpenTarget }: Props) {
+type CaptureInitialDraft = { key: string; detail: string; files: File[] };
+type TextShareTransaction = { uid: string; mutationId: string; storeId: string | null; title: string; detail: string; posted: boolean; confirmed: boolean };
+type Props = { initialDraft?: CaptureInitialDraft; itemUid?: string | null; onOpenTarget: (target: HandoffTarget) => void; endpoint: string; token: string; scope: string; open: boolean; onClose: () => void };
+export function CapturePanel({ initialDraft, itemUid = null, endpoint, token, scope, open, onClose, onOpenTarget }: Props) {
   const [online, setOnline] = useState(() => navigator.onLine);
   const [draftId, setDraftId] = useState(() => crypto.randomUUID());
   const currentDraft = useRef({ draftId, detail: '', writable: false });
@@ -21,9 +23,11 @@ export function CapturePanel({ itemUid = null, endpoint, token, scope, open, onC
   const [item, setItem] = useState<WorkItem | null>(null), [list, setList] = useState<CaptureList | null>(null);
   const [images, setImages] = useState<{ id: string; src: string; label: string }[]>([]);
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
+  const appliedInitialDrafts = useRef(new Set<string>());
+  const textShare = useRef(false);
   const revoked = useDeviceRevoked(endpoint, token);
   const lifetime = useRef(new AbortController()), api = useMemo(() => captureApi(endpoint, token, () => lifetime.current.signal), [endpoint, token]);
-  const tx = useRef<CaptureTransaction | null>(null), working = useRef(false), card = useRef<HTMLElement | null>(null), input = useRef<HTMLInputElement | null>(null);
+  const tx = useRef<CaptureTransaction | TextShareTransaction | null>(null), working = useRef(false), card = useRef<HTMLElement | null>(null), input = useRef<HTMLInputElement | null>(null);
   const pending = useRef<{ kind: 'edit' | 'delete'; uid: string; mutationId: string; expectedRevision: number; title: string; detail: string } | null>(null);
   currentDraft.current = { draftId, detail, writable: !tx.current && !item };
   const voice = useCaptureVoice(`capture:${scope}:${draftId}`, endpoint, token, async (text, record) => {
@@ -59,7 +63,7 @@ export function CapturePanel({ itemUid = null, endpoint, token, scope, open, onC
     } finally { working.current = false; if (!lifetime.current.signal.aborted) setBusy(false); }
   }
   function show(value: WorkItem) { setItem(value); setTitle(value.title); setDetail(value.detail); setRaw(value.capture?.rawTranscript ?? null); setFiles([]); setImages([]); }
-  function reset() { setDraftId(crypto.randomUUID()); setItem(null); setTitle(''); setDetail(''); setRaw(null); setFiles([]); setImages([]); tx.current = null; pending.current = null; setNotice(''); setError(''); }
+  function reset() { setDraftId(crypto.randomUUID()); setItem(null); setTitle(''); setDetail(''); setRaw(null); setFiles([]); setImages([]); tx.current = null; pending.current = null; textShare.current = false; setNotice(''); setError(''); }
   async function refresh(append = false) {
     const page = await api.list(append ? list?.nextCursor ?? undefined : undefined);
     setList(previous => append && previous?.storeId === page.storeId ? { ...page, items: [...previous.items, ...page.items] } : page);
@@ -71,8 +75,26 @@ export function CapturePanel({ itemUid = null, endpoint, token, scope, open, onC
       const saved = await api.edit(p.uid, { mutationId: p.mutationId, expectedRevision: p.expectedRevision, title: p.title, detail: p.detail });
       show(saved.item); pending.current = null; setNotice('修改已保存');
     } else {
+      if (!tx.current && textShare.current && !files.length && raw === null) {
+        const textTitle = title.trim() || [...detail.trim().split('\n')[0]].slice(0, 200).join('') || '分享事项';
+        if ([...textTitle].length > 200 || new TextEncoder().encode(detail).length > 65536) throw new Error('标题最多200字，说明最多64KiB');
+        tx.current = { uid: crypto.randomUUID(), mutationId: crypto.randomUUID(), storeId: null, title: textTitle, detail, posted: false, confirmed: false };
+      }
       tx.current ??= captureTransaction({ title, detail, rawTranscript: raw, files });
-      const saved = await api.save(tx.current, canvasPreview); show(saved.item); tx.current = null; setNotice('事项已保存 · 待处理');
+      const frozen = tx.current;
+      let saved: WorkItemResponse;
+      if ('capture' in frozen) saved = await api.save(frozen, canvasPreview);
+      else {
+        const info = await api.list();
+        if (frozen.storeId && frozen.storeId !== info.storeId) throw new Error('电脑事项存储已变化，请核对原连接');
+        frozen.storeId = info.storeId; frozen.posted = true;
+        const created = await api.request<WorkItemResponse>('/api/work-items', 'POST', { uid: frozen.uid, mutationId: frozen.mutationId,
+          expectedRevision: 0, storeId: frozen.storeId, kind: 'task', title: frozen.title, detail: frozen.detail, assets: [], codeRefs: [] });
+        saved = await api.get(frozen.uid);
+        if (created.storeId !== frozen.storeId || saved.storeId !== frozen.storeId || saved.item.uid !== frozen.uid) throw new Error('事项回读未确认，请重试核对');
+        frozen.confirmed = true;
+      }
+      show(saved.item); tx.current = null; textShare.current = false; setNotice('事项已保存 · 待处理');
     }
     await refresh();
   }
@@ -99,6 +121,13 @@ export function CapturePanel({ itemUid = null, endpoint, token, scope, open, onC
     else if (!itemUid && item && !tx.current && !pending.current) reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, itemUid]);
+  useEffect(() => {
+    if (!open || !initialDraft || itemUid || item || tx.current || pending.current || working.current || appliedInitialDrafts.current.has(initialDraft.key)) return;
+    appliedInitialDrafts.current.add(initialDraft.key);
+    textShare.current = true;
+    setDetail(current => [current, initialDraft.detail].filter(Boolean).join('\n\n'));
+    setFiles(current => [...current, ...initialDraft.files]);
+  }, [open, itemUid, item, initialDraft]);
   const controlsDisabled = busy || !connected;
   return <>
     {open && createPortal(<div className="handoff-scrim"><section ref={card} tabIndex={-1} className="handoff-card capture-card" role="dialog" aria-modal="true" aria-labelledby="capture-title" onKeyDown={event => {
@@ -110,7 +139,7 @@ export function CapturePanel({ itemUid = null, endpoint, token, scope, open, onC
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
     }}>
       <h2 id="capture-title">{item ? '捕获事项' : '新建事项'}</h2>
-      <p>图片和原始转写保留为独立事项，保存后为待处理。</p>
+      <p>文字、图片和原始转写保留为独立事项，保存后为待处理。</p>
       {!connected && <p role="alert">{revoked ? deviceRevokedMessage : '需要连接电脑'}</p>}
       <label>标题<input aria-label="事项标题" value={title} disabled={locked || !connected} onChange={e => setTitle(e.target.value)} placeholder="留空使用默认标题" /></label>
       <label>说明<textarea aria-label="事项说明" value={detail} disabled={locked || !connected} onChange={e => setDetail(e.target.value)} rows={5} /></label>
