@@ -56,6 +56,13 @@
 - CI：`apps/relay/tests/ccDesk.test.mjs`，进程内假服务端（协议 17 子集）+ 假本机接口：列表、订阅与片段拼接、历史翻页、提问与权限映射、发送/停止/审批、其他电脑的会话只读、凭证缺失与协议不符、证书指纹不符时不发送凭据。
 - 本地：真实 CC Desk 服务端（模拟模式）+ 改过的转发层 + 网关适配器，端到端跑一遍；再在真实环境用测试会话验收。
 
+## 实现情况（11-15）
+
+- 网关：`apps/relay/src/agents/ccDesk{Protocol,Connection,Control,Transcript,Adapter}.ts`，命令行 `gateway/ccDeskSetup.ts`。证书：配了指纹只认指纹，没配走系统 CA（CC Desk 的自签证书因此必须配指纹）。
+- 手机：列表过滤已认 `sessionApi: 1`，不用另加白名单；历史翻页走通用方式（与 Claude 通道相同，最多 190 条）。补了说明文字、`ccdesk` 会话 ID 校验，以及 `CCDESK_OTHER_DEVICE`、`CCDESK_CONTROL_UNAVAILABLE`、`CCDESK_RUN_ACTIVE`、`CCDESK_BUSY`、`CCDESK_TOKEN_MISSING` 的提示。
+- 测试：`ccDesk.test.mjs` 8 项（CI）；本地端到端 `integrations/cc-desk/test/e2e-gateway.mjs` 11 项通过。
+- 剩下：升级电脑上的网关；用户在终端运行 `ccdesk login`，重启网关；真实环境用测试会话验收；手机界面更新等用户说“发”。
+
 ## 不做
 
 - 新建会话（W3b）：仍走一次性定时任务文件，另做。

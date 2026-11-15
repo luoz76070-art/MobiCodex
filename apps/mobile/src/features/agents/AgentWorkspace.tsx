@@ -41,8 +41,16 @@ import { SessionRangeControl } from "../threads/SessionRangeControl";
 import { agentAttentionKey, attentionAfterSend, setAttentionViewing } from "../notify/attention";
 
 type Agent = { id: string; label: string; transport: string; sessionApi?: 1; state?: string };
+const ccDeskErrors: Record<string, string> = {
+  CCDESK_OTHER_DEVICE: "这个会话在另一台电脑上，只能在那台电脑上操作。",
+  CCDESK_CONTROL_UNAVAILABLE: "CC Desk 没有开启手机控制：请在电脑上打开“CC Desk Tunnel（手机控制）”后重试。",
+  CCDESK_RUN_ACTIVE: "会话正在运行，请等它结束或先中断。",
+  CCDESK_BUSY: "CC Desk 正忙，请稍后再试。",
+  CCDESK_TOKEN_MISSING: "电脑端网关还没有登录 CC Desk：请在电脑终端运行 mobile-codex ccdesk login。",
+};
 const friendlyError = (error: unknown) => {
-  const status = (error as { status?: number })?.status;
+  const status = (error as { status?: number })?.status, code = (error as { code?: unknown })?.code;
+  if (typeof code === "string" && Object.hasOwn(ccDeskErrors, code)) return ccDeskErrors[code];
   return status === 401 ? deviceRevokedMessage : status === 410 ? "电脑会话暂时离线，请返回会话列表并等待重新连接。" : status === 404 ? "电脑端尚未提供此 Agent，请更新或检查插件配置。"
     : status === 409 ? "会话状态已变化，请等待重新同步后再操作。" : "无法连接 Agent，请确认电脑上的网关与 Agent 服务正在运行。";
 };
@@ -184,8 +192,8 @@ export default function AgentWorkspace({ handoffTarget, onTargetOpened, onCaptur
         {!agent && <>
           <AgentPickRow id="codex" label="Codex" description="电脑桌面会话与手机工作台" summary={codexSummary} onOpen={onBack} />
           {agents.map(item => <AgentPickRow key={item.id} id={item.id} label={item.label} summary={summaries[item.id]} recentOnly={item.id === "deepseek"} onOpen={() => void loadSessions(item)}
-            description={item.id === "deepseek" ? "查看电脑会话与历史，继续原线程和处理提问" : item.id === "claude" ? "打开已加载插件的会话，查看输出、排队输入与中断" : "打开现有会话，查看输出与处理提问"} />)}
-          {!loading && !agents.length && !error && <EmptyState compact title="还没有接入其他 Agent">配置 DeepSeek Harness、Claude Code 插件或 OpenCode 服务后，下拉刷新此页。</EmptyState>}
+            description={item.id === "deepseek" ? "查看电脑会话与历史，继续原线程和处理提问" : item.id === "ccdesk" ? "查看 CC Desk 会话，发消息、审批与中断" : item.id === "claude" ? "打开已加载插件的会话，查看输出、排队输入与中断" : "打开现有会话，查看输出与处理提问"} />)}
+          {!loading && !agents.length && !error && <EmptyState compact title="还没有接入其他 Agent">配置 DeepSeek Harness、Claude Code 插件、CC Desk 或 OpenCode 服务后，下拉刷新此页。</EmptyState>}
         </>}
         {agent && <>
           {agent.id === "deepseek" && <SessionRangeControl range={range} disabled={loading} onChange={next => { setRange(next); void loadSessions(agent, false, next); }} />}
@@ -193,7 +201,7 @@ export default function AgentWorkspace({ handoffTarget, onTargetOpened, onCaptur
           {<ProjectGroups key={agent.id} scope={scope} agentId={agent.id} groups={groupByProject(sessions, session => session.directory)} search={query}>
             {session => <button className="agent-session-row" key={session.id} onClick={() => { saveAgentView(scope, agent.id, session.id); setSelected(session); }}><strong>{session.title || "未命名会话"}</strong><time>{new Date(session.updatedAt).toLocaleString()}</time></button>}
           </ProjectGroups>}
-          {!loading && !sessions.length && !error && <EmptyState compact title="没有会话">{agent.id === "deepseek" ? range === "recent" ? "近 30 天没有匹配会话，可查看更早会话。" : "没有匹配的 DeepSeek 会话，请检查电脑插件连接或搜索条件。" : agent.id === "claude" ? `尚无已连接的 ${agent.label} 会话，请先在电脑会话中加载并配置插件。` : "当前目录没有可用的现有会话。"}</EmptyState>}
+          {!loading && !sessions.length && !error && <EmptyState compact title="没有会话">{agent.id === "deepseek" ? range === "recent" ? "近 30 天没有匹配会话，可查看更早会话。" : "没有匹配的 DeepSeek 会话，请检查电脑插件连接或搜索条件。" : agent.id === "ccdesk" ? "CC Desk 服务上没有匹配的会话。" : agent.id === "claude" ? `尚无已连接的 ${agent.label} 会话，请先在电脑会话中加载并配置插件。` : "当前目录没有可用的现有会话。"}</EmptyState>}
           {cursor && <button className="action-button" disabled={loading} onClick={() => void loadSessions(agent, true)}>加载更多会话</button>}
         </>}
         {loading && (agent ? !sessions.length : !agents.length) ? <ListSkeleton label="正在读取…" />
@@ -358,9 +366,10 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
   return <section className="agent-chat">
     <SystemNotice className="agent-connection" error={stream === "unauthorized"}>{online ? `${agent.label} 已连接` : stream === "unauthorized" ? deviceRevokedMessage : stream === "paused" ? "连接已暂停，返回前台后恢复" : "正在恢复连接…"}</SystemNotice>
     <div className="messages-viewport" ref={viewport} onScroll={() => { const element = viewport.current; if (element) { nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 100; reading.current[draftSession] = element.scrollTop; } }}>
-      {(snapshot?.partialText || agent.id === "claude" || agent.id === "deepseek") && <details className="agent-capabilities"><summary>会话能力与同步范围</summary>
+      {(snapshot?.partialText || agent.id === "claude" || agent.id === "deepseek" || agent.id === "ccdesk") && <details className="agent-capabilities"><summary>会话能力与同步范围</summary>
         {snapshot?.partialText && <p>当前显示已同步的消息与工具记录，长内容可能截断；更早历史以本通道提供的加载入口为准。</p>}
         {agent.id === "claude" && <p>消息在当前任务结束后处理；提问和单次审批可在手机处理。</p>}
+        {agent.id === "ccdesk" && <p>只能操作这台电脑上的会话，其他电脑上的会话只能查看。发消息、审批和中断需要电脑上开着“CC Desk Tunnel（手机控制）”；权限请求可允许一次或拒绝。</p>}
         {agent.id === "deepseek" && <p>查看历史不会启动任务；发送后继续原会话，运行中可引导或排队。权限请求须核对完整参数后允许一次或拒绝。</p>}
       </details>}
       {snapshot?.operationError && <SystemNotice error>{snapshot.operationError.code === "rejected" ? "电脑会话拒绝了本次操作，输入内容已保留。" : "操作尚未送达电脑便已过期，输入内容已保留。"}</SystemNotice>}

@@ -46,7 +46,7 @@ function validDraftKey(key: string) {
   const match = /^([a-z][a-z0-9-]{0,63}):([a-zA-Z0-9_-]{1,160})$/u.exec(key);
   if (!match || match[1] === "codex") return false;
   if (match[1] === "opencode") return /^ses[a-zA-Z0-9_-]{1,128}$/u.test(match[2]);
-  return !["claude", "deepseek"].includes(match[1]) || /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/u.test(match[2]);
+  return !["claude", "deepseek", "ccdesk"].includes(match[1]) || /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/u.test(match[2]);
 }
 function boundedDrafts(value: Record<string, unknown>) {
   let budget = 256_000;

@@ -7,6 +7,8 @@ import { DeepSeekAdapter } from "./deepSeekAdapter.js";
 import { DeepSeekClient } from "./deepSeekClient.js";
 import type { DeepSeekConfig } from "./deepSeekProtocol.js";
 import type { ClaudeConfig } from "./claudeProtocol.js";
+import { CcDeskAdapter } from "./ccDeskAdapter.js";
+import type { CcDeskConfig } from "./ccDeskProtocol.js";
 import { agentError, type SessionAdapter } from "./sessions.js";
 
 export type AgentStatus = {
@@ -121,12 +123,13 @@ export class AgentGateway {
   }
 }
 
-export function createAgentGateway(config: { codexHome: string; opencode?: OpenCodeConfig; claude?: ClaudeConfig; deepseek?: DeepSeekConfig }): AgentGateway {
+export function createAgentGateway(config: { codexHome: string; opencode?: OpenCodeConfig; claude?: ClaudeConfig; deepseek?: DeepSeekConfig; ccdesk?: CcDeskConfig }): AgentGateway {
   const adapters: AgentAdapter[] = [new CodexExistingServerAdapter(new LocalAppServerClient({
     socketPath: path.join(config.codexHome, "app-server-control", "app-server-control.sock"),
   }))];
   if (config.opencode) adapters.push(new OpenCodeAdapter(new OpenCodeClient(config.opencode)));
   if (config.claude) adapters.push(new ClaudeAdapter());
   if (config.deepseek) adapters.push(new DeepSeekAdapter(new DeepSeekClient(config.deepseek)));
+  if (config.ccdesk) adapters.push(new CcDeskAdapter(config.ccdesk));
   return new AgentGateway(adapters);
 }

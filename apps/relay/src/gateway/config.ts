@@ -6,6 +6,7 @@ import { z } from "zod";
 import { openCodeConfigSchema } from "../agents/openCodeClient.js";
 import { claudeConfigSchema } from "../agents/claudeProtocol.js";
 import { deepSeekConfigSchema } from "../agents/deepSeekProtocol.js";
+import { ccDeskConfigSchema } from "../agents/ccDeskProtocol.js";
 
 const absolutePath = z.string().refine(value => path.isAbsolute(value));
 const secret = z.string().min(32).max(512);
@@ -17,6 +18,7 @@ const schema = z.object({
   opencode: openCodeConfigSchema.optional(),
   claude: claudeConfigSchema.optional(),
   deepseek: deepSeekConfigSchema.optional(),
+  ccdesk: ccDeskConfigSchema.optional(),
 }).strict();
 export type ManagedConfig = z.infer<typeof schema>;
 
@@ -49,6 +51,17 @@ function validateUrl(raw: string, broker: boolean) {
     const local = broker ? ["http:", "ws:"] : ["http:"];
     if (url.username || url.password || url.search || url.hash || (!secure.includes(url.protocol) && !(loopback && local.includes(url.protocol)))) throw new Error();
   } catch { throw gatewayError("GATEWAY_URL_INVALID"); }
+}
+
+/** Replaces an existing configuration atomically, keeping it private. */
+export async function writeManagedConfig(file: string, input: unknown): Promise<void> {
+  const config = parseManagedConfig(input);
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  try {
+    await fs.writeFile(temporary, JSON.stringify(config, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+    await fs.rename(temporary, file);
+  } catch { throw gatewayError("GATEWAY_CONFIG_WRITE_FAILED"); }
+  finally { await fs.rm(temporary, { force: true }); }
 }
 
 export async function readManagedConfig(file: string): Promise<ManagedConfig> {

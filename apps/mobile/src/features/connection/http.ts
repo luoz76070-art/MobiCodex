@@ -156,7 +156,8 @@ export function ensureHttpOk(status: number, data?: unknown) {
   const voiceCode = typeof reason === "string" && Object.hasOwn(voiceErrors, reason) ? reason : undefined;
   const code = voiceCode ?? (status === 409 && typeof reason === "string" && Object.hasOwn(desktopErrors, reason) ? reason : undefined);
   const detail = voiceCode ? voiceErrors[voiceCode] : code ? desktopErrors[code] : status === 409 ? "会话或提交状态发生冲突，请刷新会话并核对消息记录。" : undefined;
-  throw Object.assign(new Error(status === 401 ? deviceRevokedMessage : detail ? `HTTP ${status}：${detail}` : `HTTP ${status}`), { status, ...(code ? { code } : {}) });
+  const agentCode = !code && typeof reason === "string" && /^CCDESK_[A-Z_]{1,48}$/u.test(reason) ? reason : undefined;
+  throw Object.assign(new Error(status === 401 ? deviceRevokedMessage : detail ? `HTTP ${status}：${detail}` : `HTTP ${status}`), { status, ...(code ?? agentCode ? { code: code ?? agentCode } : {}) });
 }
 
 export function authHeaders(token: string) {

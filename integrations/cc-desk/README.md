@@ -29,6 +29,20 @@ node integrations/cc-desk/patch.mjs install
 
 退出副本，打开原版即可，原版从未改动，服务端也没有任何改动。不再需要时 `node integrations/cc-desk/patch.mjs remove` 把副本移到废纸篓。网关找不到本机接口会自动回到只读。
 
+## 接入手机（网关）
+
+1. 在这台电脑的终端里运行（凭据只在这里输入一次，存进钥匙串，不写进任何文件、命令行参数或环境变量）：
+
+   ```sh
+   node dist-plugin/mobile-codex/scripts/mobile-codex.mjs ccdesk login
+   ```
+
+   服务地址、证书指纹和这台电脑的设备 ID 默认取 CC Desk 自己的设置（不读它保存的凭据）；不一样时加 `--url wss://…/ws`、`--fingerprint <SHA-256>`。登录前先连一次服务端核对凭据和证书。
+2. 重启网关（`stop` 再 `start`）。手机的 Agent 列表里出现“CC Desk”。
+3. `ccdesk status` 查看是否配置、钥匙串里有没有凭据、找没找到本机接口；`ccdesk logout` 删除凭据和配置。
+
+网关读消息用自己的连接（每个打开的会话一条，最多 8 条；不报设备身份），写操作只经本机接口。会话不在这台电脑上，或者开的是原版 CC Desk，手机上只能看、不能发，卡片上写明原因。
+
 ## 本机接口协议
 
 每个 CC Desk 配置目录（每个连接）一个 socket：`~/.mobicodex/ccdesk/<配置目录的哈希>.sock`，旁边的同名 `.json` 写着 `profile`、`service`（服务地址）、`pid`、`controlVersion`。每行一个 JSON：
@@ -52,4 +66,5 @@ node integrations/cc-desk/patch.mjs install
 ## 测试
 
 - `pnpm test:ccdesk`：asar 读写、挂钩、指令过滤与回复路由、本机接口（CI 运行）。
-- 本地端到端（需要 CC Desk 服务端程序，不在本仓库）：`test/e2e-fixture.mjs` 让改过的转发层连离线模拟模式的服务端；`test/e2e-electron.mjs` 用副本本身、独立配置目录登录模拟服务端，经本机接口发消息并截图。
+- `apps/relay/tests/ccDesk.test.mjs`（也在 `pnpm test:ccdesk` 里）：网关的 CC Desk 接入，对着进程内的假服务端和假本机接口。
+- 本地端到端（需要 CC Desk 服务端程序，不在本仓库）：`test/e2e-fixture.mjs` 让改过的转发层连离线模拟模式的服务端；`test/e2e-electron.mjs` 用副本本身、独立配置目录登录模拟服务端，经本机接口发消息并截图；`test/e2e-gateway.mjs` 让网关的 CC Desk 接入对着模拟服务端和改过的转发层，从手机这一侧发消息、审批、回答提问、停止（先构建 relay）。
