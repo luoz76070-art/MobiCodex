@@ -6,6 +6,8 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.OpenableColumns;
+import android.util.Log;
+import android.widget.Toast;
 
 import androidx.core.content.pm.ShortcutInfoCompat;
 import androidx.core.content.pm.ShortcutManagerCompat;
@@ -24,6 +26,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URLConnection;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -132,7 +135,9 @@ public class IntakePlugin extends Plugin {
             if (images.length() >= MAX_IMAGES) { skipped++; continue; }
             try {
                 images.put(copyImage(streams.get(index), id, index));
-            } catch (IOException | RuntimeException ignored) {
+            } catch (IOException | RuntimeException error) {
+                // Type and message only: enough to tell a missing grant from a bad file, without the content.
+                Log.w("MobiCodexIntake", "share image skipped: " + error.getClass().getSimpleName() + ": " + error.getMessage());
                 skipped++;
             }
         }
@@ -140,6 +145,8 @@ public class IntakePlugin extends Plugin {
             // Failed copies may have left an empty directory.
             try { deleteTree(new File(shareRoot(), id)); }
             catch (IOException | RuntimeException ignored) { /* The age-based cleanup retries. */ }
+            // Nothing usable arrived: say so instead of opening the app with no sheet.
+            if (skipped > 0) bridge.executeOnMainThread(() -> Toast.makeText(getContext(), "没能读取分享的图片", Toast.LENGTH_SHORT).show());
             return;
         }
         JSObject payload = new JSObject();
@@ -158,9 +165,11 @@ public class IntakePlugin extends Plugin {
         String authority = uri.getAuthority();
         if (authority == null || authority.startsWith(getContext().getPackageName() + ".")) throw new IOException("Unsupported image URI");
         ContentResolver resolver = getContext().getContentResolver();
-        String mimeType = resolver.getType(uri);
-        if (mimeType == null || !mimeType.startsWith("image/")) throw new IOException("Unsupported image type");
         String name = imageName(resolver, uri);
+        String mimeType = resolver.getType(uri);
+        // Some providers report no type; the file name is the next best hint.
+        if (mimeType == null) mimeType = URLConnection.guessContentTypeFromName(name);
+        if (mimeType == null || !mimeType.startsWith("image/")) throw new IOException("Unsupported image type");
         File directory = new File(shareRoot(), id);
         if (!directory.isDirectory() && !directory.mkdirs()) throw new IOException("Share cache unavailable");
         // Each stream has its own destination even if the provider repeats display names.
