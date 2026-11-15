@@ -253,6 +253,8 @@ public class AttentionService extends Service {
             .setContentTitle(heading).setContentText(text)
             .setStyle(new NotificationCompat.BigTextStyle().bigText(text))
             .setContentIntent(AttentionNotifications.open(this, key, title)).setAutoCancel(true)
+            // Android 7 and below pop up on priority plus sound or vibration; 8+ follow the channel.
+            .setPriority(NotificationCompat.PRIORITY_HIGH).setDefaults(NotificationCompat.DEFAULT_SOUND | NotificationCompat.DEFAULT_VIBRATE)
             .setCategory(NotificationCompat.CATEGORY_STATUS);
         AttentionNotifications.post(this, AttentionNotifications.turnId(key), AttentionNotifications.privately(this, builder, AttentionNotifications.DONE));
     }

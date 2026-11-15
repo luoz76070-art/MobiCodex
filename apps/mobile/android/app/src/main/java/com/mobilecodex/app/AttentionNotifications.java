@@ -14,7 +14,10 @@ import androidx.core.app.NotificationManagerCompat;
 /** Channels, ids and builders shared by the service and the action receiver. */
 final class AttentionNotifications {
     static final String RUNNING = "attention_running";
-    static final String DONE = "attention_done";
+    /** Pops up at the top of the screen and vibrates. A channel's importance can't be raised once created, so it has a new id. */
+    static final String DONE = "attention_done_v2";
+    /** Earlier builds' finished channel (default importance: status bar only); removed on start. */
+    static final String LEGACY_DONE = "attention_done";
     static final String ACTION = "attention_action";
     static final int ONGOING_ID = 7100;
     static final String OPEN_ACTION = "com.mobilecodex.app.OPEN_ATTENTION";
@@ -31,13 +34,20 @@ final class AttentionNotifications {
         NotificationChannel running = new NotificationChannel(RUNNING, "任务进行中", NotificationManager.IMPORTANCE_LOW);
         running.setDescription("有任务在跑时保持和电脑的连接");
         running.setShowBadge(false);
-        NotificationChannel done = new NotificationChannel(DONE, "任务完成", NotificationManager.IMPORTANCE_DEFAULT);
-        done.setDescription("手机上发出的任务完成、失败或中断");
+        NotificationChannel done = new NotificationChannel(DONE, "任务完成", NotificationManager.IMPORTANCE_HIGH);
+        done.setDescription("手机上发出的任务完成、失败或中断，在屏幕上方弹出并震动");
+        done.enableVibration(true);
+        // Someone who had turned the old channel off keeps it off; the sound stays the system default, as for approvals.
+        NotificationChannel legacy = manager.getNotificationChannel(LEGACY_DONE);
+        if (legacy != null && legacy.getImportance() == NotificationManager.IMPORTANCE_NONE && manager.getNotificationChannel(DONE) == null) {
+            done.setImportance(NotificationManager.IMPORTANCE_NONE);
+        }
         NotificationChannel action = new NotificationChannel(ACTION, "需要审批", NotificationManager.IMPORTANCE_HIGH);
         action.setDescription("Agent 等你批准或回答");
         manager.createNotificationChannel(running);
         manager.createNotificationChannel(done);
         manager.createNotificationChannel(action);
+        if (legacy != null) manager.deleteNotificationChannel(LEGACY_DONE);
     }
 
     static int turnId(String key) { return ("turn|" + key).hashCode(); }

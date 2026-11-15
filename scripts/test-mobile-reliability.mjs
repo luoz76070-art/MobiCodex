@@ -33,6 +33,7 @@ const entry = `
 import { createPollScope } from ${JSON.stringify(path.join(mobile, 'features/chat/sync.ts'))};
 import { defaultRuntime, desktopControlOfflinePatch, saveThreadRuntimeCache, loadThreadRuntimeCache, threadCacheSaveNotice } from ${JSON.stringify(path.join(mobile, 'features/chat/runtime.ts'))};
 import { createSnapshotReducer } from ${JSON.stringify(path.join(mobile, 'features/connection/snapshotPatch.ts'))};
+import { releasedStreamState } from ${JSON.stringify(path.join(mobile, 'features/connection/subscription.ts'))};
 export { defaultRuntime, saveThreadRuntimeCache, loadThreadRuntimeCache, threadCacheSaveNotice };
 import { createRuntimeSync } from ${JSON.stringify(path.join(mobile, 'features/chat/runtimeSync.ts'))};
 import { readActivityEvidence } from ${JSON.stringify(path.join(mobile, 'features/chat/sessionStatusModel.ts'))};
@@ -51,7 +52,9 @@ export function driver(seed = defaultRuntime()) {
  const streamState = 'recovering', liveStreamFallbackTurnId = seed.activeTurnId;
  const canUseEventSource = () => true;
  const desktopPollActiveMs = 1, desktopPollIdleMs = 1, livePollFallbackMs = 1, liveSnapshotThrottleMs = 1;
- const setStreamState = () => {}, setLiveStreamFallbackTurnId = () => {}, setConnectionState = () => {};
+ let trackedStreamState = 'connecting';
+ const setStreamState = value => { trackedStreamState = typeof value === 'function' ? value(trackedStreamState) : value; };
+ const setLiveStreamFallbackTurnId = () => {}, setConnectionState = () => {};
  const subscribeEvents = options => { subscriptions.push(options); return () => {}; };
  const requestPost = async () => ({ streamToken: 'synthetic' });
  const endpoint = 'http://synthetic.invalid', token = 'synthetic';
@@ -65,7 +68,7 @@ export function driver(seed = defaultRuntime()) {
    getRuntime: () => activeRuntimeRef.current, getSignal: () => scopeAbortRef.current.signal, updateRuntime,
    read: (route, signal) => apiGet(route, token, signal),
  });
- return { state: () => state, statuses, requests, subscriptions, timers, listeners,
+ return { state: () => state, streamState: () => trackedStreamState, statuses, requests, subscriptions, timers, listeners,
  revoke: () => { deviceRevoked = true; },
  queue: () => { queueUpdates = true; }, flush: () => { queueUpdates = false; for (const fn of updates.splice(0)) state = fn(state); },
  patch: patch => patchRuntime('thread', patch), disposeScope: () => scopeAbortRef.current.abort(),
@@ -254,6 +257,18 @@ test('throttled live snapshots and disposed live callbacks cannot update a new t
  cleanup(); const before = d.state();
  stream.events.turn(turn('current', 'completed')); stream.onState('recovering');
  assert.deepEqual(d.state(), before);
+});
+
+test('#15 a torn-down stream does not leave the recovering notice behind', () => {
+ for (const kind of ['desktop', 'live']) {
+   const seed = { ...defaultRuntime(), watchMode: kind === 'desktop' ? 'desktop-tail' : 'none', activeTurnId: kind === 'live' ? 'current' : null, turnStatus: 'inProgress' };
+   const d = driver(seed), cleanup = d[`${kind}Stream`]();
+   d.subscriptions[0].onState('recovering'); assert.equal(d.streamState(), 'recovering');
+   cleanup(); assert.equal(d.streamState(), 'connecting', `${kind}: the turn ended while recovering`);
+   d.subscriptions[0].onState('recovering'); assert.equal(d.streamState(), 'connecting', `${kind}: a disposed stream cannot bring it back`);
+   const again = d[`${kind}Stream`](); d.subscriptions[1].onState('unauthorized'); again();
+   assert.equal(d.streamState(), 'unauthorized', `${kind}: a revoked device stays revoked`);
+ }
 });
 
 test('25 drafts and pending identities survive the body thread limit', () => {
