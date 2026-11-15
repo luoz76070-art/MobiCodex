@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="new_task"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_new_task"
+        android:shortcutShortLabel="@string/shortcut_new_task">
+        <intent
+            android:action="com.mobilecodex.app.SHORTCUT"
+            android:targetPackage="com.mobilecodex.app"
+            android:targetClass="com.mobilecodex.app.MainActivity">
+            <extra android:name="mobicodexShortcut" android:value="new-task" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="voice"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_voice"
+        android:shortcutShortLabel="@string/shortcut_voice">
+        <intent
+            android:action="com.mobilecodex.app.SHORTCUT"
+            android:targetPackage="com.mobilecodex.app"
+            android:targetClass="com.mobilecodex.app.MainActivity">
+            <extra android:name="mobicodexShortcut" android:value="voice" />
+        </intent>
+    </shortcut>
+</shortcuts>
