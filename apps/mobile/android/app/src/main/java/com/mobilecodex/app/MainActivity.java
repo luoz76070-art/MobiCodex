@@ -23,6 +23,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(DiagnosticExportPlugin.class);
         registerPlugin(ProductWindowPlugin.class);
         registerPlugin(AttentionPlugin.class);
+        registerPlugin(IntakePlugin.class);
         super.onCreate(savedInstanceState);
         boolean dark = ProductWindow.systemDark(this);
         ProductWindow.apply(this, dark, ProductWindow.lastBackground(this, dark));
@@ -44,6 +45,8 @@ public class MainActivity extends BridgeActivity {
         setIntent(intent);
         PluginHandle handle = getBridge() == null ? null : getBridge().getPlugin("Attention");
         if (handle != null && handle.getInstance() instanceof AttentionPlugin) ((AttentionPlugin) handle.getInstance()).handleIntent(intent);
+        PluginHandle intake = getBridge() == null ? null : getBridge().getPlugin("Intake");
+        if (intake != null && intake.getInstance() instanceof IntakePlugin) ((IntakePlugin) intake.getInstance()).handleIntent(intent);
     }
 
     @Override
