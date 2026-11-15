@@ -35,7 +35,7 @@
 
 ## 最终双通道回执
 
-源码提交 `b9301639d3dddc81c412e259202092ff59e3b06e` 与 annotated 标签 `codex-to-phone-v0.1.6-native-preview` 已正常原子推送；标签展开值等于该提交。5917个归档源码逐项匹配该提交的Git blob。GitHub版本目录全部6个文件（含APK/源码/校验值/元数据）已从该提交完整回下载、大小/SHA/全部字节一致；大文件使用验证过的HTTP206区间拼合。GitHub接受58.15MiB APK并提示超过推荐50MiB，未使用LFS或改写历史。
+源码提交 `38ade89c31bb3cfe82d4d27070ea9cf7704a4fe4` 与 annotated 标签 `codex-to-phone-v0.1.6-native-preview` 已正常原子推送；标签展开值等于该提交。5917个归档源码逐项匹配该提交的Git blob。GitHub版本目录全部6个文件（含APK/源码/校验值/元数据）已从该提交完整回下载、大小/SHA/全部字节一致；大文件使用验证过的HTTP206区间拼合。GitHub接受58.15MiB APK并提示超过推荐50MiB，未使用LFS或改写历史。
 
 App源latest8/previous7，源码previous逐字节对应发布前code7。安装页200且字节匹配；APK60,977,711字节、源码21,689,287字节完整HTTPS回下载，与本地逐字节及SHA一致；APK Range206/CORS通过，原四通道清单内容及SHA保持。实际App清单读取/解析函数从公网识别code8，code7可升级。公开汇总见[execution-notes-verification.json](execution-notes-verification.json)。
 

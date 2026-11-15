@@ -48,6 +48,6 @@ Git沿现有 `luoz76070-art/project` 的main，仅提交 `codex-to-phone/`；开
 
 ## GitHub最终交付结果
 
-已正常推送现有main及annotated预览标签，源码提交 `a71e7f2f09edb5870abab0f2cd7df1808c8bb4d4`，标签 `codex-to-phone-v0.1.5-native-preview` 展开值与之相同。所有5917个归档源码文件与该提交中的Git blob一致。APK、源码包、配套网关和SHA256SUMS均从GitHub完整回下载并与本地逐字节一致；精确大小/SHA见[公开交付回执](github-delivery.json)。
+已正常推送现有main及annotated预览标签，源码提交 `11025a9641cfb5cb677b0914aa0738412b11d3e0`，标签 `codex-to-phone-v0.1.5-native-preview` 展开值与之相同。所有5917个归档源码文件与该提交中的Git blob一致。APK、源码包、配套网关和SHA256SUMS均从GitHub完整回下载并与本地逐字节一致；精确大小/SHA见[公开交付回执](github-delivery.json)。
 
 大APK首次整文件下载出现超时，保留失败记录，随后使用已核实HTTP206的有界区间续传；所有区间校验后拼回60,977,575字节，最终SHA与APK一致。该结果不证明手机安装或真实取图已经通过。GitHub接受了58.15MiB APK，给出超过推荐50MiB的提示，未超过100MiB硬限制；没有配置LFS或改写历史。后续文档提交仅记录这次交付，版本标签保持指向上述源码提交。

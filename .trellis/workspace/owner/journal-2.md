@@ -22,13 +22,13 @@
 ### Main Changes
 
 - 说明按序常显，连续工具一条动态摘要，一次展开原详情；原字号、图像与控制路径保持。
-- GitHub b930163及preview标签已推送，5917源码匹配提交，六个版本文件完整回下载一致；App源latest8/previous7与对应源码发布通过。
+- GitHub 38ade89及preview标签已推送，5917源码匹配提交，六个版本文件完整回下载一致；App源latest8/previous7与对应源码发布通过。
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `b930163` | fix(codex-to-phone): keep execution notes visible in code8 preview |
+| `38ade89` | fix(codex-to-phone): keep execution notes visible in code8 preview |
 
 ### Testing
 
@@ -68,13 +68,13 @@
 
 - 精确版本门、plan-review可选callId和普通工具结果缺省isError修复；审批指纹保持，新approval intent保留电脑处理。
 - 原profile官方链接/桥接重载，旧网关2280ms正常退出，新固定08bff6fea5f4运行；原五宿主进程、配置、设备和patch保持。
-- cef6890源码及六份电脑补充交付现有GitHub，原code9十文件/旧标签及App更新源保持。
+- 8f88875源码及六份电脑补充交付现有GitHub，原code9十文件/旧标签及App更新源保持。
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `cef6890` | fix(codex-to-phone): restore DeepSeek 0.2.2-rc.1 bridge for code9 |
+| `8f88875` | fix(codex-to-phone): restore DeepSeek 0.2.2-rc.1 bridge for code9 |
 
 ### Testing
 
@@ -103,13 +103,13 @@
 
 ### Summary
 
-将 codex-to-phone 提升为 project 仓库根目录，归档其他项目，修正 MobiCodex CI、文档和发布路径；完成 pnpm、Android、YAML 与路径验证。创建提交 6f0907c 和 1388a0a，未推送；用户原有宣传、文档和 codex-live-session 资料保留为未提交文件。
+将 codex-to-phone 提升为 project 仓库根目录，归档其他项目，修正 MobiCodex CI、文档和发布路径；完成 pnpm、Android、YAML 与路径验证。创建提交 e7f5a29 和 1388a0a，未推送；用户原有宣传、文档和 codex-live-session 资料保留为未提交文件。
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
-| `6f0907c` | chore(repo): promote MobiCodex to repository root |
+| `e7f5a29` | chore(repo): promote MobiCodex to repository root |
 | `1388a0a` | chore(repo): remove unrelated projects from MobiCodex tree |
 
 ### Status

@@ -104,7 +104,7 @@ corepack pnpm probe:gateway
 
 ## 版本基线与恢复
 
-开发前基线：`codex-to-phone-v1.2.2`，提交 `12c9f15616bf0c5622f0bd77f990ab8625c8f3c6`。功能与更新说明见根目录 `CHANGELOG.md`。备份包含源码、Git bundle、当时的 APK / App / dist 和必要本地配置，恢复细节以备份目录中的 README 为准；凭证和运行产物不上传 GitHub。
+开发前基线：`codex-to-phone-v1.2.2`，提交 `bb95703e2e1714169db5c640f7f4df34afa74c48`。功能与更新说明见根目录 `CHANGELOG.md`。备份包含源码、Git bundle、当时的 APK / App / dist 和必要本地配置，恢复细节以备份目录中的 README 为准；凭证和运行产物不上传 GitHub。
 
 P0 未替换运行中的输入通道。回退本轮研究只需停止诊断连接、使用已发布基线构建；恢复运行包前须停止相应服务并按运维说明验证。不要在恢复前覆盖当前配置或删除工作区其他修改。
 

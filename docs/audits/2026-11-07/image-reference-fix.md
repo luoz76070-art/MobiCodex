@@ -26,7 +26,7 @@
 
 候选bundle SHA256 `a7c895b883ed14ba851dc99ba97bf5452a41f9e8e84137a1837e1c8cb025e828`，独立归档337,434字节，6份网关文件及10份源码覆盖文件解包后逐字节核验通过，私有凭证扫描0匹配。固定目录、私有备份和回退点先行准备；[候选阶段回执](image-reference-fix-verification.json)保留当时尚未切换的状态。用户随后明确批准「现在切换并验证」，实际运行结果见下节。其余手机交互与59组完整验收保持原待验范围。
 
-源码及补充包提交 `8aaac32db744d6dcb7bbd15a619ac771294442bb` 已正常推送原 main，5份补充交付文件和10份源码从GitHub完整回下载逐字节一致，见[GitHub回执](image-reference-fix-github.json)。最终文档同步后标记 `codex-to-phone-v0.1.7-image-reference-preview`；该预览标签记录已验证候选，不表示在线切换或真机通过。沿用既有版本同步/私有备份流程，补充共享图片契约，未新增技能或自动化。
+源码及补充包提交 `bb2bb56b981c20e073f596612607bfe759f6302d` 已正常推送原 main，5份补充交付文件和10份源码从GitHub完整回下载逐字节一致，见[GitHub回执](image-reference-fix-github.json)。最终文档同步后标记 `codex-to-phone-v0.1.7-image-reference-preview`；该预览标签记录已验证候选，不表示在线切换或真机通过。沿用既有版本同步/私有备份流程，补充共享图片契约，未新增技能或自动化。
 
 ## 已授权在线切换与原图验证
 

@@ -51,6 +51,6 @@ ignored证据根：`output/audit/2026-10-30/deepseek-rc3-compat/`。runtime-iden
 
 ## Git同步与未验范围
 
-源码提交`6c2c700dc679010407cc7dd1d00093e5dacd53a2`及annotated标签`codex-to-phone-v0.2.2-deepseek-rc3-preview`已原子推送现有origin/main，远端main与标签展开值核对一致。随后交付文档单独同步，标签保持指向源码基线。只提交本项目路径，父仓库其他修改保持。
+源码提交`728a671ba949aac8def831dd1d0c68fd0c0cfcc3`及annotated标签`codex-to-phone-v0.2.2-deepseek-rc3-preview`已原子推送现有origin/main，远端main与标签展开值核对一致。随后交付文档单独同步，标签保持指向源码基线。只提交本项目路径，父仓库其他修改保持。
 
 手机列表、正文与重开已获用户确认，本轮完成。真实发送/引导/排队/审批、中断和长期后台不在本轮作为已通过结论；[真实控制验收候选计划](../../plans/2026-10-30-deepseek-control-acceptance.md)待用户决定是否启动。复用既有官方运行时检查、固定包切换及备份流程，补充DeepSeek契约；未创建新的安装系统或自动化。

@@ -16,7 +16,7 @@
 
 ## 远程验证
 
-最终 Run `43270398301` 使用提交 `da16f4331bd2355552a2c9eb63a5f599c0d2cbc1`，结果为 success，耗时约 54 分钟：
+最终 Run `43270398301` 使用提交 `e261d4dfe8cb6c17bfe44ee212bb6336153d7d84`，结果为 success，耗时约 54 分钟：
 
 - Flutter analysis：通过，`No issues found!`。
 - Kelivo Flutter UI 测试：Ubuntu report-only 阶段完成。
@@ -35,7 +35,7 @@
 
 Release 的六份资产均存在：APK、APK 元数据、源码归档、README、SHA256SUMS、source-package.json。正式预览 APK SHA256 为 `55cd1ba56009fde374f2964c560a6f6a0224aba8e0555c79096b3583f7b3c049`，与 Release 内的 `SHA256SUMS` 和 GitHub asset digest 一致。
 
-本轮只修复构建与发布链路，没有修改产品代码或 APK 功能，因此正式预览 APK 保持原 SHA 是预期结果；最新 CI/工作流修复已在 `main` 的 `62b3fd2`、`da16f43` 提交中。
+本轮只修复构建与发布链路，没有修改产品代码或 APK 功能，因此正式预览 APK 保持原 SHA 是预期结果；最新 CI/工作流修复已在 `main` 的 `ac64490`、`e261d4d` 提交中。
 
 ## 本机检查与边界
 

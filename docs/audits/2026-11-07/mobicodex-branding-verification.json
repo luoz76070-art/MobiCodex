@@ -5,7 +5,7 @@
   "versionCode": 10,
   "displayName": "MobiCodex",
   "applicationId": "com.mobilecodex.kelivo.preview",
-  "sourceCommit": "76da5fbbbcad55d90ddbfd25e783a80346d527b5",
+  "sourceCommit": "11d3cbe087269a083b4153810e4194543ea8148d",
   "tag": "codex-to-phone-v0.1.8-native-preview",
   "checks": {
     "jsMobile": 169,
@@ -55,7 +55,7 @@
   },
   "github": {
     "verifiedAt": "2026-11-07T15:22:22.754194+00:00",
-    "commit": "76da5fbbbcad55d90ddbfd25e783a80346d527b5",
+    "commit": "11d3cbe087269a083b4153810e4194543ea8148d",
     "files": [
       {
         "file": "README.md",

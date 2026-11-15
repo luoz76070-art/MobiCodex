@@ -5,7 +5,7 @@
 ## 当前证据
 
 - 本地 `apps/kelivo/pubspec.yaml` 为 `0.1.8-native-preview+10`。
-- 本地 `HEAD` 与 `origin/main` 均为 `5147394de62b393d03d305921ac4b1a343c1697e`。
+- 本地 `HEAD` 与 `origin/main` 均为 `6b9a3a15bde56b937ec28ba66326b5bd0bd95fb9`。
 - GitHub 主分支已包含 `apps/kelivo`、`releases/android/kelivo-preview/0.1.8/`、APK、源码归档、元数据和 SHA256。
 - Kelivo APK 为 `60,752,427` 字节，SHA256 为 `55cd1ba56009fde374f2964c560a6f6a0224aba8e0555c79096b3583f7b3c049`。
 - GitHub Release 当前发布的是 `mobicodex-v1.3.18-update-source-preview`，其 APK 属于 `apps/mobile` 旧 React/Capacitor 链路；Kelivo `0.1.8-native-preview` 没有对应 GitHub Release。

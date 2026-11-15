@@ -104,7 +104,7 @@
     "github": {
       "status": "passed",
       "verifiedAt": "2026-11-07T03:01:47.511713+00:00",
-      "productCommit": "415f41961edaaa9bfd4cea0e08ab5b830017a017",
+      "productCommit": "6240b9baae2e03289d96036b0c5040e57f72bc39",
       "annotatedTag": "codex-to-phone-v0.1.7-native-preview",
       "remoteRefsVerified": true,
       "allArtifactBytesIdentical": true,

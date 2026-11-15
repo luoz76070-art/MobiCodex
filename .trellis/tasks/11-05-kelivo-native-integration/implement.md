@@ -219,7 +219,7 @@ App内更新本轮交付核验通过：见 `docs/audits/2026-11-06/kelivo-update
 - [x] 原生IPC未决输入/问题/审批及队列预检，私有备份与固定候选逐文件核验。
 - [x] 官方原desktop profile加载桥接，正常停止并切换网关；原宿主PID/配置/设备保持。
 - [x] 本地/公网/重连/能力/图片77项通过；用户确认code9与原会话/正文，手机其他交互另验。
-- [x] 新电脑包、审计与Git交付：cef6890已推送；GitHub六份补充及11个源码全量下载一致，原code9十文件/标签保留。最终文档与preview标签同步单独核对。
+- [x] 新电脑包、审计与Git交付：8f88875已推送；GitHub六份补充及11个源码全量下载一致，原code9十文件/标签保留。最终文档与preview标签同步单独核对。
 
 证据：`docs/audits/2026-11-07/agent-parity-runtime.md`；手机后续计划为`docs/plans/2026-11-07-agent-phone-acceptance.md`，待用户启动。总体in_progress、59组完整验收不变。
 
@@ -229,7 +229,7 @@ App内更新本轮交付核验通过：见 `docs/audits/2026-11-06/kelivo-update
 - [x] 合成HTTP失败回归，先失败后修复。
 - [x] Codex与所有SessionAdapter精确引用授权；代码/普通链接/未引用/跨会话及失效边界检查。
 - [x] targeted、完整后端、类型/lint/构建与新独立网关归档；保持code9 APK。
-- [x] 文档、限定项目Git交付；源码8aaac32与5份交付/10份源码GitHub回下载一致，preview标签同步另核对。
+- [x] 文档、限定项目Git交付；源码bb2bb56与5份交付/10份源码GitHub回下载一致，preview标签同步另核对。
 - [x] 用户批准后在线切换；首次stop退出超时及官方手机桥接组件重载恢复均记录，旧网关自然退出，新固定bundle上线，原配置/设备/宿主保持。
 - [x] 原指定图片本地/公网三种路径字节一致，鉴权/拒绝边界、CORS/native/Tunnel/DeepSeek及保存状态检查共69项断言通过；首次检查器未计429续查的失败保留。
 - [x] 手机在原会话重试图片，用户回复「图片已显示，大图和返回正常」，三项passed-user-confirmed；不扩大为其他通道或全部59组通过。
@@ -245,4 +245,4 @@ App内更新本轮交付核验通过：见 `docs/audits/2026-11-06/kelivo-update
 - [x] 最终原生复跑/成品核验、匹配源码与 GitHub/App 更新源双交付。
 - [x] 用户对 code10 覆盖安装、桌面图标/名称、关于页与原连接/AI配置的验收问题回复「已升级，图标名称与原配置都正常」；按用户反馈通过，安装APK/SHA未独立回拉。
 
-code10交付回执：源码76da5fb，5934份源码匹配；GitHub6文件及公网APK/源码完整下载一致，latest10/previous9和原四通道保持。2026-11-07用户已确认手机升级、图标名称及原配置正常，本轮品牌与更新需求闭环。证据：docs/audits/2026-11-07/mobicodex-branding-verification.json；总体整合任务继续in_progress，完整59组验收不在本次确认范围。
+code10交付回执：源码11d3cbe，5934份源码匹配；GitHub6文件及公网APK/源码完整下载一致，latest10/previous9和原四通道保持。2026-11-07用户已确认手机升级、图标名称及原配置正常，本轮品牌与更新需求闭环。证据：docs/audits/2026-11-07/mobicodex-branding-verification.json；总体整合任务继续in_progress，完整59组验收不在本次确认范围。

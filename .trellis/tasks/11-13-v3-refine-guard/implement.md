@@ -1,6 +1,6 @@
 # 实施与验证
 
-1. 基线44e9e01（含S1/V2），锁定依赖安装完成，分支codex/v3-refine-guard。
+1. 基线a7efbf0（含S1/V2），锁定依赖安装完成，分支codex/v3-refine-guard。
 2. 新增纯校验模块，接入现有VoiceInput；扩展已有生产组件驱动，测试实际警告/采用/编辑接线。
 3. 数字、技术串、否定及保守归一化单元矩阵；更新语音契约。
 4. 全量test:voice、test:mobile、typecheck、lint及手机构建；自审后提交、推送并开PR。结果完成后补录。

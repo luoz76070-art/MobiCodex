@@ -188,7 +188,7 @@
   "github": {
     "status": "passed",
     "verifiedAt": "2026-11-07T01:00:33.048264+00:00",
-    "commit": "b9301639d3dddc81c412e259202092ff59e3b06e",
+    "commit": "38ade89c31bb3cfe82d4d27070ea9cf7704a4fe4",
     "tag": "codex-to-phone-v0.1.6-native-preview",
     "files": [
       {
@@ -234,7 +234,7 @@
   },
   "sourceCommit": {
     "status": "passed",
-    "commit": "b9301639d3dddc81c412e259202092ff59e3b06e",
+    "commit": "38ade89c31bb3cfe82d4d27070ea9cf7704a4fe4",
     "sourceFiles": 5917,
     "allArchiveSourcesMatchGitCommit": true
   },

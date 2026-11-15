@@ -1,4 +1,4 @@
-# B2 扫描前后对照（基线 ce877ba）
+# B2 扫描前后对照（基线 6d92ad8）
 
 扫描范围：`apps/kelivo` 全树，重点人工分类 Dart、四份 ARB、Android manifest/资源/通知、iOS/macOS 系统/分享文案、Windows/Linux 窗口、Web manifest/index、assets；另扫描 `apps/mobile` 和 `.github/workflows`。源码注释、依赖、开发工具/测试夹具、协议/标识、持久化路径与用户内容不按产品文案替换。
 

@@ -73,7 +73,7 @@
     "testsPassed": 10,
     "nativeDownloadAssertions": 39
   },
-  "sourceCommit": "a71e7f2f09edb5870abab0f2cd7df1808c8bb4d4",
+  "sourceCommit": "11025a9641cfb5cb677b0914aa0738412b11d3e0",
   "sourceTag": "codex-to-phone-v0.1.5-native-preview",
   "deviceInstallation": "awaiting user",
   "gatewayUpgrade": "not performed",

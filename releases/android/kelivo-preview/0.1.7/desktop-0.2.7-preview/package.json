@@ -11,7 +11,7 @@
     "0.2.2-rc.1"
   ],
   "gatewayBundleSha256": "08bff6fea5f4b56bde294b780f7b15db58f0ee4b477ab01cdc912e61bea379ca",
-  "sourceBaselineCommit": "6e52efe95de92a72c8eef79dea55a992c5378c14",
+  "sourceBaselineCommit": "e274aadebe9e9218f2d6edf76a9ec821d56c789f",
   "sourcePatchSha256": "5b3fa1afeb633bf3b8c3b3c133ff32922373303830da431a0b603b7f7060b171",
   "sourceFiles": [
     {

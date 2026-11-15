@@ -27,6 +27,6 @@
     "docs/audits/2026-10-23/version-sync.md",
     "docs/project-index.md"
   ],
-  "notes": "2026-10-23用户接受版本同步建议，覆盖本轮默认禁止Git写入的规则。已落实本地分步提交/完整版本集中push流程；源码基线1ea28a29b1ad4da74457793d6fd99834af71337f已推送并核验origin/main，220文件全在本项目。后端367/367、手机68/68、消息/更新5项/热更新/类型/构建通过，最终资源等于APK30。私有备份与扫描通过，其他工程修改保留。收尾docs及明确preview标签按同流程交付，最终OID与远端核验见ignored output/audit/2026-10-23/version-sync/final-report.json。原语音综合任务仍待验，不归档。",
+  "notes": "2026-10-23用户接受版本同步建议，覆盖本轮默认禁止Git写入的规则。已落实本地分步提交/完整版本集中push流程；源码基线ee120701b684a3b621df46933b93da9cdfd1696f已推送并核验origin/main，220文件全在本项目。后端367/367、手机68/68、消息/更新5项/热更新/类型/构建通过，最终资源等于APK30。私有备份与扫描通过，其他工程修改保留。收尾docs及明确preview标签按同流程交付，最终OID与远端核验见ignored output/audit/2026-10-23/version-sync/final-report.json。原语音综合任务仍待验，不归档。",
   "meta": {}
 }

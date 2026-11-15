@@ -33,9 +33,9 @@
 
 旧网关预检曾出现 SSE 500/超时，随后通过只读原生 IPC 核对当前会话未决状态；新网关实际 SSE 200，旧故障根因未确定。首次准备把隔离检查 Electron 子进程误算宿主，退出守卫阻止安装，修正为原五个宿主后才继续。联动检查器的早期断言失败保留为 attempt1–3，最终 77 项通过。归档器曾因 Git 子目录路径重复而未生成元数据，修正后在独立临时索引验证补丁、逐文件核对两份归档。补丁文本本身的空白上下文又触发新增文件的空白检查，现以 gzip 封装，解压后逐字节保持原补丁且再次应用通过；上述中间失败不隐去，也不计为产品通过。
 
-[电脑兼容补充目录](../../../releases/android/kelivo-preview/0.1.7/desktop-0.2.7-preview/)包含实际固定安装程序的两份归档、基线源码补丁、逐文件元数据和 SHA256SUMS。补丁从 `6e52efe95de92a72c8eef79dea55a992c5378c14` 重建 11 个修改源码/契约文件，独立索引应用后与工作区 SHA 一致。原 code9 十份产物和原 preview 标签保持不变，App 更新源继续 latest9/previous8。
+[电脑兼容补充目录](../../../releases/android/kelivo-preview/0.1.7/desktop-0.2.7-preview/)包含实际固定安装程序的两份归档、基线源码补丁、逐文件元数据和 SHA256SUMS。补丁从 `e274aadebe9e9218f2d6edf76a9ec821d56c789f` 重建 11 个修改源码/契约文件，独立索引应用后与工作区 SHA 一致。原 code9 十份产物和原 preview 标签保持不变，App 更新源继续 latest9/previous8。
 
-源码与补充包提交 `cef68905dda13d7d96fbc22c8a5c051847283651` 已推送原 main，六份补充文件与 11 个修改源码已从 GitHub 完整回下载，大小/SHA/全部字节一致；16 个归档文件和补丁重建检查通过。原 code9 十份文件及指向 `415f419` 的旧 preview 标签保持。结果见[独立交付回执](agent-parity-runtime-github.json)；最终记录同步后打新的 `codex-to-phone-v0.2.7-deepseek-preview` 标签，不创建 GitHub Release，不移动旧标签。
+源码与补充包提交 `8f8887505741561d1d70457c70c5e26d0d438d43` 已推送原 main，六份补充文件与 11 个修改源码已从 GitHub 完整回下载，大小/SHA/全部字节一致；16 个归档文件和补丁重建检查通过。原 code9 十份文件及指向 `6240b9b` 的旧 preview 标签保持。结果见[独立交付回执](agent-parity-runtime-github.json)；最终记录同步后打新的 `codex-to-phone-v0.2.7-deepseek-preview` 标签，不创建 GitHub Release，不移动旧标签。
 
 ## 验收边界
 

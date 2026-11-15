@@ -5,7 +5,7 @@
   "androidVersionName": "0.1.7-native-preview",
   "deepseekPluginVersion": "0.2.7-unchanged",
   "gatewayBundleSha256": "a7c895b883ed14ba851dc99ba97bf5452a41f9e8e84137a1837e1c8cb025e828",
-  "sourceBaselineCommit": "a3c2052c6d3438420f16d173224abb52f727bb76",
+  "sourceBaselineCommit": "0cd63fe50b18cca638c9ac511624ded53e692aee",
   "sourceFiles": [
     {
       "file": ".trellis/spec/relay/backend/agent-gateway-contract.md",

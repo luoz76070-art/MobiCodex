@@ -4,7 +4,7 @@
 
 ## 源码与标签
 
-- 源码提交：`00611079228f2fba1e22c17dd20aa39b51715e0f`，包含APK31输入关联/缓存修复、APK32紧凑输入区及相关测试、规范和交付记录，共24文件。
+- 源码提交：`45ad08907bccd78760e991360e79e359989aac79`，包含APK31输入关联/缓存修复、APK32紧凑输入区及相关测试、规范和交付记录，共24文件。
 - 本次将已累积且共享版本文件的改动整理为一个源码提交，未重建或伪造APK31的历史提交。
 - 交付记录随后作为独立docs提交，与源码一起原子推送；最终预览标签为`codex-to-phone-v1.3.11-compact-composer-preview`，指向包含交付记录的提交。
 - 最终远端main及annotated tag展开OID，以`git ls-remote`实际核验为准；结果保存于`output/audit/2026-10-23/apk32-github-sync/remote-verification.json`，避免反复修改文档写入自身OID。

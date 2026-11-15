@@ -5,7 +5,7 @@
 ## 本轮Git交付
 
 - 沿用父仓库project的现有origin/main，未新建仓库或分支；当前GitHub仓库为luoz76070-art/project。
-- 本地源码基线提交`1ea28a29b1ad4da74457793d6fd99834af71337f`已正常推送，并以git ls-remote核验远端main相同。该提交共220文件，全部属于codex-to-phone子目录；包含此前累计的原生网关、多Agent、更新/语音、引导/排队/身份去重及过程折叠源码与记录。
+- 本地源码基线提交`ee120701b684a3b621df46933b93da9cdfd1696f`已正常推送，并以git ls-remote核验远端main相同。该提交共220文件，全部属于codex-to-phone子目录；包含此前累计的原生网关、多Agent、更新/语音、引导/排队/身份去重及过程折叠源码与记录。
 - 本轮首次整理既有累计改动，建立一次APK30预览源码基线，未伪造此前不存在的逐功能提交。后续独立功能按约定细分本地提交。
 - 收尾记录以单独docs提交保存，版本标签使用`codex-to-phone-v1.3.9-process-collapse-preview`，最后正常原子推送main与该标签；最终OID以实际远端main及annotated tag的`^{}`展开值为准，不为将自身OID写回文档产生无限提交。
 

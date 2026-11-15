@@ -16,6 +16,6 @@ code6 打开「设置 → 应用更新 → 检查更新」，可下载 **0.1.5-n
 - 实际运行 App 原有 `readAndroidUpdateManifest`，从固定通道带缓存规避参数获取公网清单并解析，通过，code6可识别code7。安装页200且内容与发布文件一致。
 - `node --test scripts/test-release-publication.mjs scripts/test-apk-update.mjs`：10项通过，包含39个原生下载断言。产品源码未改，复用已核验 code7 签名/构建，不重复运行完整原生构建。
 
-公开回执：[app-update-verification.json](app-update-verification.json)。原始清单、发布日志、实际解析和完整下载比对脚本/报告位于 `output/audit/2026-11-07/app-update/`。对应源码提交仍为 `a71e7f2f09edb5870abab0f2cd7df1808c8bb4d4`，既有 preview 标签保持不动。
+公开回执：[app-update-verification.json](app-update-verification.json)。原始清单、发布日志、实际解析和完整下载比对脚本/报告位于 `output/audit/2026-11-07/app-update/`。对应源码提交仍为 `11025a9641cfb5cb677b0914aa0738412b11d3e0`，既有 preview 标签保持不动。
 
 README、集成说明、版本目录及工程索引同步当前状态；历史审计保留当时事实。复用现有发布脚本，将“GitHub与App更新源同时交付”的验收要求补入[版本同步流程](../../ops/version-sync.md)，避免再次只上传GitHub；没有新增通用技能或自动化。

@@ -33,9 +33,9 @@ Web构建：`web-3d9952a9-c6c8-4109-b38a-181968c55ca2`。网关构建：`gateway
 
 ## Git与证据
 
-fetch发现origin/main领先一条`9c80e49 Create SECURITY.md`，仅新增父仓库SECURITY.md。按项目约定暂停自动合并；用户明确批准后使用`merge --ff-only`接收，保留所有项目修改。
+fetch发现origin/main领先一条`653f9dc Create SECURITY.md`，仅新增父仓库SECURITY.md。按项目约定暂停自动合并；用户明确批准后使用`merge --ff-only`接收，保留所有项目修改。
 
-集成源码提交：`a29e32867dad48c19544ff79daff61febc4337e4`；annotated标签：`codex-to-phone-v1.3.15-reliability-preview`。已原子推送main与标签，并核实远端main及标签展开值都等于该提交。后续交付文档另作docs提交，标签保持指向该源码构建基线，不移动已发布标签。仅提交codex-to-phone/下101项源码与文档，暂存前后校验范围、无二进制/构建包/凭证；父仓库其他工程修改保持。
+集成源码提交：`d9a4b8c6d9fa0f228b52694f58ce64ebae12fa1b`；annotated标签：`codex-to-phone-v1.3.15-reliability-preview`。已原子推送main与标签，并核实远端main及标签展开值都等于该提交。后续交付文档另作docs提交，标签保持指向该源码构建基线，不移动已发布标签。仅提交codex-to-phone/下101项源码与文档，暂存前后校验范围、无二进制/构建包/凭证；父仓库其他工程修改保持。
 
 详细证据：ignored `output/audit/2026-10-30/preview-validation/`中的verify-all-final.log、apk-verification.json、publication-check.json、switch-report.json、health-report.json、stream-check.json、github-sync.json和phone-acceptance.json。初始失败日志独立保留。私有源码/原网关/配置备份位置在backup-path.txt与state-path.txt中，不入Git。
 

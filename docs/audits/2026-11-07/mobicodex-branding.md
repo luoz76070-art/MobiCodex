@@ -33,7 +33,7 @@
 
 0.1.8-native-preview / versionCode10；[版本目录](../../../releases/android/kelivo-preview/0.1.8/)包含APK、对应源码、元数据及SHA256。APK 60,752,427字节，SHA256 `55cd1ba56009fde374f2964c560a6f6a0224aba8e0555c79096b3583f7b3c049`；源码21,287,624字节，SHA256 `ce234665805b9d8502f467542d7ca0d2e7cb18a70a4b1a65dbfad9f1e4de8619`。证书SHA256仍为 `3ffb81f3524a590f469b80476951a22fbc6e441a470b9270079a8c1d452c4a38`。
 
-源码提交 `76da5fbbbcad55d90ddbfd25e783a80346d527b5` 已推送现有 main。5934份归档源码的Git blob与权限全部匹配；GitHub版本目录6份文件均完整回下载、大小/SHA/全部字节一致，大文件以HTTP206分段拼合验证。
+源码提交 `11d3cbe087269a083b4153810e4194543ea8148d` 已推送现有 main。5934份归档源码的Git blob与权限全部匹配；GitHub版本目录6份文件均完整回下载、大小/SHA/全部字节一致，大文件以HTTP206分段拼合验证。
 
 独立App源先发布源码，再APK/清单及MobiCodex下载页；latest10/previous9，previous源码逐字节保留code9。APK 60,752,427字节及源码21,287,624字节均从公网完整HTTPS下载，与本地全部字节/SHA一致；Range206、CORS、安装页字节及原四通道清单内容/SHA保持均通过。当前App实际清单读取/解析函数识别code10，code9可升级。公开下载页已通过浏览器核验，新图标、MobiCodex和code10可见；临时夹具与浏览器页已关闭。
 

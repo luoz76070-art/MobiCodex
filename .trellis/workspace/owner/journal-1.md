@@ -1554,7 +1554,7 @@ APK29用户确认语音主流程通过；网关增加有限低权重短语，真
 
 | Hash | Message |
 |------|---------|
-| `1ea28a2` | feat(codex-to-phone): checkpoint APK30 preview and version sync workflow |
+| `ee12070` | feat(codex-to-phone): checkpoint APK30 preview and version sync workflow |
 
 ### Testing
 
@@ -1591,8 +1591,8 @@ APK29用户确认语音主流程通过；网关增加有限低权重短语，真
 
 | Hash | Message |
 |------|---------|
-| `6c2c700` | fix(codex-to-phone): restore DeepSeek rc.3 bridge compatibility |
-| `b4903b8` | docs(codex-to-phone): record DeepSeek rc.3 deployment and preview sync |
+| `728a671` | fix(codex-to-phone): restore DeepSeek rc.3 bridge compatibility |
+| `649cf79` | docs(codex-to-phone): record DeepSeek rc.3 deployment and preview sync |
 
 ### Testing
 
@@ -1662,8 +1662,8 @@ APK29用户确认语音主流程通过；网关增加有限低权重短语，真
 
 | Hash | Message |
 |------|---------|
-| `30b2860` | fix(codex-to-phone): recover unloaded desktop thread controls |
-| `ccd4cf9` | docs(codex-to-phone): record cold thread phone acceptance |
+| `a134df7` | fix(codex-to-phone): recover unloaded desktop thread controls |
+| `28c6727` | docs(codex-to-phone): record cold thread phone acceptance |
 
 ### Testing
 
@@ -1900,7 +1900,7 @@ APK29用户确认语音主流程通过；网关增加有限低权重短语，真
 
 | Hash | Message |
 |------|---------|
-| `a71e7f2` | feat(codex-to-phone): deliver Kelivo preview with compact execution and images |
+| `11025a9` | feat(codex-to-phone): deliver Kelivo preview with compact execution and images |
 
 ### Testing
 
@@ -1911,7 +1911,7 @@ APK29用户确认语音主流程通过；网关增加有限低权重短语，真
 
 [OK] **Completed**
 
-- [OK] GitHub源码a71e7f2、annotated preview标签及APK/源码/网关/SHA清单全量回下载一致；公开回执docs/audits/2026-11-07/github-delivery.json。大包超时采用有界206续传，未改线上网关/自托管源。
+- [OK] GitHub源码11025a9、annotated preview标签及APK/源码/网关/SHA清单全量回下载一致；公开回执docs/audits/2026-11-07/github-delivery.json。大包超时采用有界206续传，未改线上网关/自托管源。
 
 ### Next Steps
 

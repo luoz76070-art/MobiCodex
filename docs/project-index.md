@@ -40,7 +40,7 @@ Kelivo 整合候选（2026-11-04，现有远控视觉试迁移已实施）：用
 
 本轮[code9运行切换与DeepSeek原桥接恢复](audits/2026-11-07/agent-parity-runtime.md)：按用户授权完成私有备份、官方原desktop插件0.2.7加载和固定网关正常切换，适配实际Harness0.2.2-rc.1，保留原进程/配置/设备及严格版本/审批边界。后端419、新旧官方各30、类型/lint/构建及本地/公网77检查通过；原会话40消息含14工具记录、重连身份和图片接口通过。用户确认手机已升级code9、DeepSeek原会话与正文正常，安装SHA未独立回拉。新[电脑兼容补充目录](../releases/android/kelivo-preview/0.1.7/desktop-0.2.7-preview/)保留原code9十份交付文件及更新源latest9/previous8；GitHub回执见本轮审计。真实发送/工具偏好/手机图片/附件语音/审批停止等列入[下一轮验收计划](plans/2026-11-07-agent-phone-acceptance.md)，等待用户启动；Claude/OpenCode未配置原宿主，总整合任务及59组继续in_progress。下段“旧网关/桥接离线”为此前交付时状态，已由本轮恢复。
 
-本轮[所有电脑Agent统一体验](audits/2026-11-07/agent-parity.md)：code9 `0.1.7-native-preview` 将Codex的输入/工具/图片/附件/语音及偏好共享至DeepSeek、Claude、OpenCode和未来SessionAdapter。DeepSeek0.2.6/Claude0.1.2可见工具投影、Agent项目图片鉴权及草稿保护接线。根verify手机169/后端414/入口8、原生340、完整lint0错误（56/1既有警告）、四通道/未来夹具和官方隔离验证通过；[版本目录](../releases/android/kelivo-preview/0.1.7/)交付新APK/源码/网关/两插件。双源交付已通过：GitHub产品提交`415f419`及preview标签匹配，10份版本文件完整下载一致、5921源码匹配；App源latest9/previous8、APK/源码完整下载及原四通道保持通过。运行网关仍旧版、DeepSeek桥接离线，在线切换和手机code9真实联动待验；整体任务in_progress。
+本轮[所有电脑Agent统一体验](audits/2026-11-07/agent-parity.md)：code9 `0.1.7-native-preview` 将Codex的输入/工具/图片/附件/语音及偏好共享至DeepSeek、Claude、OpenCode和未来SessionAdapter。DeepSeek0.2.6/Claude0.1.2可见工具投影、Agent项目图片鉴权及草稿保护接线。根verify手机169/后端414/入口8、原生340、完整lint0错误（56/1既有警告）、四通道/未来夹具和官方隔离验证通过；[版本目录](../releases/android/kelivo-preview/0.1.7/)交付新APK/源码/网关/两插件。双源交付已通过：GitHub产品提交`6240b9b`及preview标签匹配，10份版本文件完整下载一致、5921源码匹配；App源latest9/previous8、APK/源码完整下载及原四通道保持通过。运行网关仍旧版、DeepSeek桥接离线，在线切换和手机code9真实联动待验；整体任务in_progress。
 
 本轮[执行说明常显修正](audits/2026-11-07/execution-notes.md)：用户已真机确认code7图片/大图返回、字号、原连接/草稿/浅深主题正常；code7折叠范围未通过，现已修正。code8 `0.1.6-native-preview` 保留说明正文，仅连续工具命令/输出折叠，点击一次查看详情，隐藏工具偏好不隐藏说明。根verify手机165/后端407/入口8、原生340、完整lint0错误（56/1既有警告）通过；APK同签名且5个Web文件匹配。对应源码和APK同步现有GitHub及独立App更新源，实际交付回执见本轮审计。2026-11-07用户回复「已升级，显示符合预期」，code8升级与新折叠范围真机确认通过，本轮闭环；手机安装SHA未独立回拉，整体59组及原Desktop新建仍未完成，[后续计划](plans/2026-11-06-kelivo-device-parity.md)待用户决定启动。
 
@@ -97,13 +97,13 @@ Kelivo 整合候选（2026-11-04，现有远控视觉试迁移已实施）：用
 
 最新[输入三路时序及现存缓存补修](audits/2026-10-23/input-source-transition.md)：用户确认18:21重复重开后仍存在；原会话native/rollout各一次，完整字段回放一份，独立复现历史→HTTP确认→缺client的早期native产生两份。合并器改以native别名判断历史是否绑定，显式client冲突保守保留；全部6种顺序及版本3缓存/实际渲染回归通过，草稿/待确认和真实重复保持。APK33已发布preview，previous32，正式18/hot保持；手机70/70、浏览器12项、公网19项及完整lint0错误/7警告。未改或重启网关，未取得截图瞬间手机缓存，真机仍待升级复核；本轮未做Git写入。
 
-最新[APK32预览源码同步](audits/2026-10-23/apk32-version-sync.md)：按用户明确要求，将APK31输入修复及APK32紧凑输入区整理为源码提交0061107，并随交付记录同步现有GitHub main及APK32 preview标签。手机69/69、消息/两端类型/构建重新通过，提交范围仅本项目；真机待验项保持，远端OID以ignored交付核验记录为准。
+最新[APK32预览源码同步](audits/2026-10-23/apk32-version-sync.md)：按用户明确要求，将APK31输入修复及APK32紧凑输入区整理为源码提交45ad089，并随交付记录同步现有GitHub main及APK32 preview标签。手机69/69、消息/两端类型/构建重新通过，提交范围仅本项目；真机待验项保持，远端OID以ignored交付核验记录为准。
 
 最新[运行中输入区收紧](audits/2026-10-23/compact-running-composer.md)：APK32已发布preview，previous31，正式18/hot保持。运行状态与普通反馈并入底栏，空草稿仅保留停止，有输入才显示紧凑引导/排队；待发默认按数量/状态收起，全文及取消仍可展开。390px footer从271.5px降至125px；手机69/69、浏览器19项及公网19项通过，lint0错误/8项既有警告。未改或重启在线网关；真机触摸/键盘待升级验收。
 
 最新[手机输入镜像与缓存补修](audits/2026-10-23/input-mirror-cache.md)：原会话实际一次，完整字段样本原先不重复；缺client ID的旧/早期投影可复现，已保留native别名并刷新旧正文缓存（草稿/待确认保持）。APK31已发布preview，previous30，正式18/hot保持；消息/手机69项、类型/构建/浏览器15项、公网19项通过，lint0错误/8警告。网关未改未重启，真机显示待升级核对，不将合成复现冒充截图根因确认。
 
-最新[版本同步约定](ops/version-sync.md)及[源码同步记录](audits/2026-10-23/version-sync.md)：用户已确认独立功能/修复完成后分步本地提交，完整版本验收后集中推送现有GitHub并打版本标签。父仓库为project，仅提交codex-to-phone子目录；保留其他工程和用户暂存项，不自动建分支/PR或部署。APK30预览源码基线1ea28a2已推送并核验origin/main，220文件全部属于本项目；收尾docs与preview标签沿同一流程交付。后端367/367、手机68/68、消息/更新/类型/构建再次通过，产品Web资源等于原APK30；真机验收及语音供应商问题仍独立保留。
+最新[版本同步约定](ops/version-sync.md)及[源码同步记录](audits/2026-10-23/version-sync.md)：用户已确认独立功能/修复完成后分步本地提交，完整版本验收后集中推送现有GitHub并打版本标签。父仓库为project，仅提交codex-to-phone子目录；保留其他工程和用户暂存项，不自动建分支/PR或部署。APK30预览源码基线ee12070已推送并核验origin/main，220文件全部属于本项目；收尾docs与preview标签沿同一流程交付。后端367/367、手机68/68、消息/更新/类型/构建再次通过，产品Web资源等于原APK30；真机验收及语音供应商问题仍独立保留。
 
 最新[执行过程自动折叠完整交付](audits/2026-10-23/process-collapse.md)：APK30已发布preview，previous29、正式18/hot保持，固定网关及DeepSeek插件0.2.1已实际更新。Codex明确commentary及已知工具运行展开，final_answer开始时折叠；DeepSeek只在原生成功turn结束后提升无工具末步为终稿，覆盖实时及冷历史。用户/终稿/权限卡独立，手动重开保持，新任务展开；未知阶段/异常无终稿保持可见。后端367/367、手机68/68、消息/更新/类型/构建和浏览器19/19通过；lint0错误/5警告，成品同签名，85健康/17重连/19公网完整下载核验通过。旧网关2165ms自然退出，原Harness/配置/设备/Key保持。APK30包含此前引导/排队及重复显示源码修正，下列“未发布”为各轮历史状态；Android安装/真实任务另验，综合语音task不归档。
 
@@ -161,7 +161,7 @@ Kelivo 整合候选（2026-11-04，现有远控视觉试迁移已实施）：用
 
 先读 [工程布局](project-layout.md)，再按 `.trellis/spec/mobile/frontend/` 或 `.trellis/spec/relay/backend/` 进入对应模块规范。任务与验收记录保存在 `.trellis/tasks/` 和 `.trellis/workspace/owner/`；优化优先级以 [2026-10-20 审核计划](audits/2026-10-20/README.md) 为准。A–D 本轮源码实施与隔离验证已完成，统一实测步骤、当前包和限制见 [优化交付](audits/2026-10-20/delivery.md)。
 
-已发布并备份的开发基线为 `codex-to-phone-v1.2.2`（`12c9f15`）。当前任务 `.trellis/tasks/10-20-agent-gateway/` 的 P0、P1提问/原会话控制/审批、P2插件管理、P3 OpenCode及Claude原请求问答/单次审批源码已实施；[Agent网关](agent-gateway.md)记录接口、证据及剩余阶段。最终后端227/227（Codex问答44、OpenCode32、Claude31）、手机37/37、消息回归、两端类型/构建、两插件独立包和窄屏合成验收通过。本机Claude CLI2.1.220低于Mods宿主下限2.1.287（API声明生成于2.1.277），未升级或加载；原生取消/两端先答仍须核验。实际插件安装、Codex原会话控制、真实OpenCode/Claude及Android仍待验收；用户已授权并完成原生候选网关切换，APK19提供独立预览下载；正式Android更新清单仍18，旧Mac App和权限保留，暂不开长期连接测试。
+已发布并备份的开发基线为 `codex-to-phone-v1.2.2`（`bb95703`）。当前任务 `.trellis/tasks/10-20-agent-gateway/` 的 P0、P1提问/原会话控制/审批、P2插件管理、P3 OpenCode及Claude原请求问答/单次审批源码已实施；[Agent网关](agent-gateway.md)记录接口、证据及剩余阶段。最终后端227/227（Codex问答44、OpenCode32、Claude31）、手机37/37、消息回归、两端类型/构建、两插件独立包和窄屏合成验收通过。本机Claude CLI2.1.220低于Mods宿主下限2.1.287（API声明生成于2.1.277），未升级或加载；原生取消/两端先答仍须核验。实际插件安装、Codex原会话控制、真实OpenCode/Claude及Android仍待验收；用户已授权并完成原生候选网关切换，APK19提供独立预览下载；正式Android更新清单仍18，旧Mac App和权限保留，暂不开长期连接测试。
 
 本地[1.3.0候选交付](audits/2026-10-21/agent-gateway-candidate.md)已生成versionCode19同签名APK、插件ZIP及仅兼容19的完整单文件热更新，APK已独立预览发布，真实安装待确认。修复热更新遗漏懒加载Agent页面；包内资源、双更新源、签名/权限及单HTML合成运行已核对。OpenCode已按本机2.0.16的固定官方源码修正，未知版本拒绝控制、普通form问答映射原字段值，复杂表单保留不可操作说明；Codex PATH版本与Desktop内部版本分别记录。
 

@@ -1,6 +1,6 @@
 # 实施与验证
 
-1. 已核对 main 66ccc62、干净工作区并安装锁定依赖，建立 codex/v2-retry-transcription。
+1. 已核对 main 77f285f、干净工作区并安装锁定依赖，建立 codex/v2-retry-transcription。
 2. 实现内存录音生命周期、同步重转锁、失败按钮和恢复取消分类。
 3. 补生产组件行为及 Relay 路由测试；同步语音契约并自审全量差异。
 4. 跑 test:voice、test:mobile、typecheck；定向 lint 与手机 build。通过后提交、推送并开指定 PR。
