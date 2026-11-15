@@ -16,3 +16,24 @@
 
 1. 用下载页的安装包覆盖安装 0.3.0（同一签名，数据保留）。
 2. 要用 CC Desk 会话：按[网关管理](../../../../plugins/mobile-codex/README.md)用本版源码构建网关（`corepack pnpm build:plugin`），沿用原配置和工作目录切换到新程序。
+
+## 发布结果
+
+2026-11-15 发布。
+
+- **GitHub Release** `mobicodex-v0.3.1`（Actions run 43728957275，成功；同一提交的 CI run 43728952817 也通过）：APK、界面包、两份清单和 `SHA256SUMS`。
+- **安装包** `mobile-codex-0.3.1-152e239f3493.apk`，3,431,646 字节，SHA-256 `152e239f3493bc9a60cae070ac89051ef5c603e97e5af77de44c6bf41c86c95e`，versionCode 42。
+  - 签名证书 SHA-256 `3ffb81f3524a590f469b80476951a22fbc6e441a470b9270079a8c1d452c4a38`，与 0.3.0 相同，可以直接覆盖安装。
+  - 字节数和 0.3.0 碰巧相同，校验值不同，包内已有新的「任务完成」通知类别。
+- **下载页** https://zyzlz.xin/mobile-codex/releases/android/preview/index.html 已换成 0.3.1（旧页面在服务器上备份）。
+  - 更新清单 `preview/latest.json` 指向 0.3.1（code 42），0.3.0 的清单移到 `previous.json`。
+  - 界面更新通道（`hot/latest.json`）没有改。
+- **发布后核对**
+  - 从公网下载的 APK 与 CI 产物逐字节相同；分段下载返回 206，跨域头正常。
+  - 线上清单为 0.3.1 / 42，大小和校验值一致；`previous.json` 为 0.3.0 / 41。
+  - 服务器上 preview 目录只多了本版 APK，并替换了 `index.html`、`latest.json`、`previous.json`。
+- **验证**
+  - 通知弹出和震动已在合并前用调试包在 Android 模拟器上验收，包括升级后换成新类别、横幅弹出、系统记录到通知震动、点横幅进线程、设置提示和跳转。
+  - 「正在恢复连接」的修复同时在模拟器上确认过。
+  - CC Desk 会话已在真机上验收。
+  - 本次正式包没有再单独上模拟器。
