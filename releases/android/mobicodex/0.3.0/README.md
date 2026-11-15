@@ -19,3 +19,17 @@
 1. 用下载页的安装包覆盖安装 0.2.0（同一签名，数据保留）。
 2. 电脑端：按[网关管理](../../../../plugins/mobile-codex/README.md)用本版源码构建网关（`corepack pnpm build:plugin`），沿用原配置和工作目录切换到新程序。
 3. 第一次发任务时 App 会申请通知权限；拒绝后可以在「设置 → 通知」重新打开。
+
+## 发布结果
+
+2026-11-15 发布。
+
+- **GitHub Release** `mobicodex-v0.3.0`（Actions run 43680473935，成功；同一提交的 CI run 43680469341 也通过）：APK、界面包、两份清单和 `SHA256SUMS`。
+- **安装包** `mobile-codex-0.3.0-4c7564e98d68.apk`，3,431,646 字节，SHA-256 `4c7564e98d68bd33cb1a9979f35648136a0e3d50a3106c7b8dfb104f18f7412d`。签名证书 SHA-256 `3ffb81f3524a590f469b80476951a22fbc6e441a470b9270079a8c1d452c4a38`，与 0.2.0 相同，可以覆盖升级。GitHub Release 和下载页上的是同一个文件。
+- **下载页** https://zyzlz.xin/mobile-codex/releases/android/preview/index.html 已换成 0.3.0（旧页面在服务器上备份）。更新清单 `preview/latest.json` 指向 0.3.0（code 41），0.2.0 的清单移到 `previous.json`。
+- **界面更新通道**（`hot/latest.json`）没有改；0.3.0 的界面包只存档在 Release 里。
+- **发布后核对**
+  - 从公网下载的 APK 与 CI 产物逐字节相同；分段下载返回 206，跨域头正常。
+  - 线上清单为 0.3.0 / 41，大小和校验值一致；`previous.json` 为 0.2.0 / 40。
+  - 服务器上只有 preview 的 `index.html`、`latest.json`、`previous.json` 三个文件变了（另加一份旧页面备份）。
+- **模拟器验证**：CI 产出的 APK 在 Android 模拟器上从 0.2.0 覆盖升级到 0.3.0，数据保留，启动正常，桌面长按快捷方式（新任务、语音输入、最近线程）已注册。通知、换渠道和分享在合并前已在模拟器上逐项验收。
