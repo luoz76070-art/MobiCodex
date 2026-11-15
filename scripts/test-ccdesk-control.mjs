@@ -164,7 +164,13 @@ test("control socket: state, the five commands only, and replies", async (t) => 
   const until = async (test) => { for (let i = 0; i < 100; i++) { const found = lines.find(test); if (found) return found; await new Promise((r) => setTimeout(r, 20)); } throw new Error("no such line"); };
   const ask = (request) => { const id = randomUUID(); socket.write(`${JSON.stringify({ id, ...request })}\n`); return until((m) => m.id === id); };
 
-  assert.deepEqual((await until((m) => m.event === "state")).state, { connected: true, writable: false, adapter: null, connectionId: null, serviceVersion: null, protocolVersion: null, controlVersion: 1 });
+  assert.deepEqual((await until((m) => m.event === "state")).state, { connected: true, writable: false, adapter: null, connectionId: null, serviceVersion: null, protocolVersion: null, device: null, controlVersion: 1 });
+  // The window's computer, as it signs in: its name and id are passed on, nothing else of the sign-in.
+  const deviceId = randomUUID();
+  control.fromWindow({ type: "auth", protocolVersion: 17, token: "SECRET-SIGN-IN-TOKEN", deviceName: "Work Mac.local", tunnel: true });
+  control.fromWindow({ type: "device", id: deviceId });
+  assert.deepEqual((await until((m) => m.event === "state" && m.state.device)).state.device, { id: deviceId, name: "Work Mac.local" });
+  assert.ok(!lines.some((line) => JSON.stringify(line).includes("SECRET")), "the sign-in token never reaches the socket");
   assert.equal((await ask({ op: "command", command: { type: "message.send", requestId: randomUUID(), sessionId: randomUUID(), text: "x" } })).error.code, "not_ready");
   control.observe({ type: "ready", adapter: "simulation", connectionId: randomUUID(), version: "0.3.2", protocolVersion: 17 });
   await until((m) => m.event === "state" && m.state.writable);

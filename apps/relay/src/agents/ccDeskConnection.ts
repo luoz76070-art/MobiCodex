@@ -2,10 +2,11 @@ import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import type { TLSSocket } from "node:tls";
 import WebSocket from "ws";
+import type { CcDeskDevice } from "./ccDeskControl.js";
 import { CCDESK_PROTOCOL, parseServerMessage, type CcDeskServerMessage } from "./ccDeskProtocol.js";
 import { agentError } from "./sessions.js";
 
-export type CcDeskConnectionOptions = { url: string; fingerprint?: string; token: string; deviceName?: string; timeoutMs?: number; heartbeatMs?: number };
+export type CcDeskConnectionOptions = { url: string; fingerprint?: string; token: string; device?: CcDeskDevice; timeoutMs?: number; heartbeatMs?: number };
 export type CcDeskReady = Extract<CcDeskServerMessage, { type: "ready" }>;
 export type CcDeskSnapshot = Extract<CcDeskServerMessage, { type: "session.snapshot" }>;
 export type CcDeskResponse = Extract<CcDeskServerMessage, { type: "response" }>;
@@ -24,9 +25,11 @@ function requestCode(code: string | undefined) {
 }
 
 /**
- * One control connection to the CC Desk service. It never says which computer it is and asks for no execution
- * channel, so the service gives it no seat: it can list, follow one session and read history, nothing more.
- * The token is sent only after the certificate checks out.
+ * One reading connection to the CC Desk service: list, follow one session, read history. It asks for no execution
+ * channel. A service that shows each computer only its own sessions needs it to say which computer it is; then
+ * it says exactly what the window of that computer said (`device`), because the service renames the computer's
+ * sessions after the name a connection gives. It never sends `leave`: from the last connection of a computer that
+ * would end the computer's runs at once. The token is sent only after the certificate checks out.
  */
 export class CcDeskConnection extends EventEmitter {
   private socket: WebSocket | null = null;
@@ -36,6 +39,7 @@ export class CcDeskConnection extends EventEmitter {
   closed = false;
   ready: CcDeskReady | null = null;
   constructor(private readonly options: CcDeskConnectionOptions) { super(); }
+  get device() { return this.options.device ?? null; }
 
   open(): Promise<CcDeskReady> {
     const { url, fingerprint, token, timeoutMs = 15_000 } = this.options;
@@ -56,9 +60,17 @@ export class CcDeskConnection extends EventEmitter {
         const certificate = (response.socket as TLSSocket).getPeerCertificate?.();
         if (!certificate?.fingerprint256 || pin(certificate.fingerprint256) !== pin(fingerprint)) fail("CCDESK_CERT_MISMATCH");
       });
+      const device = this.options.device;
+      // With a device frame the service sends `ready` again, now with that computer's sessions; a request sent
+      // after it is answered after that, whichever way the service shows sessions.
+      const barrier = device ? randomUUID() : null;
+      const done = () => { settled = true; clearTimeout(timer); this.beat(); resolve(this.ready!); };
       socket.once("open", () => {
         if (settled || this.closed) return;
-        socket.send(JSON.stringify({ type: "auth", protocolVersion: CCDESK_PROTOCOL, token, deviceName: this.options.deviceName ?? "MobiCodex 网关", tunnel: false }));
+        socket.send(JSON.stringify({ type: "auth", protocolVersion: CCDESK_PROTOCOL, token, deviceName: device?.name ?? "MobiCodex 网关", tunnel: false }));
+        if (!device) return;
+        socket.send(JSON.stringify({ type: "device", id: device.id, ...(device.platform ? { platform: device.platform } : {}) }));
+        socket.send(JSON.stringify({ type: "session.history", requestId: barrier, sessionId: randomUUID(), beforeSequence: 1 }));
       });
       socket.on("message", raw => {
         this.heard = Date.now();
@@ -69,7 +81,11 @@ export class CcDeskConnection extends EventEmitter {
         if (message.type === "ready") {
           if (message.protocolVersion !== CCDESK_PROTOCOL) return fail("CCDESK_PROTOCOL_UNSUPPORTED");
           this.ready = message;
-          if (!settled) { settled = true; clearTimeout(timer); this.beat(); resolve(message); }
+          if (!settled && !barrier) done();
+          return;
+        }
+        if (barrier && message.type === "response" && message.requestId === barrier) {
+          if (!settled && this.ready) done();
           return;
         }
         this.route(message);
@@ -104,7 +120,6 @@ export class CcDeskConnection extends EventEmitter {
     this.waiting.clear();
     const socket = this.socket;
     if (socket?.readyState === WebSocket.OPEN) {
-      try { socket.send(JSON.stringify({ type: "leave" })); } catch { /* closing anyway */ }
       socket.close(1000);
       setTimeout(() => socket.terminate(), 1000).unref();
     } else socket?.terminate();

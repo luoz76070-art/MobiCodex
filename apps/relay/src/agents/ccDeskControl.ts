@@ -6,10 +6,13 @@ import os from "node:os";
 import path from "node:path";
 import { agentError } from "./sessions.js";
 
-export type CcDeskControlState = { connected: boolean; writable: boolean; adapter?: string | null; serviceVersion?: string | null; protocolVersion?: number | null };
+/** The computer the CC Desk window signed in as: its device frame and sign-in name, exactly as sent. */
+export type CcDeskDevice = { id: string; name: string; platform?: string };
+export type CcDeskControlState = { connected: boolean; writable: boolean; adapter?: string | null; serviceVersion?: string | null; protocolVersion?: number | null; device?: CcDeskDevice | null };
 export type CcDeskRelayed = { ok: boolean; sessionId?: string; code?: string; message?: string };
 type Pending = { resolve: (value: CcDeskRelayed) => void; reject: (error: Error) => void; timer: NodeJS.Timeout };
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 export function defaultControlDirectory() { return path.join(os.homedir(), ".mobicodex", "ccdesk"); }
 function sameService(a: unknown, b: string) {
   try {
@@ -36,6 +39,12 @@ export class CcDeskControl extends EventEmitter {
   constructor(private readonly options: { service: string; directory?: string; timeoutMs?: number }) { super(); }
 
   get writable() { return Boolean(this.socket && this.state?.connected && this.state.writable); }
+  /** Who the window is while it is connected; null otherwise, or from a client that does not say. */
+  get device(): CcDeskDevice | null {
+    const device = this.socket && this.state?.connected ? this.state.device : null;
+    if (!device || typeof device.id !== "string" || !UUID.test(device.id) || typeof device.name !== "string" || !device.name.trim() || device.name.length > 120) return null;
+    return { id: device.id, name: device.name, ...(typeof device.platform === "string" && /^[a-z0-9]{1,16}$/u.test(device.platform) ? { platform: device.platform } : {}) };
+  }
 
   /** Finds and connects to the socket if there is none; cheap to call before each use. */
   async refresh(): Promise<void> {

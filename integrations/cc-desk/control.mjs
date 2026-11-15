@@ -60,6 +60,12 @@ export function createConnectionControl({ send, isOpen = () => true, log = () =>
     connectionId: null,
     serviceVersion: null,
     protocolVersion: null,
+    // Which computer the window says it is (its sign-in name and device frame; nothing else of the sign-in is
+    // kept). A reader of MobiCodex's own must say exactly the same: the service renames this computer's
+    // sessions after the name a connection gives, and shows a computer only its own sessions.
+    deviceName: null,
+    deviceId: null,
+    devicePlatform: null,
     phoneOnlySessions: () => [...phoneOnly],
     setWritable(value) {
       if (control.writable === value) return;
@@ -94,7 +100,14 @@ export function createConnectionControl({ send, isOpen = () => true, log = () =>
     // subscriptions: following a session replaces all others, sending to one adds it.
     fromWindow: guard((message) => {
       if (!message || typeof message !== "object") return;
-      if (message.type === "session.subscribe" && typeof message.sessionId === "string") {
+      if (message.type === "auth" && typeof message.deviceName === "string") {
+        control.deviceName = message.deviceName;
+        onState();
+      } else if (message.type === "device" && typeof message.id === "string") {
+        control.deviceId = message.id;
+        control.devicePlatform = typeof message.platform === "string" ? message.platform : null;
+        onState();
+      } else if (message.type === "session.subscribe" && typeof message.sessionId === "string") {
         windowSubscriptions = new Set([message.sessionId]);
         phoneOnly.clear();
       } else if ((message.type === "message.send" || message.type === "run.continue") && typeof message.sessionId === "string") {
@@ -176,6 +189,9 @@ function stateOf(control) {
     connectionId: control.connectionId,
     serviceVersion: control.serviceVersion,
     protocolVersion: control.protocolVersion,
+    device: control.deviceId && control.deviceName
+      ? { id: control.deviceId, name: control.deviceName, ...(control.devicePlatform ? { platform: control.devicePlatform } : {}) }
+      : null,
     controlVersion: CONTROL_VERSION,
   };
 }

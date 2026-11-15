@@ -52,7 +52,16 @@ export class CcDeskAdapter implements AgentAdapter, SessionAdapter {
   private stopped = false;
   constructor(private readonly config: CcDeskConfig, private readonly deps: CcDeskDependencies = {}) {
     this.control = deps.control ?? new CcDeskControl({ service: config.url, directory: config.controlDirectory });
-    this.control.on("state", () => { for (const entry of this.entries.values()) this.publish(entry); });
+    this.control.on("state", () => {
+      // A reader that said it is this computer goes when the window does (or changes who it is), so the service
+      // never keeps the computer's seat for MobiCodex alone; the phone reconnects and reads as it then can.
+      const device = this.control.device;
+      for (const entry of [...this.entries.values()]) {
+        const bound = entry.connection?.device;
+        if (bound && (bound.id !== device?.id || bound.name !== device?.name || bound.platform !== device?.platform)) this.drop(entry);
+        else this.publish(entry);
+      }
+    });
   }
 
   validSessionId(id: string) { return ccDeskId.safeParse(id).success; }
@@ -69,7 +78,6 @@ export class CcDeskAdapter implements AgentAdapter, SessionAdapter {
         const connection = await this.connect();
         const count = connection.ready?.sessions.length ?? 0;
         connection.close();
-        await this.control.refresh();
         if (!this.stopped) this.state = { ...this.state, state: "connected", loadedSessions: { count, hasMore: false }, checkedAt: new Date().toISOString(), errorCode: null };
       } catch (error) {
         if (!this.stopped) this.state = { ...this.state, state: "failed", loadedSessions: null, checkedAt: new Date().toISOString(),
@@ -85,7 +93,8 @@ export class CcDeskAdapter implements AgentAdapter, SessionAdapter {
     const connection = await this.connect();
     const sessions = connection.ready?.sessions ?? [];
     connection.close();
-    void this.control.refresh();
+    // A service that shows each computer only its own sessions shows none to a reader that cannot say which it is.
+    if (!connection.device && !sessions.length) throw agentError("CCDESK_CONTROL_UNAVAILABLE", 409);
     const needle = search.trim().toLowerCase();
     return {
       sessions: sessions
@@ -102,7 +111,7 @@ export class CcDeskAdapter implements AgentAdapter, SessionAdapter {
     const watched = this.entries.get(id)?.connection;
     const connection = watched && !watched.closed ? watched : await this.connect();
     try {
-      const page = await connection.request({ type: "session.history", sessionId: id, beforeSequence: Number(cursor) }, "snapshot");
+      const page = await connection.request({ type: "session.history", sessionId: id, beforeSequence: Number(cursor) }, "snapshot").catch(error => { throw this.unseen(connection, error); });
       const transcript = new CcDeskTranscript();
       for (const event of page.events) transcript.apply(event, true);
       return { messages: transcript.list(), cursor: page.hasEarlier && page.firstSequence > 1 ? String(page.firstSequence) : null };
@@ -120,16 +129,14 @@ export class CcDeskAdapter implements AgentAdapter, SessionAdapter {
       entry = created;
       this.entries.set(id, created);
       created.pending = (async () => {
-        const controlReady = this.control.refresh().catch(() => undefined);
         const connection = await this.connect();
         if (created.dropped || this.stopped) { connection.close(); throw agentError("CCDESK_DISCONNECTED"); }
         created.connection = connection;
         connection.on("message", (message: CcDeskServerMessage) => this.receive(created, message));
         connection.once("close", () => this.drop(created));
-        const page = await connection.request({ type: "session.subscribe", sessionId: id, afterSequence: 0 }, "snapshot");
+        const page = await connection.request({ type: "session.subscribe", sessionId: id, afterSequence: 0 }, "snapshot").catch(error => { throw this.unseen(connection, error); });
         created.session = page.session;
         created.transcript.load(page);
-        await controlReady;
       })();
     }
     const listener = { receive, disconnect };
@@ -177,12 +184,19 @@ export class CcDeskAdapter implements AgentAdapter, SessionAdapter {
     this.entries.clear();
   }
 
+  /** Not found to a reader that could not say which computer it is: most likely hidden from it, not gone. */
+  private unseen(connection: CcDeskConnection, error: unknown) {
+    return !connection.device && (error as { code?: string }).code === "CCDESK_SESSION_NOT_FOUND" ? agentError("CCDESK_CONTROL_UNAVAILABLE", 409) : error;
+  }
+
   private async connect() {
     if (this.stopped) throw agentError("CCDESK_STOPPED", 503);
     const readToken = this.deps.readToken ?? keychainToken;
     this.token ??= await readToken(this.config.url);
+    await this.control.refresh().catch(() => undefined);
+    const device = this.control.device;
     const open = (token: string) => {
-      const options = { url: this.config.url, token, ...(this.config.fingerprint ? { fingerprint: this.config.fingerprint } : {}) };
+      const options = { url: this.config.url, token, ...(this.config.fingerprint ? { fingerprint: this.config.fingerprint } : {}), ...(device ? { device } : {}) };
       const connection = this.deps.connection?.(options) ?? new CcDeskConnection(options);
       return connection.open().then(() => connection);
     };
@@ -228,7 +242,8 @@ export class CcDeskAdapter implements AgentAdapter, SessionAdapter {
   }
 
   private onThisMac(session: CcDeskSession | null) {
-    return Boolean(session) && (!this.config.deviceId || session!.device?.id === this.config.deviceId);
+    const mine = this.control.device?.id ?? this.config.deviceId;
+    return Boolean(session) && (!mine || session!.device?.id === mine);
   }
   private blocked(entry: Entry): string | null {
     if (!this.onThisMac(entry.session)) return "这个会话在另一台电脑上，只能在那台电脑上操作。";

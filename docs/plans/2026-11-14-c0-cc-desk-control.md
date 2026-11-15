@@ -71,7 +71,7 @@
 - 客户端 0.3.2 没有对外控制接口。本机只有两个内部端口：界面与主进程之间的桥（一次性随机口令、来源校验、只允许一个连接）和 SSH 转发口。
 - 主进程转发层里收发都是明文 JSON，补丁在这里注入指令、截回回复。客户端是 ad-hoc 签名，Electron 没开 asar 完整性校验；改动只做在副本上。
 - 服务端每条连接只能订阅一个会话（`session.subscribe` 会清掉其他订阅，`message.send` 和 `run.continue` 会加订阅，`session.create` 只留新会话），所以读消息不能借窗口的连接，网关用自己的连接读。
-- 连接一旦发 `device` 帧，服务端就为该设备建席位和执行通道入口；网关的只读连接只发 `auth`（`tunnel:false`），不发 `device`。服务端会话可见性默认 shared，不需要设备身份也能读。
+- 连接一旦发 `device` 帧，服务端就为该设备建席位和执行通道入口；网关的只读连接只发 `auth`（`tunnel:false`），不发 `device`。服务端会话可见性默认 shared，不需要设备身份也能读。（11-15 更正：本机的服务端开着 `PROXY_SESSION_VISIBILITY=device`，网关改为照抄窗口的设备身份读，见 `2026-11-15-c2-ccdesk-gateway.md`“设备身份”。）
 - 窗口收到任何会话的 `native.metrics`、`native.capabilities` 都会当成当前会话的显示，所以补丁按窗口自己的订阅过滤实时事件。
 - 新建会话（W3b）不走补丁：在窗口连接上 `session.create` 会把窗口的订阅换成新会话，打断窗口。W3b 仍用一次性定时任务文件（`target.type = "new"`）。
 

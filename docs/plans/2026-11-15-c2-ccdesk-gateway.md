@@ -9,7 +9,7 @@
   - 会话列表：临时连接，取 `ready.sessions`，用完即关。
   - 打开的会话：每个会话一条连接（上限 8），`session.subscribe` 拿历史页，之后接 `session.event` / `session.fragment` / `session.updated`。
   - 更早的历史：在该会话的连接上发 `session.history`（`beforeSequence`）。
-  - 连接只发 `auth`（`tunnel:false`，设备名“MobiCodex 网关”），**不发 `device`**，服务端不会为网关建席位或执行通道。
+  - 连接发 `auth` 时 `tunnel:false`，不建执行通道。~~不发 `device`~~：11-15 真实环境发现本机服务端开着 `PROXY_SESSION_VISIBILITY=device`，不报设备身份的连接一个会话也看不到，见下文“设备身份”。
 - **写（C2b）**：经补丁副本的本机接口（`~/.mobicodex/ccdesk/*.json` 里 `service` 与配置的服务地址一致、`pid` 存活的那个 socket）。五种指令：`message.send`、`approval.reply`、`run.cancel`（停止）、`run.continue`（暂不暴露）、`run.task.stop`（暂不暴露）。
 - 找不到本机接口、接口不可写、会话不在这台 Mac 上（`session.device.id` ≠ 配置的 `deviceId`）时，只读，并在权限卡上写明原因。
 
@@ -56,12 +56,20 @@
 - CI：`apps/relay/tests/ccDesk.test.mjs`，进程内假服务端（协议 17 子集）+ 假本机接口：列表、订阅与片段拼接、历史翻页、提问与权限映射、发送/停止/审批、其他电脑的会话只读、凭证缺失与协议不符、证书指纹不符时不发送凭据。
 - 本地：真实 CC Desk 服务端（模拟模式）+ 改过的转发层 + 网关适配器，端到端跑一遍；再在真实环境用测试会话验收。
 
+## 设备身份（11-15 真实环境发现后补）
+
+- 服务端按设备隔离会话：`ready.sessions`、订阅、历史只给报了同一设备 ID 的连接。
+- 服务端收到 `device` 帧会把该设备所有会话上的设备名改成这条连接 `auth` 里的 `deviceName`（整个替换设备信息）；窗口用启动时的主机名，网关猜不准。所以挂钩把窗口发出的 `auth.deviceName` 和 `device` 帧（`id`、可选 `platform`）原样放进本机接口的状态（`device`，不含凭据），网关读连接照抄。
+- 带设备身份的连接会加入这台电脑的席位：窗口断开时网关的读连接跟着断开（本机接口状态变为未连接即断），不替这台电脑占着席位；关连接从不发 `leave`（最后一条连接发 `leave` 会立刻结束这台电脑的运行，不发则按服务端原有的离线宽限处理）。
+- 连接时依次发 `auth`、`device` 和一个查不存在会话的 `session.history`；服务端按顺序处理，这个请求的回复一定在第二个 `ready`（带会话）之后，以此为准。
+- 没有设备身份（副本没开、旧挂钩）又什么都看不到时，报 `CCDESK_CONTROL_UNAVAILABLE`（手机提示打开副本）。
+
 ## 实现情况（11-15）
 
 - 网关：`apps/relay/src/agents/ccDesk{Protocol,Connection,Control,Transcript,Adapter}.ts`，命令行 `gateway/ccDeskSetup.ts`。证书：配了指纹只认指纹，没配走系统 CA（CC Desk 的自签证书因此必须配指纹）。
 - 手机：列表过滤已认 `sessionApi: 1`，不用另加白名单；历史翻页走通用方式（与 Claude 通道相同，最多 190 条）。补了说明文字、`ccdesk` 会话 ID 校验，以及 `CCDESK_OTHER_DEVICE`、`CCDESK_CONTROL_UNAVAILABLE`、`CCDESK_RUN_ACTIVE`、`CCDESK_BUSY`、`CCDESK_TOKEN_MISSING` 的提示。
-- 测试：`ccDesk.test.mjs` 8 项（CI）；本地端到端 `integrations/cc-desk/test/e2e-gateway.mjs` 11 项通过。
-- 剩下：升级电脑上的网关；用户在终端运行 `ccdesk login`，重启网关；真实环境用测试会话验收；手机界面更新等用户说“发”。
+- 测试：`ccDesk.test.mjs` 10 项（CI，假服务端含按设备隔离与改名行为，断言不改名、不发 `leave`）；本地端到端 `integrations/cc-desk/test/e2e-gateway.mjs` 13 项通过（模拟服务端按设备隔离；从服务端日志核对没有连接以离开结束）。
+- 剩下：重装补丁副本（新挂钩报设备身份）；换上新网关；真实环境用测试会话验收；手机界面更新等用户说“发”。用户已在 11-15 运行 `ccdesk login`。
 
 ## 不做
 

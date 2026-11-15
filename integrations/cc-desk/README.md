@@ -9,7 +9,7 @@
 - **只放行五种指令**：`message.send`、`approval.reply`、`run.cancel`、`run.continue`、`run.task.stop`。删会话、改设置、登录、终端等一律拒绝。
 - **借窗口的连接发出**：指令进的是窗口现有的连接，服务端看到的就是这台电脑在操作，命令照样在这台电脑上执行，手机发的消息在窗口里和自己打字一样。
 - **不打扰窗口**：服务端对这些指令的回复截回给 socket，不给窗口；只有手机在操作、窗口没打开的会话，其实时事件不转给窗口（窗口会把任何会话的用量读数当成当前会话的）。窗口打开了那个会话，就照常实时显示。
-- **读消息不走这里**：服务端每条连接同时只能跟一个会话，借窗口的连接读会把窗口正在看的会话顶掉。MobiCodex 网关用自己的只读连接读（不报设备身份，服务端不会为它建执行通道）。
+- **读消息不走这里**：服务端每条连接同时只能跟一个会话，借窗口的连接读会把窗口正在看的会话顶掉。MobiCodex 网关用自己的连接读（不建执行通道）。服务端按设备隔离会话时，网关以窗口报的同一个设备身份读：挂钩记下窗口登录时的设备名和设备 ID（不记凭据），经本机接口告诉网关。
 
 ## 安装
 
@@ -41,7 +41,11 @@ node integrations/cc-desk/patch.mjs install
 2. 重启网关（`stop` 再 `start`）。手机的 Agent 列表里出现“CC Desk”。
 3. `ccdesk status` 查看是否配置、钥匙串里有没有凭据、找没找到本机接口；`ccdesk logout` 删除凭据和配置。
 
-网关读消息用自己的连接（每个打开的会话一条，最多 8 条；不报设备身份），写操作只经本机接口。会话不在这台电脑上，或者开的是原版 CC Desk，手机上只能看、不能发，卡片上写明原因。
+网关读消息用自己的连接（每个打开的会话一条，最多 8 条），写操作只经本机接口。
+
+- 服务端开着 `PROXY_SESSION_VISIBILITY=device` 时，每台电脑只看得到自己的会话，网关得说自己是这台电脑。服务端还会按连接报的名字给这台电脑的所有会话改名，所以网关用的设备名和 ID 必须和窗口报的一字不差（取自本机接口，不自己猜：CC Desk 用启动时的主机名，主机名会变）。
+- 窗口断开，网关的读连接也跟着断开，不在服务端上替这台电脑占着席位；关连接时不发 `leave`（从这台电脑最后一条连接发出，会立刻结束它正在跑的任务）。
+- 所以开的是原版 CC Desk 时，手机上看不到 CC Desk 的会话，会提示打开副本。服务端共享可见时，其他电脑的会话只能看、不能发，卡片上写明原因。
 
 ## 本机接口协议
 
@@ -54,12 +58,12 @@ node integrations/cc-desk/patch.mjs install
 
 - 应答：`{"id":"2","ok":true,"response":{"ok":true,"sessionId":"…"}}`；`response` 是服务端的回复，`response.ok` 为假时带 `code`、`message`（比如 `other_device`）。
 - 本地拒绝：`{"id":"2","ok":false,"error":{"code":"not_ready","message":"…"}}`，`code` 为 `not_ready`、`not_connected`、`not_allowed`、`bad_request`、`duplicate`、`timeout`、`connection_closed` 之一。
-- 连上时和状态变化时推送 `{"event":"state","state":{"connected":true,"writable":true,"adapter":"claude-code","connectionId":"…","serviceVersion":"0.3.2","protocolVersion":17,"controlVersion":1}}`。`writable` 在执行通道就绪后才为真。
+- 连上时和状态变化时推送 `{"event":"state","state":{"connected":true,"writable":true,"adapter":"claude-code","connectionId":"…","serviceVersion":"0.3.2","protocolVersion":17,"device":{"id":"…","name":"…"},"controlVersion":1}}`。`writable` 在执行通道就绪后才为真；`device` 是窗口登录时报的设备 ID 和设备名（窗口带了平台时也带 `platform`），窗口还没登录时为 `null`。
 - `requestId` 就是这条消息的 ID：超时或连接中断后用同一个 `requestId` 重发，服务端不会重复执行。
 
 ## 边界
 
-- 副本要开着手机才能操作；开的是原版时只能读。
+- 副本要开着手机才能操作；服务端按设备隔离会话时，连看也要副本开着。
 - 本机以同一账号运行的程序都能用这个接口，与它们本来就能读这个账号的文件、凭据是同一信任级别；不对网络开放。
 - CC Desk 客户端升级后要重新生成副本；脚本只认 0.3.2 的原版文件。
 

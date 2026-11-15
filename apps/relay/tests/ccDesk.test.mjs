@@ -27,11 +27,15 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(predicate, label = 'condition') { const end = Date.now() + 4000; while (!predicate()) { if (Date.now() > end) assert.fail(`timeout: ${label}`); await sleep(10); } }
 
 // A stand-in CC Desk service: auth, ready, one subscription per connection, history pages, broadcasts.
-async function service({ protocol = 17 } = {}) {
+async function service({ protocol = 17, visibility = 'shared' } = {}) {
   const server = https.createServer({ key: fs.readFileSync(path.join(scratch, 'key.pem')), cert: fs.readFileSync(path.join(scratch, 'cert.pem')) });
   const wss = new WebSocketServer({ server, path: '/ws' });
   const now = () => new Date().toISOString();
-  const state = { sessions: new Map(), events: new Map(), peers: new Set(), frames: [], deviceFrames: 0, auths: 0, sequence: new Map() };
+  const state = { sessions: new Map(), events: new Map(), peers: new Set(), frames: [], deviceFrames: 0, auths: 0, renames: 0, leaves: 0, sequence: new Map() };
+  // As the service with PROXY_SESSION_VISIBILITY=device: a computer sees only its own sessions.
+  const visible = (peer, session) => visibility !== 'device' || (peer.device && session.device.id === peer.device.id);
+  const ready = peer => send(peer, { type: 'ready', protocolVersion: protocol, connectionId: randomUUID(), adapter: 'claude-code', version: '0.3.2',
+    sessions: [...state.sessions.values()].filter(session => visible(peer, session)) });
   const session = (id, title, device, extra = {}) => {
     state.sessions.set(id, { id, title, projectPath: `/work/${title}`, device: { id: device, name: device === MAC ? 'Mac' : 'LAPTOP', platform: device === MAC ? 'darwin' : 'win32' },
       permissionMode: 'default', createdAt: now(), updatedAt: now(), activeRun: null, ...extra });
@@ -49,7 +53,7 @@ async function service({ protocol = 17 } = {}) {
   const fragment = (sessionId, runId, payload) => { for (const peer of state.peers) if (peer.subscription === sessionId) send(peer, { type: 'session.fragment', sessionId, runId, payload }); };
   const update = (sessionId, changes) => {
     const value = { ...state.sessions.get(sessionId), ...changes, updatedAt: now() }; state.sessions.set(sessionId, value);
-    for (const peer of state.peers) if (peer.ready) send(peer, { type: 'session.updated', session: value });
+    for (const peer of state.peers) if (peer.ready && visible(peer, value)) send(peer, { type: 'session.updated', session: value });
   };
   wss.on('connection', socket => {
     const peer = { socket, ready: false, subscription: null };
@@ -61,11 +65,22 @@ async function service({ protocol = 17 } = {}) {
         state.auths++;
         if (message.token !== TOKEN) { send(peer, { type: 'connection.error', code: 'unauthorized', message: 'no' }); return socket.close(4001); }
         if (message.protocolVersion !== protocol) { send(peer, { type: 'connection.error', code: 'version_mismatch', message: 'no' }); return socket.close(4002); }
-        peer.ready = true;
-        return send(peer, { type: 'ready', protocolVersion: protocol, connectionId: randomUUID(), adapter: 'claude-code', version: '0.3.2', sessions: [...state.sessions.values()] });
+        peer.ready = true; peer.name = message.deviceName;
+        return ready(peer);
       }
-      if (message.type === 'device') { state.deviceFrames++; return; }
-      if (message.type === 'leave') return;
+      if (message.type === 'device') {
+        state.deviceFrames++;
+        peer.device = { id: message.id, name: peer.name, ...(message.platform ? { platform: message.platform } : {}) };
+        // The service renames a computer's sessions after the name its latest connection gave.
+        for (const value of state.sessions.values())
+          if (value.device.id === message.id && value.device.name !== peer.name) { value.device = peer.device; state.renames++; }
+        if (visibility === 'device') ready(peer);
+        return;
+      }
+      if (message.type === 'leave') { state.leaves++; return; }
+      const known = state.sessions.get(message.sessionId);
+      if ((message.type === 'session.subscribe' || message.type === 'session.history') && (!known || !visible(peer, known)))
+        return send(peer, { type: 'response', requestId: message.requestId, ok: false, code: 'not_found', message: 'no' });
       const all = state.events.get(message.sessionId) ?? [];
       if (message.type === 'session.subscribe') {
         peer.subscription = message.sessionId;
@@ -81,17 +96,19 @@ async function service({ protocol = 17 } = {}) {
     });
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  return { ...state, state, url: `wss://127.0.0.1:${server.address().port}/ws`, session, record, fragment, update,
+  return { state, get deviceFrames() { return state.deviceFrames; }, get auths() { return state.auths; }, get renames() { return state.renames; }, get leaves() { return state.leaves; },
+    events: state.events, sessions: state.sessions, peers: state.peers, frames: state.frames,
+    url: `wss://127.0.0.1:${server.address().port}/ws`, session, record, fragment, update,
     close: () => new Promise(resolve => { for (const client of wss.clients) client.terminate(); wss.close(); server.close(resolve); }) };
 }
 
 // A stand-in of the patched client's socket (integrations/cc-desk/control.mjs, protocol of controlVersion 1).
-async function controlSocket(url, { writable = true, answer = command => ({ ok: true, sessionId: command.sessionId }) } = {}) {
+async function controlSocket(url, { writable = true, device = { id: MAC, name: 'Mac' }, answer = command => ({ ok: true, sessionId: command.sessionId }) } = {}) {
   const directory = fs.mkdtempSync(path.join(scratch, 'c')), socketPath = path.join(directory, 'a.sock');
   const commands = [], clients = new Set();
   const server = net.createServer(client => {
     clients.add(client); client.setEncoding('utf8');
-    client.write(JSON.stringify({ event: 'state', state: { connected: true, writable, adapter: 'claude-code', protocolVersion: 17, controlVersion: 1 } }) + '\n');
+    client.write(JSON.stringify({ event: 'state', state: { connected: true, writable, adapter: 'claude-code', protocolVersion: 17, device, controlVersion: 1 } }) + '\n');
     let text = '';
     client.on('data', chunk => {
       text += chunk; let end;
@@ -107,7 +124,8 @@ async function controlSocket(url, { writable = true, answer = command => ({ ok: 
   });
   await new Promise(resolve => server.listen(socketPath, resolve));
   fs.writeFileSync(path.join(directory, 'a.json'), JSON.stringify({ service: url, socket: socketPath, pid: process.pid, controlVersion: 1 }));
-  return { directory, commands, close: () => new Promise(resolve => { for (const client of clients) client.destroy(); server.close(resolve); }) };
+  return { directory, commands, push: state => { for (const client of clients) client.write(JSON.stringify({ event: 'state', state }) + '\n'); },
+    close: () => new Promise(resolve => { for (const client of clients) client.destroy(); server.close(resolve); }) };
 }
 
 function adapter(fake, control, extra = {}) {
@@ -155,8 +173,11 @@ test('probe, list and capabilities follow the service and the socket', async () 
   await assert.rejects(readOnly.listSessions('', 'x'), { code: 'CCDESK_CURSOR_UNSUPPORTED' });
   const control = await controlSocket(fake.url);
   const writable = adapter(fake, control);
+  assert.equal(fake.deviceFrames, 0, 'without the window to copy, the gateway does not say it is a computer');
   assert.equal((await writable.probe()).capabilities.sendMessage, true);
-  assert.equal(fake.deviceFrames, 0, 'the gateway never says it is a computer');
+  const signIns = fake.frames.filter(frame => frame.type === 'auth').map(frame => frame.deviceName);
+  assert.equal(signIns.at(-1), 'Mac', 'with the window, it signs in under the window\'s own name');
+  assert.deepEqual([fake.renames, fake.leaves], [0, 0]);
   await readOnly.stop(); await writable.stop(); await control.close(); await fake.close();
 });
 
@@ -289,7 +310,7 @@ test('writes: send, confirm, interrupt, approvals and questions go through the s
   await until(() => watch.last().submission?.action === 'interrupt' && watch.last().submission.delivery === 'confirmed', 'interrupt confirmed');
   assert.equal(watch.last().lastTurn.status, 'interrupted');
   await assert.rejects(instance.sendMessage(id, { controlToken: randomUUID(), clientMessageId: randomUUID(), text: 'x', delivery: 'queue' }), { code: 'CCDESK_STALE_CONTROL' });
-  assert.equal(fake.deviceFrames, 0);
+  assert.deepEqual([fake.renames, fake.leaves], [0, 0], 'no session renamed, no runs ended by a leave');
   watch.close(); await instance.stop(); await control.close(); await fake.close();
 });
 
@@ -344,6 +365,35 @@ test('a stop whose answer was lost is settled by however the run ends; long sess
   await until(() => watch.last().submission?.delivery === 'confirmed' && watch.last().status === 'idle', 'settled');
   assert.equal(watch.last().control.canSend, true);
   watch.close(); await instance.stop(); await control.close(); await fake.close();
+});
+
+test('a service that shows each computer its own sessions: read as the window, go when it goes', async () => {
+  const fake = await service({ visibility: 'device' });
+  const mine = fake.session(randomUUID(), 'mine', MAC); await sleep(5);
+  fake.session(randomUUID(), 'also-mine', MAC);
+  fake.session(randomUUID(), 'windows', LAPTOP);
+  const blind = adapter(fake, null);
+  await assert.rejects(blind.listSessions(), { code: 'CCDESK_CONTROL_UNAVAILABLE' }, 'without the window nothing is visible, and the phone is told why');
+  await assert.rejects(blind.watchSession(mine, () => {}, () => {}), { code: 'CCDESK_CONTROL_UNAVAILABLE' });
+  await blind.stop();
+
+  const control = await controlSocket(fake.url);
+  const instance = adapter(fake, control);
+  assert.deepEqual((await instance.probe()).loadedSessions, { count: 2, hasMore: false });
+  assert.deepEqual((await instance.listSessions()).sessions.map(s => s.title).sort(), ['also-mine', 'mine']);
+  const watch = await watcher(instance, mine);
+  assert.equal(watch.last().control.canSend, true);
+  const run = randomUUID();
+  fake.record(mine, run, { type: 'message.user', messageId: randomUUID(), text: '看得到', scenario: 'chat' });
+  await until(() => watch.last().messages.some(m => m.text === '看得到'), 'live event');
+  assert.deepEqual([fake.renames, fake.leaves], [0, 0], 'the service renamed nothing; no leave');
+  assert.ok(fake.frames.filter(frame => frame.type === 'device').every(frame => frame.id === MAC && !('platform' in frame)), 'the device frame is the window\'s, as it sent it');
+
+  control.push({ connected: false, writable: false, controlVersion: 1 });
+  await until(() => watch.disconnected(), 'the reader goes with the window');
+  await until(() => ![...fake.peers].some(peer => peer.device), 'no connection is left holding the computer');
+  assert.equal(fake.leaves, 0);
+  await instance.stop(); await control.close(); await fake.close();
 });
 
 test('the socket client picks the live description of the same service', async () => {

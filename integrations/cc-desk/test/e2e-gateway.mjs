@@ -1,6 +1,8 @@
 // End-to-end check of the gateway's CC Desk agent (C2): MobiCodex's adapter reads from a CC Desk service in simulation
 // mode over its own connections and writes through the patched bridge's socket, while a stand-in window holds the
-// computer's connection. Local only, like e2e-fixture.mjs; build the relay first (pnpm --filter @mobile-codex/relay build).
+// computer's connection. The service shows each computer only its own sessions (PROXY_SESSION_VISIBILITY=device),
+// so the gateway reads as the window's computer, under exactly the name the window gave.
+// Local only, like e2e-fixture.mjs; build the relay first (pnpm --filter @mobile-codex/relay build).
 //
 //   node integrations/cc-desk/test/e2e-gateway.mjs --fixture <dir> --bridge <dir>
 import assert from "node:assert/strict";
@@ -19,7 +21,7 @@ const { ccDeskConfigSchema } = await import(pathToFileURL(join(relayDist, "agent
 const WebSocket = createRequire(join(args.fixture, "package.json"))("ws");
 const TOKEN = "fixture-token-0123456789abcdef", PORT = 18831, TLS_PORT = 18832;
 const scratch = mkdtempSync(join(tmpdir(), "ccdesk-gw-"));
-const children = [], results = [];
+const children = [], results = [], serviceLog = [];
 const check = (name, fn) => { fn(); results.push(name); console.log(`ok - ${name}`); };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function until(read, label, ms = 10000) {
@@ -32,7 +34,7 @@ function start(command, argv, env, ready) {
     children.push(child);
     let output = "";
     const timer = setTimeout(() => reject(new Error(`${argv[0]} did not start: ${output}`)), 15000);
-    const listen = (chunk) => { output += chunk; if (output.includes(ready)) { clearTimeout(timer); resolve(child); } };
+    const listen = (chunk) => { output += chunk; if (argv[0].endsWith("main.ts")) serviceLog.push(String(chunk)); if (output.includes(ready)) { clearTimeout(timer); resolve(child); } };
     child.stdout.on("data", listen); child.stderr.on("data", listen);
     child.once("exit", (code) => reject(new Error(`${argv[0]} exited ${code}: ${output}`)));
   });
@@ -48,7 +50,7 @@ const ids = () => ({ clientMessageId: randomUUID() });
 
 let adapter = null;
 try {
-  await start(process.execPath, [join(args.fixture, "apps/server/src/main.ts")], { PROXY_PORT: String(PORT), PROXY_TOKEN: TOKEN, PROXY_DATA_DIR: join(scratch, "data") }, "Proxy simulation service");
+  await start(process.execPath, [join(args.fixture, "apps/server/src/main.ts")], { PROXY_PORT: String(PORT), PROXY_TOKEN: TOKEN, PROXY_DATA_DIR: join(scratch, "data"), PROXY_SESSION_VISIBILITY: "device" }, "Proxy simulation service");
   await start(process.execPath, [join(args.fixture, "tls-front.mjs"), String(TLS_PORT), String(PORT)], {}, "tls front");
   const fingerprint = readFileSync(join(args.fixture, "tls.fingerprint"), "utf8").trim();
   const service = `wss://127.0.0.1:${TLS_PORT}/ws`;
@@ -84,17 +86,13 @@ try {
 
   adapter = new CcDeskAdapter(ccDeskConfigSchema.parse({ url: service, fingerprint, deviceId: MAC, controlDirectory: process.env.MOBICODEX_CCDESK_DIR }), { readToken: async () => TOKEN });
   const status = await adapter.probe();
-  check("the gateway connects, sees the sessions and can write", () => {
+  check("the gateway connects as this computer, sees its sessions and can write", () => {
     assert.equal(status.state, "connected");
-    assert.equal(status.loadedSessions.count, 3);
+    assert.equal(status.loadedSessions.count, 2);
     assert.equal(status.capabilities.sendMessage, true);
   });
   const { sessions } = await adapter.listSessions();
-  check("the list marks the other computer's session", () => {
-    assert.equal(sessions[0].id, foreign);
-    assert.match(sessions.find((s) => s.id === foreign).title, /（Other computer）$/);
-    assert.equal(sessions.find((s) => s.id === phone).title, "phone-session");
-  });
+  check("the list holds this computer's sessions only", () => assert.deepEqual(sessions.map((s) => s.title).sort(), ["phone-session", "window-session"]));
 
   const seen = [];
   const close = await adapter.watchSession(phone, (snapshot) => seen.push(snapshot), () => {});
@@ -149,20 +147,30 @@ try {
   check("a run is stopped from the phone", () => assert.equal(last().permissions.length, 0));
   close();
 
-  const otherSeen = [];
-  const closeOther = await adapter.watchSession(foreign, (snapshot) => otherSeen.push(snapshot), () => {});
-  check("the other computer's session is read only", () => assert.equal(otherSeen.at(-1).control.canSend, false));
-  await assert.rejects(adapter.sendMessage(foreign, { controlToken: otherSeen.at(-1).control.token, ...ids(), text: "不该发", delivery: "queue" }), { code: "CCDESK_OTHER_DEVICE" });
-  closeOther();
+  const hidden = await adapter.watchSession(foreign, () => {}, () => {}).then(() => null, (error) => error.code);
+  check("the other computer's session stays hidden", () => assert.equal(hidden, "CCDESK_SESSION_NOT_FOUND"));
+  check("no session of this computer was renamed", () => {
+    const renamed = win.seen.filter((m) => m.type === "session.updated" && m.session.device?.id === MAC && m.session.device.name !== "Fixture Mac");
+    assert.equal(renamed.length, 0);
+  });
 
+  let gone = false;
+  const closeLast = await adapter.watchSession(phone, () => {}, () => { gone = true; });
   windowSocket.close();
-  await sleep(300);
+  await until(() => gone, "the reader goes with the window");
+  await assert.rejects(adapter.listSessions(), { code: "CCDESK_CONTROL_UNAVAILABLE" });
   const afterClose = await adapter.probe();
-  check("with the computer's window gone the gateway reads but no longer writes", () => {
-    assert.equal(afterClose.state, "connected");
+  check("with the computer's window gone the gateway lets go and says phone control is off", () => {
     assert.equal(afterClose.capabilities.sendMessage, false);
   });
-  // Send, approval, answer and stop; the message to the other computer's session never left the gateway.
+  closeLast();
+  await sleep(300);
+  check("the service saw connections of this computer close, none of them by leaving", () => {
+    const closes = serviceLog.join("").split("\n").filter((line) => /^Connection \w+ closed after/u.test(line));
+    assert.ok(closes.length >= 3, closes.join("\n"));
+    assert.ok(!closes.some((line) => line.includes("the client left")), closes.join("\n"));
+  });
+  // Send, approval, answer and stop.
   check("the bridge logged each relay", () => assert.equal(logs.filter((line) => line.startsWith("MobiCodex control: relayed")).length, 4));
   otherSocket.close();
   await bridge.close();
