@@ -7,7 +7,7 @@
 **在手机上继续电脑上的 Codex 与各 Agent 会话**
 
 [![Android](https://img.shields.io/badge/Android-6.0%2B-3DDC84?logo=android&logoColor=white)](#下载)
-[![Preview](https://img.shields.io/badge/preview-0.2.0-blue)](releases/android/mobicodex/0.2.0/)
+[![Preview](https://img.shields.io/badge/preview-0.3.0-blue)](releases/android/mobicodex/0.3.0/)
 [![License](https://img.shields.io/badge/License-MIT-555)](LICENSE)
 
 [下载](#下载) · [界面预览](#界面预览) · [开始使用](#开始使用) · [开发与构建](#开发与构建)
@@ -16,15 +16,17 @@
 
 MobiCodex 是一个 Android App：在手机上查看并继续电脑上的 Codex、DeepSeek Harness、Claude Code 或 OpenCode 会话，跟随输出，发送文字、图片和语音，处理审批与提问；用「事项」把工作交给 Agent，进度自动回写，由你验收。
 
-当前版本 **0.2.0 / versionCode 40**（2026-11-14）。从这一版起 MobiCodex 是独立 App（包名 `com.mobilecodex.app`），不再和 Kelivo 的 AI 聊天打包在一起。电脑页的界面、配色和功能与之前 Kelivo 整合版 0.1.11 里一致；Kelivo 整合版停止更新，历史版本与源码仍保留在仓库。
+当前版本 **0.3.0 / versionCode 41**（2026-11-15）：任务完成和审批会发系统通知（审批可在通知上直接处理）；Codex 额度用完时可以在原线程里换一个渠道接着做；可以从其他 App 分享文字和图片进来，桌面长按图标有快捷方式。通知和换渠道需要同时升级电脑端网关，详见[更新说明](CHANGELOG.md)。
+
+MobiCodex 从 0.2.0 起是独立 App（包名 `com.mobilecodex.app`），不再和 Kelivo 的 AI 聊天打包在一起；Kelivo 整合版停止更新，历史版本与源码仍保留在仓库。
 
 ## 下载
 
 | 文件 | 用途 |
 | --- | --- |
-| [Android APK：0.2.0（下载页）](https://zyzlz.xin/mobile-codex/releases/android/preview/index.html) | Android 6.0+；预览证书签名，可直接覆盖安装旧版 Mobile Codex 1.x |
-| [GitHub Release](https://github.com/luoz76070-art/MobiCodex/releases/tag/mobicodex-v0.2.0) | 同一源码由 GitHub Actions 构建，含 APK、界面更新包与校验值 |
-| [版本说明与校验值](releases/android/mobicodex/0.2.0/) | 本版内容、签名说明与安装步骤 |
+| [Android APK：0.3.0（下载页）](https://zyzlz.xin/mobile-codex/releases/android/preview/index.html) | Android 6.0+；预览证书签名，可直接覆盖安装旧版 Mobile Codex 1.x |
+| [GitHub Release](https://github.com/luoz76070-art/MobiCodex/releases/tag/mobicodex-v0.3.0) | 同一源码由 GitHub Actions 构建，含 APK、界面更新包与校验值 |
+| [版本说明与校验值](releases/android/mobicodex/0.3.0/) | 本版内容、签名说明与安装步骤 |
 
 **从 Kelivo 整合版换过来**：新 App 与 Kelivo 版是两个不同的应用，可以同时安装。装好后在电脑上运行 `pair` 生成配对信息，在 App「设置」里粘贴，配对一次即可；确认正常后再卸载 Kelivo 版。Kelivo 里的 AI 聊天记录和手机上保存的语音转写记录不会迁移。
 
