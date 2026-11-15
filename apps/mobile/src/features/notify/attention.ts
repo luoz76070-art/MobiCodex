@@ -5,7 +5,10 @@ import { apiGet, buildUrl } from "../connection/http";
 /** F1: system notifications for work the phone sent to the computer (finished / needs approval). */
 export type NotifySettings = { finished: boolean; approvals: boolean };
 export type NotifyPermission = "granted" | "denied" | "prompt";
-type NativeState = { permission: NotifyPermission; running: boolean };
+/** `banner` / `vibrate`: whether finished-task notifications pop up and vibrate; absent on builds before that check. */
+type NativeState = { permission: NotifyPermission; running: boolean; banner?: boolean; vibrate?: boolean };
+/** Settings hint for finished-task notifications: "off" when the system turned pop-up or vibration off, "check" otherwise. */
+export type FinishedAlertHint = "off" | "check" | null;
 type AttentionNative = {
   configure(options: { endpoint: string; token: string } & NotifySettings): Promise<NativeState>;
   start(): Promise<NativeState & { started: boolean }>;
@@ -14,6 +17,7 @@ type AttentionNative = {
   permission(): Promise<NativeState>;
   requestPermission(): Promise<NativeState>;
   openSettings(): Promise<void>;
+  openChannelSettings(): Promise<void>;
   addListener(event: "open", listener: (value: { key: string; title?: string | null }) => void): Promise<PluginListenerHandle>;
 };
 type AttentionItem = { key: string; running: boolean; requests: unknown[] };
@@ -100,12 +104,18 @@ export function useAttention(endpoint: string, token: string, open: (target: { a
   }, [open]);
 }
 
+export function finishedAlertHint(state: Pick<NativeState, "permission" | "banner" | "vibrate"> | null, finished: boolean): FinishedAlertHint {
+  if (!finished || state?.permission !== "granted" || state.banner === undefined) return null;
+  return state.banner === false || state.vibrate === false ? "off" : "check";
+}
+
 /** Settings page: the two switches and the system permission state. */
 export function useNotifySettings() {
   const [settings, setSettings] = useState(loadNotifySettings);
-  const [permission, setPermission] = useState<NotifyPermission | null>(null);
+  const [native, setNative] = useState<NativeState | null>(null);
+  const permission = native?.permission ?? null;
   const refresh = useCallback(() => {
-    if (attentionAvailable()) void Attention.permission().then(state => setPermission(state.permission)).catch(() => undefined);
+    if (attentionAvailable()) void Attention.permission().then(setNative).catch(() => undefined);
   }, []);
   useEffect(() => {
     refresh();
@@ -121,8 +131,13 @@ export function useNotifySettings() {
     try {
       if (permission === "denied") { await Attention.openSettings(); return; }
       localStorage.setItem(askedKey, "1");
-      setPermission((await Attention.requestPermission()).permission);
+      setNative(await Attention.requestPermission());
     } catch { refresh(); }
   }, [permission, refresh]);
-  return { available: attentionAvailable(), settings, change, permission, allow };
+  /** The "任务完成" channel's system page (pop-up, vibration); the app's notification page on builds without it. */
+  const openAlertSettings = useCallback(async () => {
+    if (!attentionAvailable()) return;
+    try { await Attention.openChannelSettings(); } catch { await Attention.openSettings().catch(() => undefined); }
+  }, []);
+  return { available: attentionAvailable(), settings, change, permission, allow, alertHint: finishedAlertHint(native, settings.finished), openAlertSettings };
 }

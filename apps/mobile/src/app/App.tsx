@@ -70,7 +70,7 @@ import { VoiceInput } from "../features/voice/VoiceInput";
 import { VoiceSettings } from "../features/voice/VoiceSettings";
 
 import { createSnapshotReducer } from "../features/connection/snapshotPatch";
-import { subscribeEvents, type SubscriptionState } from "../features/connection/subscription";
+import { releasedStreamState, subscribeEvents, type SubscriptionState } from "../features/connection/subscription";
 const appVersionCode = isKelivoHost ? productVersionCode : standaloneVersionCode;
 const appVersionLabel = isKelivoHost ? productVersionLabel : standaloneVersionLabel;
 const AgentWorkspace = React.lazy(() => import("../features/agents/AgentWorkspace"));
@@ -1599,7 +1599,7 @@ function Workspace({ intakeShare, onShareDone, onCaptureIntake, intakeShortcut, 
         else if (state === "recovering") patchRuntime(threadId, { status: "正在恢复连接，已有内容已保留" });
       },
     });
-    return () => { subscription.dispose(); unsubscribe(); updateRuntime(threadId, runtime => ({ ...runtime, activityEvidence: null, sourceConnected: false, ...desktopControlOfflinePatch(runtime) })); };
+    return () => { subscription.dispose(); unsubscribe(); setStreamState(releasedStreamState); updateRuntime(threadId, runtime => ({ ...runtime, activityEvidence: null, sourceConnected: false, ...desktopControlOfflinePatch(runtime) })); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id, activeRuntime.loading, activeRuntime.watchMode, endpoint, token, deviceRevoked]);
 
@@ -1662,6 +1662,7 @@ function Workspace({ intakeShare, onShareDone, onCaptureIntake, intakeShortcut, 
       subscription.dispose();
       if (snapshotTimer !== null) window.clearTimeout(snapshotTimer);
       unsubscribe();
+      setStreamState(releasedStreamState);
       patchRuntime(threadKey, { userInputs: [], activityEvidence: null, sourceConnected: false });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2154,6 +2155,8 @@ function Workspace({ intakeShare, onShareDone, onCaptureIntake, intakeShortcut, 
           <label className="haptics-setting">任务完成时通知
             <button type="button" className="action-button" role="switch" aria-label="任务完成时通知" aria-checked={notify.settings.finished} onClick={() => notify.change({ finished: !notify.settings.finished })}>{notify.settings.finished ? "已开启" : "已关闭"}</button>
           </label>
+          {notify.alertHint && <p className="update-note">{notify.alertHint === "off" ? "系统关掉了“任务完成”通知的弹出或震动，任务完成时不会在屏幕上方弹出。" : "任务完成时在屏幕上方弹出并震动。有的手机还要在系统里单独打开“悬浮通知”（或“横幅”）和震动。"}</p>}
+          {notify.alertHint && <button className="action-button" onClick={() => void notify.openAlertSettings()}><Bell size={16} /><span>{notify.alertHint === "off" ? "去打开弹出和震动" : "检查“任务完成”通知设置"}</span></button>}
           <label className="haptics-setting">需要审批时通知
             <button type="button" className="action-button" role="switch" aria-label="需要审批时通知" aria-checked={notify.settings.approvals} onClick={() => notify.change({ approvals: !notify.settings.approvals })}>{notify.settings.approvals ? "已开启" : "已关闭"}</button>
           </label>

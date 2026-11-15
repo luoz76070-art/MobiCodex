@@ -1,6 +1,9 @@
 package com.mobilecodex.app;
 
 import android.Manifest;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.os.Build;
 import android.provider.Settings;
@@ -26,6 +29,8 @@ public class AttentionPlugin extends Plugin {
     @Override
     public void load() {
         AttentionConfig.appVisible = true;
+        // Channels exist from the start, so the settings page can read and open them before the first task.
+        AttentionNotifications.channels(getContext());
         handleIntent(getActivity().getIntent());
     }
 
@@ -92,11 +97,33 @@ public class AttentionPlugin extends Plugin {
 
     @PluginMethod
     public void openSettings(PluginCall call) {
-        Intent intent = Build.VERSION.SDK_INT >= 26
+        getActivity().startActivity(appSettings());
+        call.resolve();
+    }
+
+    /** The "任务完成" channel's own page (pop-up, sound, vibration); the app's page where a system has none. */
+    @PluginMethod
+    public void openChannelSettings(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= 26) {
+            Intent channel = new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, getContext().getPackageName())
+                .putExtra(Settings.EXTRA_CHANNEL_ID, AttentionNotifications.DONE);
+            try {
+                getActivity().startActivity(channel);
+                call.resolve();
+                return;
+            } catch (ActivityNotFoundException error) {
+                // Some systems have no per-channel page.
+            }
+        }
+        getActivity().startActivity(appSettings());
+        call.resolve();
+    }
+
+    private Intent appSettings() {
+        return Build.VERSION.SDK_INT >= 26
             ? new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, getContext().getPackageName())
             : new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:" + getContext().getPackageName()));
-        getActivity().startActivity(intent);
-        call.resolve();
     }
 
     /** A notification tap: the page opens the thread; retained until a listener is attached. */
@@ -123,6 +150,18 @@ public class AttentionPlugin extends Plugin {
         }
         result.put("permission", permission);
         result.put("running", AttentionService.running());
+        // Whether finished-task notifications can pop up and vibrate (the user can lower either per channel).
+        boolean banner = true, vibrate = true;
+        if (Build.VERSION.SDK_INT >= 26) {
+            NotificationManager manager = getContext().getSystemService(NotificationManager.class);
+            NotificationChannel done = manager == null ? null : manager.getNotificationChannel(AttentionNotifications.DONE);
+            if (done != null) {
+                banner = done.getImportance() >= NotificationManager.IMPORTANCE_HIGH;
+                vibrate = done.shouldVibrate();
+            }
+        }
+        result.put("banner", banner);
+        result.put("vibrate", vibrate);
         return result;
     }
 }

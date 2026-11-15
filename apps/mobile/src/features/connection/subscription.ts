@@ -1,6 +1,11 @@
 import { relayAuthorization } from "./authorization";
 
 export type SubscriptionState = "connecting" | "online" | "recovering" | "paused" | "unauthorized";
+
+/** What a page shows once its stream is torn down (turn ended, thread changed): nothing is recovering any more; a revoked device stays revoked. */
+export function releasedStreamState(current: SubscriptionState): SubscriptionState {
+  return current === "unauthorized" ? current : "connecting";
+}
 export type SubscriptionDiagnostic = { at: string; generation: number; state: SubscriptionState | "stopped";
   reason: "start" | "retry" | "open" | "stream-error" | "heartbeat-timeout" | "invalid-event" | "auth-failed" | "token-failed" | "background" | "foreground" | "network-online" | "dispose" };
 

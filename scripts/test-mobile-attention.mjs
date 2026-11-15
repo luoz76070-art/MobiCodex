@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
@@ -87,4 +87,32 @@ test('after a send: asks for permission once, starts only when allowed, and does
   m.setAttentionViewing('desktop:t1');
   await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(p.calls.at(-1), ['viewing', 'desktop:t1']);
+});
+
+test('#18 settings hint: only for granted finished notifications on builds that report pop-up and vibration', () => {
+  const granted = { permission: 'granted', banner: true, vibrate: true };
+  assert.equal(m.finishedAlertHint(granted, true), 'check');
+  assert.equal(m.finishedAlertHint({ ...granted, banner: false }, true), 'off');
+  assert.equal(m.finishedAlertHint({ ...granted, vibrate: false }, true), 'off');
+  assert.equal(m.finishedAlertHint(granted, false), null, 'switched off in the app');
+  assert.equal(m.finishedAlertHint({ ...granted, permission: 'denied' }, true), null, 'the permission button covers it');
+  assert.equal(m.finishedAlertHint({ permission: 'granted' }, true), null, 'an older installed build cannot tell');
+  assert.equal(m.finishedAlertHint(null, true), null);
+});
+
+test('#18 finished-task notifications pop up and vibrate on a new channel that replaces the old one', async () => {
+  const java = name => readFile(path.join(root, 'apps/mobile/android/app/src/main/java/com/mobilecodex/app', name), 'utf8');
+  const [channels, service, bridge] = await Promise.all(['AttentionNotifications.java', 'AttentionService.java', 'AttentionPlugin.java'].map(java));
+  assert.match(channels, /DONE = "attention_done_v2"/);
+  assert.match(channels, /new NotificationChannel\(DONE, "任务完成", NotificationManager\.IMPORTANCE_HIGH\)/);
+  assert.match(channels, /done\.enableVibration\(true\)/);
+  assert.match(channels, /deleteNotificationChannel\(LEGACY_DONE\)/);
+  assert.match(channels, /legacy\.getImportance\(\) == NotificationManager\.IMPORTANCE_NONE/, 'a blocked old channel stays blocked');
+  const finished = service.slice(service.indexOf('builder(this, AttentionNotifications.DONE)'), service.indexOf('privately(this, builder, AttentionNotifications.DONE)'));
+  assert.match(finished, /setPriority\(NotificationCompat\.PRIORITY_HIGH\)/);
+  assert.match(finished, /DEFAULT_VIBRATE/);
+  assert.match(service, /privately\(this, builder, AttentionNotifications\.DONE\)/, 'lock screens keep the private version');
+  assert.match(bridge, /ACTION_CHANNEL_NOTIFICATION_SETTINGS[\s\S]*EXTRA_CHANNEL_ID, AttentionNotifications\.DONE/);
+  assert.match(bridge, /result\.put\("banner", banner\)/);
+  assert.match(bridge, /result\.put\("vibrate", vibrate\)/);
 });
