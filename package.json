@@ -43,6 +43,7 @@
     "verify:android": "node scripts/verify-android.mjs",
     "verify:all": "node scripts/verify.mjs --android",
     "test:verification": "node --test scripts/test-verification.mjs",
+    "test:ccdesk": "node --test scripts/test-ccdesk-control.mjs",
     "test:attention": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/attention.test.mjs apps/relay/tests/modelSwitch.test.mjs"
   },
   "devDependencies": {
