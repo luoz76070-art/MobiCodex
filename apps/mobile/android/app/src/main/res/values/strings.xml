@@ -2,4 +2,7 @@
 <resources>
     <string name="app_name">MobiCodex</string>
     <string name="title_activity_main">MobiCodex</string>
+    <string name="shortcut_new_task">新任务</string>
+    <string name="shortcut_voice">语音输入</string>
+    <string name="shortcut_thread">线程</string>
 </resources>
