@@ -10,11 +10,11 @@
 [![Preview](https://img.shields.io/badge/preview-0.3.1-blue)](releases/android/mobicodex/0.3.1/)
 [![License](https://img.shields.io/badge/License-MIT-555)](LICENSE)
 
-[下载](#下载) · [界面预览](#界面预览) · [开始使用](#开始使用) · [开发与构建](#开发与构建)
+[下载](#下载) · [界面预览](#界面预览) · [开始使用](#开始使用) · [反馈问题](#反馈问题) · [开发与构建](#开发与构建)
 
 </div>
 
-MobiCodex 是一个 Android App：在手机上查看并继续电脑上的 Codex、DeepSeek Harness、Claude Code 或 OpenCode 会话，跟随输出，发送文字、图片和语音，处理审批与提问；用「事项」把工作交给 Agent，进度自动回写，由你验收。
+MobiCodex 是一个 Android App：在手机上查看并继续电脑上的 Codex、DeepSeek Harness、Claude Code、CC Desk 或 OpenCode 会话，跟随输出，发送文字、图片和语音，处理审批与提问；用「事项」把工作交给 Agent，进度自动回写，由你验收。
 
 当前版本 **0.3.1 / versionCode 42**（2026-11-15）：任务完成通知改为在屏幕上方弹出并震动；可以在手机上查看并继续电脑上的 CC Desk 会话；修复后台结束的任务回到 App 后「正在恢复连接」不消失。0.3.0 起任务完成和审批会发系统通知，Codex 额度用完可以在原线程里换渠道，也可以从其他 App 分享内容进来，详见[更新说明](CHANGELOG.md)。
 
@@ -76,8 +76,8 @@ MobiCodex 从 0.2.0 起是独立 App（包名 `com.mobilecodex.app`），不再�
 首次从源码准备：
 
 ```sh
-git clone https://github.com/luoz76070-art/project.git
-cd project
+git clone https://github.com/luoz76070-art/MobiCodex.git
+cd MobiCodex
 corepack pnpm install --frozen-lockfile
 corepack pnpm build:plugin
 node dist-plugin/mobile-codex/scripts/mobile-codex.mjs status
@@ -93,7 +93,16 @@ node dist-plugin/mobile-codex/scripts/mobile-codex.mjs pair
 
 在手机 App「设置」粘贴一次性配对信息，连接后选择已有会话。`pair` 只生成短期配对信息，不调用模型。已有配置请先 `status`，沿用原配置和工作目录，按[版本包说明](releases/android/kelivo-preview/0.1.7/README.md)切换网关程序。
 
-[Broker 部署](docs/remote-broker.md) · [网关管理](plugins/mobile-codex/README.md) · [其他 Agent 接入](docs/agent-gateway.md)
+[Broker 部署](docs/remote-broker.md) · [网关管理](plugins/mobile-codex/README.md) · [其他 Agent 接入](docs/agent-gateway.md) · [CC Desk 接入](integrations/cc-desk/README.md)
+
+## 反馈问题
+
+使用中遇到问题，请提到 [GitHub Issues](https://github.com/luoz76070-art/MobiCodex/issues)，写清手机型号、App 版本和复现步骤。
+
+0.3.1 的已知问题：
+
+- 其他 Agent 挂在 Codex 下面，顶栏按钮和“切换 Agent”入口不统一（[#19](https://github.com/luoz76070-art/MobiCodex/issues/19)）。
+- CC Desk 会话切屏回来后，恢复连接较慢（[#20](https://github.com/luoz76070-art/MobiCodex/issues/20)）。
 
 ## 开发与构建
 
