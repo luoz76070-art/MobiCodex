@@ -27,7 +27,7 @@ await build({ stdin: { contents: `
     plugin.onResolve({ filter: /^@capacitor\/core$/ }, () => ({ path: 'capacitor', namespace: 'fixture' }));
     plugin.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: 'export const Capacitor = { isNativePlatform: () => false }; export const CapacitorHttp = { request: async () => { throw new Error("unexpected native request"); } };', loader: 'js' }));
   } }], define: { 'import.meta.env': '{}' } });
-const { subscribeEvents, apiGet, apiPost, relayAuthorization, Capacitor, CapacitorHttp, deviceRevokedMessage } = await import(pathToFileURL(authorizationBundle).href);
+const { subscribeEvents, BACKGROUND_GRACE_MS, apiGet, apiPost, relayAuthorization, Capacitor, CapacitorHttp, deviceRevokedMessage } = await import(pathToFileURL(authorizationBundle).href);
 const { mergeLastTurn } = await moduleFrom('features/chat/lastTurn.ts');
 const { saveThreadRuntimeCache, loadThreadRuntimeCache, readThreadMessageCacheForDiagnostics, defaultRuntime, turnProgressPatch, desktopSendControl, desktopRejectedSendPatch, desktopControlPatch, desktopControlOfflinePatch, desktopControlResponsePatch, desktopMessageReceived, desktopInterruptResponsePatch, desktopApprovalsPatch, approvalResponsePatch } = await moduleFrom('features/chat/runtime.ts');
 const { makeMessageDiagnostics } = await moduleFrom('features/chat/messageDiagnostics.ts');
@@ -403,16 +403,102 @@ test('stream error obtains a fresh token, resumes, and disposal ignores late fra
   assert.deepEqual(diagnosticEvents.map(event => [event.generation, event.reason]), [[1, 'start'], [1, 'open'], [1, 'stream-error'], [2, 'retry'], [2, 'open'], [2, 'dispose']]);
 });
 
-test('hidden tabs close streams; foreground resumes with a new token', async t => {
+test('#20 foreground within the default 20s grace keeps the connection and incoming snapshots', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const { sources, document, own } = environment(t);
-  let tokens = 0;
-  const stop = subscribeEvents({ getToken: async () => ({ streamToken: String(++tokens) }), url: x => x, events: {}, onState() {} });
-  own(stop);
-  await tick(); document.hidden = true; document.dispatchEvent(new Event('visibilitychange'));
-  assert.equal(sources[0].closed, true);
-  await tick(); assert.equal(tokens, 1);
+  let tokens = 0, snapshots = 0;
+  const states = [];
+  own(subscribeEvents({ getToken: async () => ({ streamToken: String(++tokens) }), url: x => x,
+    events: { desktop: () => snapshots++ }, onState: state => states.push(state) }));
+  await Promise.resolve(); sources[0].onopen();
+  assert.equal(BACKGROUND_GRACE_MS, 20_000);
+  document.hidden = true; document.dispatchEvent(new Event('visibilitychange'));
+  t.mock.timers.tick(19_999);
+  sources[0].emit('desktop', {}); assert.equal(snapshots, 1);
+  assert.equal(sources[0].closed, false); assert.equal(states.at(-1), 'online');
   document.hidden = false; document.dispatchEvent(new Event('visibilitychange'));
-  await tick(); assert.equal(tokens, 2);
+  t.mock.timers.tick(2);
+  assert.equal(sources[0].closed, false); assert.equal(tokens, 1); assert.equal(sources.length, 1);
+});
+
+test('#20 background grace expires once, pauses the stream, and foreground obtains a new token', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { sources, document, window, own } = environment(t);
+  let tokens = 0;
+  const states = [];
+  own(subscribeEvents({ getToken: async () => ({ streamToken: String(++tokens) }), url: x => x,
+    events: {}, onState: state => states.push(state), backgroundGraceMs: 1000 }));
+  await Promise.resolve(); sources[0].onopen();
+  document.hidden = true; document.dispatchEvent(new Event('visibilitychange'));
+  t.mock.timers.tick(999);
+  document.dispatchEvent(new Event('visibilitychange')); window.dispatchEvent(new Event('focus'));
+  assert.equal(sources[0].closed, false);
+  t.mock.timers.tick(1);
+  assert.equal(sources[0].closed, true); assert.equal(states.at(-1), 'paused');
+  sources[0].onopen(); assert.equal(states.at(-1), 'paused', 'a late open cannot resurrect a paused stream');
+  t.mock.timers.tick(2000); assert.equal(tokens, 1);
+  document.hidden = false; document.dispatchEvent(new Event('visibilitychange'));
+  await Promise.resolve(); assert.equal(tokens, 2); sources[1].onopen(); assert.equal(states.at(-1), 'online');
+});
+
+test('#20 grace expiry aborts an in-flight token request and ignores its late result', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { sources, document, own } = environment(t);
+  const states = [], signals = [];
+  let finish;
+  own(subscribeEvents({ getToken: signal => { signals.push(signal); return new Promise(resolve => { finish = resolve; }); },
+    url: x => x, events: {}, onState: state => states.push(state), backgroundGraceMs: 1000 }));
+  document.hidden = true; document.dispatchEvent(new Event('visibilitychange'));
+  t.mock.timers.tick(1000);
+  assert.equal(signals[0].aborted, true); assert.equal(states.at(-1), 'paused');
+  finish({ streamToken: 'late' }); await Promise.resolve(); assert.equal(sources.length, 0);
+  document.hidden = false; document.dispatchEvent(new Event('visibilitychange'));
+  assert.equal(signals.length, 2); finish({ streamToken: 'fresh' }); await Promise.resolve();
+  assert.equal(sources.length, 1); assert.equal(sources[0].url, 'fresh');
+});
+
+for (const failure of ['stream-error', 'heartbeat-timeout']) test(`#20 ${failure} still recovers during grace without extending its deadline`, async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { sources, document, own } = environment(t);
+  const states = [], diagnostics = [];
+  own(subscribeEvents({ getToken: async () => ({ streamToken: 'synthetic' }), url: x => x, events: {},
+    onState: state => states.push(state), onDiagnostic: event => diagnostics.push(event),
+    backgroundGraceMs: 1000, heartbeatMs: failure === 'heartbeat-timeout' ? 100 : 45_000, retryBaseMs: 1 }));
+  await Promise.resolve(); sources[0].onopen();
+  document.hidden = true; document.dispatchEvent(new Event('visibilitychange'));
+  if (failure === 'stream-error') sources[0].onerror(); else t.mock.timers.tick(100);
+  assert.equal(sources[0].closed, true); assert.equal(states.at(-1), 'recovering');
+  assert.equal(diagnostics.at(-1).reason, failure);
+  t.mock.timers.tick(1); await Promise.resolve();
+  assert.equal(sources.length, 2, 'retry is not deferred until grace expires');
+  sources[1].onopen(); assert.equal(states.at(-1), 'online');
+  // Keep the new stream alive, while the original background deadline still applies.
+  for (let elapsed = failure === 'heartbeat-timeout' ? 101 : 1; elapsed < 1000;) {
+    const step = Math.min(50, 1000 - elapsed);
+    sources[1].emit('ping', {}); t.mock.timers.tick(step); elapsed += step;
+  }
+  assert.equal(sources[1].closed, true); assert.equal(states.at(-1), 'paused');
+});
+
+for (const ending of ['dispose', 'unauthorized']) test(`#20 ${ending} clears all timers, including grace; late ping cannot restart heartbeat`, async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const scheduled = t.mock.method(globalThis, 'setTimeout'), cleared = t.mock.method(globalThis, 'clearTimeout');
+  const { sources, document, window, own } = environment(t);
+  const states = [], authorization = { endpoint: `https://synthetic.invalid/${ending}`, token: 'synthetic' };
+  const stop = subscribeEvents({ authorization, getToken: async () => ({ streamToken: 'synthetic' }), url: x => x,
+    events: {}, onState: state => states.push(state) });
+  own(stop);
+  await Promise.resolve(); sources[0].onopen();
+  document.hidden = true; document.dispatchEvent(new Event('visibilitychange'));
+  if (ending === 'dispose') stop(); else relayAuthorization(authorization.endpoint, authorization.token).revoke();
+  for (const call of scheduled.mock.calls) assert.ok(cleared.mock.calls.some(clear => clear.arguments[0] === call.result), 'every timer must be explicitly cleared');
+  const count = scheduled.mock.callCount(), before = [...states];
+  sources[0].emit('ping', {}); sources[0].onerror(); sources[0].onopen();
+  t.mock.timers.tick(60_000);
+  document.hidden = false; document.dispatchEvent(new Event('visibilitychange'));
+  window.dispatchEvent(new Event('focus')); window.dispatchEvent(new Event('online'));
+  assert.equal(scheduled.mock.callCount(), count); assert.deepEqual(states, before); assert.equal(sources.length, 1);
+  if (ending === 'unauthorized') assert.equal(states.at(-1), 'unauthorized');
 });
 
 test('401 stops retries even after online and focus events', async t => {

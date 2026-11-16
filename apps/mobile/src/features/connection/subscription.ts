@@ -1,6 +1,7 @@
 import { relayAuthorization } from "./authorization";
 
 export type SubscriptionState = "connecting" | "online" | "recovering" | "paused" | "unauthorized";
+export const BACKGROUND_GRACE_MS = 20_000;
 
 /** What a page shows once its stream is torn down (turn ended, thread changed): nothing is recovering any more; a revoked device stays revoked. */
 export function releasedStreamState(current: SubscriptionState): SubscriptionState {
@@ -19,6 +20,7 @@ export function subscribeEvents(options: {
   onDiagnostic?: (event: SubscriptionDiagnostic) => void;
   retryBaseMs?: number;
   heartbeatMs?: number;
+  backgroundGraceMs?: number;
 }) {
   let disposed = false;
   let unauthorized = false;
@@ -31,6 +33,9 @@ export function subscribeEvents(options: {
   let request: AbortController | null = null;
   let retry: ReturnType<typeof setTimeout> | undefined;
   let heartbeat: ReturnType<typeof setTimeout> | undefined;
+  let background: ReturnType<typeof setTimeout> | undefined;
+  const clearBackground = () => { clearTimeout(background); background = undefined; };
+  const suspended = () => document.hidden && background === undefined;
   const close = () => {
     ++generation;
     clearTimeout(retry);
@@ -42,7 +47,8 @@ export function subscribeEvents(options: {
   };
   const failed = (reason: SubscriptionDiagnostic["reason"]) => {
     close();
-    if (disposed || unauthorized || document.hidden) return;
+    if (disposed || unauthorized) return;
+    if (suspended()) { options.onState("paused"); record("paused", reason); return; }
     options.onState("recovering");
     record("recovering", reason);
     const budget = Math.min(15000, (options.retryBaseMs ?? 500) * 2 ** Math.min(attempt++, 6));
@@ -55,7 +61,7 @@ export function subscribeEvents(options: {
   const connect = async (reason: SubscriptionDiagnostic["reason"] = "start") => {
     close();
     if (disposed || unauthorized) return;
-    if (document.hidden) { options.onState("paused"); record("paused", "background"); return; }
+    if (suspended()) { options.onState("paused"); record("paused", "background"); return; }
     connectionGeneration++;
     const current = generation;
     const controller = new AbortController();
@@ -77,7 +83,7 @@ export function subscribeEvents(options: {
         options.onState("online");
         record("online", "open");
       };
-      stream.addEventListener("ping", touch);
+      stream.addEventListener("ping", () => { if (!disposed && current === generation) touch(); });
       for (const [event, apply] of Object.entries(options.events)) {
         stream.addEventListener(event, (message) => {
           if (disposed || current !== generation) return;
@@ -90,22 +96,32 @@ export function subscribeEvents(options: {
       if (disposed || current !== generation || controller.signal.aborted) return;
       const status = (error as { status?: number })?.status;
       if (status === 401 || status === 403) {
-        close(); unauthorized = true; options.onState("unauthorized");
+        clearBackground(); close(); unauthorized = true; options.onState("unauthorized");
         record("unauthorized", "auth-failed");
       } else failed("token-failed");
     }
   };
   const visible = () => {
     if (disposed || unauthorized) return;
-    if (document.hidden) { close(); options.onState("paused"); record("paused", "background"); }
-    else if (!source && !request) void connect("foreground");
+    if (document.hidden) {
+      // A repeated visibility/focus event must not extend the original deadline.
+      if (background !== undefined) return;
+      background = setTimeout(() => {
+        background = undefined;
+        if (disposed || unauthorized || !document.hidden) return;
+        close(); options.onState("paused"); record("paused", "background");
+      }, options.backgroundGraceMs ?? BACKGROUND_GRACE_MS);
+    } else {
+      clearBackground();
+      if (!source && !request) void connect("foreground");
+    }
   };
   const online = () => { if (!document.hidden && !source) void connect("network-online"); };
   document.addEventListener("visibilitychange", visible);
   window.addEventListener("online", online);
   window.addEventListener("focus", visible);
   const authorization = options.authorization && relayAuthorization(options.authorization.endpoint, options.authorization.token);
-  const revoked = () => { close(); unauthorized = true; options.onState("unauthorized"); record("unauthorized", "auth-failed"); };
+  const revoked = () => { clearBackground(); close(); unauthorized = true; options.onState("unauthorized"); record("unauthorized", "auth-failed"); };
   const detachAuthorization = authorization?.subscribe(revoked);
   if (authorization?.isRevoked()) revoked();
   else void connect();
@@ -113,6 +129,7 @@ export function subscribeEvents(options: {
     if (disposed) return;
     disposed = true;
     detachAuthorization?.();
+    clearBackground();
     close();
     record("stopped", "dispose");
     document.removeEventListener("visibilitychange", visible);

@@ -36,7 +36,7 @@ test('loading uses skeletons instead of spinners; the thread list no longer clai
   assert.match(app, /{loadingMessages && <MessageSkeleton label="正在读取线程" \/>}/);
   assert.doesNotMatch(app, /<span>读取线程<\/span>|从左侧选择线程/);
   assert.match(agents, /loading && \(agent \? !sessions\.length : !agents\.length\) \? <ListSkeleton/);
-  assert.match(agents, /{!snapshot && <MessageSkeleton label="正在读取原会话" \/>}/);
+  assert.match(agents, /{!snapshot && stream !== "unauthorized" && <MessageSkeleton label="正在读取原会话" \/>}/);
   assert.match(items, /items === null \? \(error \? null : <ListSkeleton label="正在读取事项" \/>\)/);
 });
 test('empty states use the brand illustration everywhere', () => {

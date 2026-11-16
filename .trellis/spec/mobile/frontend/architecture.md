@@ -33,6 +33,7 @@ U2将所有电脑通道的当前状态/普通发送反馈收进输入框上方�
 - 历史页只改变 historyBefore，不推进尾部 cursor。generation 变化才重置基线；浏览历史时保留滚动位置，切回线程不自动退出历史模式。
 - Android 启动先完成 Keystore 凭证解锁/迁移，再挂载工作区；成功写入密文后才删除明文。失败保留原数据并显式报错，浏览器路径仍为 localStorage。
 - 切换Agent卸载原工作区、释放请求/订阅。只缓存按连接作用域隔离的有界普通草稿；题目、答案、审批及控制令牌不缓存。SSE与HTTP确认只清理匹配的已提交草稿，保留发送期间的新输入；迟到回包不得复活卡片或覆盖权威状态。
+- #20：共享 SSE 隐藏后默认宽限 20 秒（backgroundGraceMs 可注入），期间保留连接与正常重试/心跳，重复隐藏事件或重试不得延长截止时间；返回前台取消宽限，期满才关闭并 paused。dispose/吊销清计时，旧 ping 不得复活心跳。AgentChat 在 paused/connecting/recovering 保留内存正文和卡片，只读显示并废止控制，online 后须新快照才能操作；unauthorized 清快照/历史并取消请求。保留 #15 的 releasedStreamState 和拆流提示清理。
 - Agent会话键按各自格式保留（OpenCode的ses、Claude的UUID、DeepSeek原进程生命周期内UUID别名），不能放宽为任意Agent/路径。DeepSeek默认queue，只在原活动任务有能力时追加/中断；原生提问和审批复用通用卡片，由当前原请求声明可操作性。完整计划沿用question字段；缺少完整工具输入仅拒绝，支持允许一次、不保存长期规则。partial说明不承诺完整历史。operationError按clientMessageId绑定，权威拒绝/过期优先于迟到HTTP。
 - Desktop用户消息优先按clientMessageId合并本地占位与权威消息，兼容desktop-local-ID旧缓存。HTTP回包复用同一合并入口，不能直接append；两次不同提交ID的同文/同时间消息必须保留。合并相同正文时也保留新来的关联ID及附件，不能因优选旧对象而丢失关联。
 

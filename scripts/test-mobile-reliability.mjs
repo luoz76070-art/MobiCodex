@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import ts from 'typescript';
 import { build } from 'esbuild';
 import { turnResults } from './fixtures/last-turn.mjs';
+import { agentChatDriver } from './helpers/agent-chat-driver.mjs';
 
 // Import the production sync module; keep actual App effect bodies for lifecycle integration.
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -37,6 +38,10 @@ import { releasedStreamState } from ${JSON.stringify(path.join(mobile, 'features
 export { defaultRuntime, saveThreadRuntimeCache, loadThreadRuntimeCache, threadCacheSaveNotice };
 import { createRuntimeSync } from ${JSON.stringify(path.join(mobile, 'features/chat/runtimeSync.ts'))};
 import { readActivityEvidence } from ${JSON.stringify(path.join(mobile, 'features/chat/sessionStatusModel.ts'))};
+import * as agentRuntime from ${JSON.stringify(path.join(mobile, 'features/agents/runtime.ts'))};
+import * as agentDrafts from ${JSON.stringify(path.join(mobile, 'features/agents/drafts.ts'))};
+import { agentSessionStatus } from ${JSON.stringify(path.join(mobile, 'features/chat/sessionStatusModel.ts'))};
+export const agentHelpers = { ...agentRuntime, ...agentDrafts, createSnapshotReducer, agentSessionStatus };
 import { capMessages, mergeMessagesById, turnStatusText } from ${JSON.stringify(path.join(mobile, 'features/chat/messages.ts'))};
 export function driver(seed = defaultRuntime()) {
  let state = seed, response, queueUpdates = false;
@@ -84,7 +89,7 @@ await build({ stdin: { contents: entry, loader: 'ts', resolveDir: root }, outfil
 const previousStorage = globalThis.localStorage;
 const values = new Map();
 globalThis.localStorage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
-const { driver, defaultRuntime, saveThreadRuntimeCache, loadThreadRuntimeCache, threadCacheSaveNotice } = await import(pathToFileURL(path.join(temp, 'driver.mjs')));
+const { driver, agentHelpers, defaultRuntime, saveThreadRuntimeCache, loadThreadRuntimeCache, threadCacheSaveNotice } = await import(pathToFileURL(path.join(temp, 'driver.mjs')));
 const turn = (turnId, status) => ({ turnId, threadId: 'thread', status, messages: [], approvals: [], eventCount: 1 });
 const delta = (cursor, turnStatus, generation = 'generation', reset = false) => ({ messages: [], cursor, generation, turnStatus, reset });
 function deferred(d) {
@@ -269,6 +274,74 @@ test('#15 a torn-down stream does not leave the recovering notice behind', () =>
    const again = d[`${kind}Stream`](); d.subscriptions[1].onState('unauthorized'); again();
    assert.equal(d.streamState(), 'unauthorized', `${kind}: a revoked device stays revoked`);
  }
+});
+
+function agentSnapshot(agentId) {
+ return { agentId, session: { id: 'synthetic-session', title: '合成会话', directory: '', updatedAt: '2026-11-17T00:00:00Z' },
+   connected: true, updatedAt: '2026-11-17T00:00:00Z', status: 'running', activity: 'working',
+   messages: [{ id: 'answer', role: 'assistant', text: '已经显示的正文', timestamp: '2026-11-17T00:00:00Z' }],
+   questions: [{ id: 'question', status: 'pending', questions: [] }],
+   permissions: [{ id: 'permission', status: 'pending', action: 'test', resources: [], save: [], detail: '{}', decisions: ['once', 'reject'] }],
+   queue: { available: true, items: [{ clientMessageId: 'queued', text: '排队内容', status: 'waiting' }] },
+   control: { token: 'synthetic-control', canSend: true, canSteer: true, canInterrupt: true },
+   submission: null, partialText: false, historyCursor: 'older', lastTurn: turnResults[0] };
+}
+
+for (const agentId of ['claude', 'deepseek', 'ccdesk']) test(`#20 ${agentId} keeps its view read-only through recovery and waits for a fresh snapshot`, async t => {
+ const d = agentChatDriver(agentHelpers, agentId); t.after(() => d.unmount());
+ const first = agentSnapshot(agentId);
+ d.state('online'); d.snapshot(first);
+ assert.equal(d.node('ComputerComposer').props.canSend, true);
+ const saved = { composer: d.node('ComputerComposer').props, question: d.node('AgentQuestions').props,
+   permission: d.node('PermissionCard').props, queue: d.node('AgentQueue').props,
+   file: d.node('input').props };
+ for (const state of ['recovering', 'paused', 'connecting']) {
+   // State changes must lock even handlers captured before React renders the update.
+   d.subscription.onState(state);
+   assert.equal(await saved.question.onRespond({}), false);
+   assert.equal(await saved.permission.onRespond('once'), false);
+   assert.equal(await saved.queue.onCancel('queued'), false);
+   saved.composer.onStop(); saved.composer.onSend(); saved.file.onChange({ target: { files: [{}] } });
+   d.render();
+   assert.deepEqual(d.node('MessageTimeline').props.messages, first.messages);
+   assert.equal(d.node('AgentQuestions').props.request, first.questions[0]);
+   assert.equal(d.node('PermissionCard').props.permission, first.permissions[0]);
+   assert.equal(d.node('AgentQueue').props.queue, first.queue);
+   for (const name of ['AgentQuestions', 'PermissionCard', 'AgentQueue', 'ComputerComposer']) assert.equal(d.node(name).props.disabled, true, name);
+   const composer = d.node('ComputerComposer').props;
+   assert.equal(composer.canSend, false); assert.equal(composer.canStop, false); assert.equal(composer.uploadDisabled, true);
+   assert.deepEqual(composer.deliveries, { steer: false, queue: false });
+   assert.equal(d.node('SystemNotice').props.children.join(''), '正在恢复连接…');
+ }
+ assert.equal(d.posts.length, 0); assert.equal(d.uploads(), 0);
+ d.subscription.onState('online'); saved.composer.onStop();
+ d.render(); assert.equal(d.posts.length, 0); assert.equal(d.node('ComputerComposer').props.disabled, true, 'old controls cannot return on EventSource open');
+ const next = { ...first, messages: [{ ...first.messages[0], text: '新的权威正文' }], questions: [], permissions: [], control: { ...first.control, token: 'fresh-control' } };
+ d.snapshot(next);
+ assert.deepEqual(d.node('MessageTimeline').props.messages, next.messages);
+ assert.equal(d.node('ComputerComposer').props.disabled, false);
+ d.node('ComputerComposer').props.onStop(); await Promise.resolve();
+ assert.equal(d.posts.length, 1); assert.equal(d.posts[0].body.controlToken, 'fresh-control');
+});
+
+test('#20 unauthorized clears the Agent snapshot and paged history, cancels reads, and keeps the revoked-device notice', async t => {
+ const d = agentChatDriver(agentHelpers, 'ccdesk'); t.after(() => d.unmount());
+ d.state('online'); d.snapshot(agentSnapshot('ccdesk'));
+ d.history({ messages: [{ id: 'old', role: 'user', text: '旧历史', timestamp: '2026-11-16T00:00:00Z' }], cursor: 'earlier' });
+ d.node('button').props.onClick(); await Promise.resolve(); d.render();
+ assert.equal(d.node('MessageTimeline').props.messages.length, 2);
+ let complete;
+ d.history(new Promise(resolve => { complete = resolve; }));
+ d.node('button').props.onClick();
+ d.state('unauthorized');
+ assert.equal(d.reads.at(-1).signal.aborted, true);
+ complete({ messages: [{ id: 'late', text: '不得复活', timestamp: '2026-11-15T00:00:00Z' }], cursor: 'late' });
+ await Promise.resolve(); d.render();
+ assert.deepEqual(d.node('MessageTimeline').props.messages, []);
+ for (const name of ['AgentQuestions', 'PermissionCard', 'AgentQueue', 'MessageSkeleton', 'button']) assert.equal(d.node(name), undefined, name);
+ assert.match(d.node('SystemNotice').props.children.join(''), /电脑拒绝了这台设备/);
+ assert.equal(d.node('SystemNotice').props.error, true);
+ assert.equal(d.node('ComputerComposer').props.disabled, true);
 });
 
 test('25 drafts and pending identities survive the body thread limit', () => {

@@ -32,7 +32,7 @@ import { createSnapshotReducer } from "../connection/snapshotPatch";
 import { writeClipboard } from "../../shared/clipboard";
 import { AgentQuestions } from "./AgentQuestions";
 import { AgentQueue } from "./AgentQueue";
-import { agentDelivery, agentHistoryWindow, loadAgentDrafts, loadPendingAgentDraft, savePendingAgentDraft, offlineAgent, reconcileAgentDraft, saveAgentDrafts, verifyAgentSnapshot, type PendingAgentDraft } from "./runtime";
+import { agentDelivery, agentHistoryWindow, loadAgentDrafts, loadPendingAgentDraft, savePendingAgentDraft, reconcileAgentDraft, saveAgentDrafts, verifyAgentSnapshot, type PendingAgentDraft } from "./runtime";
 import type { AgentDelivery, AgentPermission, AgentSession, AgentSessionSnapshot } from "./types";
 import { groupByProject, projectGroupLabel, sessionInRange, sessionListRefreshMs } from "../threads/model";
 import { ProjectGroups } from "../threads/ProjectGroups";
@@ -170,6 +170,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
   const draftSession = `${agent.id}:${session.id}`;
   const pendingDraft = useRef<PendingAgentDraft | null>(loadPendingAgentDraft(scopeKey, draftSession));
   const [stream, setStream] = useState<SubscriptionState>("connecting"), [error, setError] = useState("");
+  const streamRef = useRef<SubscriptionState>("connecting");
   const [busy, setBusy] = useState(false), busyRef = useRef(false);
   const [uploading, setUploading] = useState(false), uploadScope = useRef<AbortController | null>(null);
   const uploadInput = useRef<HTMLInputElement>(null), previews = useRef(new Map<string, PendingAttachment>());
@@ -190,7 +191,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
     onDraft(next);
   }
   async function uploadFiles(files: FileList | null) {
-    if (!files?.length || uploadScope.current) return;
+    if (!files?.length || uploadScope.current || streamRef.current !== "online" || !snapshotRef.current?.control) return;
     const controller = new AbortController(); uploadScope.current = controller; setUploading(true); setError("");
     let uploaded: PendingAttachment[] = [];
     try {
@@ -244,7 +245,16 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
           initialized.current = true;
         });
       } },
-      onState: state => { setStream(state); if (state !== "online") setSnapshot(offlineAgent); },
+      onState: state => {
+        streamRef.current = state; setStream(state);
+        if (state === "unauthorized") {
+          controller.abort(); snapshotRef.current = null; setSnapshot(null); setHistory([]); setHistoryCursor(null);
+        } else if (state !== "online") {
+          // Keep the view, but require a fresh snapshot before re-enabling control.
+          const readonly = (value: AgentSessionSnapshot | null) => value ? { ...value, connected: false, control: null, activityEvidence: null } : null;
+          snapshotRef.current = readonly(snapshotRef.current); setSnapshot(readonly);
+        }
+      },
     });
     return () => { controller.abort(); unsubscribe(); };
   }, [endpoint, token, agent.id, session.id]);
@@ -258,7 +268,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
   }
   async function operate(action: "message" | "interrupt" | "question" | "permission" | "queue-cancel", suffix: string, extra: Record<string, unknown>, requestId?: string) {
     const current = snapshotRef.current, currentScope = scope.current;
-    if (!currentScope || currentScope.signal.aborted || busyRef.current || !current?.connected || !current.control) return false;
+    if (streamRef.current !== "online" || !currentScope || currentScope.signal.aborted || busyRef.current || !current?.connected || !current.control) return false;
     busyRef.current = true; setBusy(true); setError("");
     const clientMessageId = crypto.randomUUID(), controlToken = current.control.token;
     if (action === "message") {
@@ -315,7 +325,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
   }
   const sessionStatus = agentSessionStatus(snapshot, online);
   return <section className="agent-chat">
-    <SystemNotice className="agent-connection" error={stream === "unauthorized"}>{online ? `${agent.label} 已连接` : stream === "unauthorized" ? deviceRevokedMessage : stream === "paused" ? "连接已暂停，返回前台后恢复" : "正在恢复连接…"}</SystemNotice>
+    <SystemNotice className="agent-connection" error={stream === "unauthorized"}>{online ? `${agent.label} 已连接` : stream === "unauthorized" ? deviceRevokedMessage : "正在恢复连接…"}</SystemNotice>
     <div className="messages-viewport" ref={viewport} onScroll={() => { const element = viewport.current; if (element) { nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 100; reading.current[draftSession] = element.scrollTop; } }}>
       {(snapshot?.partialText || agent.id === "claude" || agent.id === "deepseek" || agent.id === "ccdesk") && <details className="agent-capabilities"><summary>会话能力与同步范围</summary>
         {snapshot?.partialText && <p>当前显示已同步的消息与工具记录，长内容可能截断；更早历史以本通道提供的加载入口为准。</p>}
@@ -332,7 +342,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
       </MessageMediaProvider>
       {snapshot?.questions.map(question => <AgentQuestions key={question.id} request={question} agentLabel={agent.label} disabled={!online || busy} onRespond={answers => operate("question", `/questions/${question.id}/respond`, { answers }, question.id)} />)}
       {snapshot?.permissions.map(permission => <PermissionCard key={permission.id} permission={permission} agentLabel={agent.label} disabled={!online || busy} onRespond={decision => operate("permission", `/permissions/${permission.id}/respond`, { decision }, permission.id)} />)}
-      {!snapshot && <MessageSkeleton label="正在读取原会话" />}
+      {!snapshot && stream !== "unauthorized" && <MessageSkeleton label="正在读取原会话" />}
     </div>
     <footer className="composer-panel agent-composer">
       {error && <SystemNotice error>{error}</SystemNotice>}
@@ -343,7 +353,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
       <ComputerComposer draft={input.text} onDraft={editText} onSend={send} onStop={() => void operate("interrupt", "/interrupt", {})} onUpload={() => uploadInput.current?.click()}
         voice={<VoiceInput context={{ cwd: session.directory, title: session.title, messages }} scope={scopeKey} thread={draftSession} recovery={voiceRecovery} endpoint={endpoint} token={token} draft={input.text} onDraft={editText} />} label="发送给当前 Agent 会话"
         placeholder={online ? `向 ${agent.label} 发送消息` : "草稿已保留，等待恢复连接…"} status={<ComposerSessionStatus status={sessionStatus} lastTurn={snapshot?.lastTurn} running={snapshot?.status === "running"} fallback={`${agent.label} · 当前会话`} />}
-        uploading={uploading} uploadDisabled={!token} busy={busy} running={snapshot?.status === "running"} hasContent={Boolean(input.text.trim() || attachments.length)}
+        disabled={!online} uploading={uploading} uploadDisabled={!online || !token} busy={busy} running={snapshot?.status === "running"} hasContent={Boolean(input.text.trim() || attachments.length)}
         canSend={sendEnabled} canStop={Boolean(control?.canInterrupt)} deliveries={{ steer: sendEnabled && Boolean(control?.canSteer), queue: sendEnabled }}
         maxLength={Math.max(0, 20_000 - (draft.length - input.text.length))} />
     </footer>
