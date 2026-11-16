@@ -1,103 +1,108 @@
 <div align="center">
 
+<img src="docs/images/mobicodex-app-icon.png" width="112" alt="MobiCodex 图标" />
+
 # MobiCodex
 
-<img src="docs/images/mobicodex-app-icon.png" width="128" alt="MobiCodex 手机连接电脑图标" />
-
-**在手机上继续电脑上的 Codex 与各 Agent 会话**
+**人离开电脑，Agent 照样能接着干。**
+在手机上跟进、回复、审批电脑上的 Codex、Claude Code、DeepSeek、CC Desk 和 OpenCode 会话。
 
 [![Android](https://img.shields.io/badge/Android-6.0%2B-3DDC84?logo=android&logoColor=white)](#下载)
-[![Preview](https://img.shields.io/badge/preview-0.3.1-blue)](releases/android/mobicodex/0.3.1/)
+[![Version](https://img.shields.io/badge/version-0.3.1-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/License-MIT-555)](LICENSE)
 
-[下载](#下载) · [界面预览](#界面预览) · [开始使用](#开始使用) · [反馈问题](#反馈问题) · [开发与构建](#开发与构建)
+[下载](#下载) · [三步上手](#三步上手) · [支持的 Agent](#支持的-agent) · [更新说明](CHANGELOG.md) · [反馈问题](#反馈问题)
 
 </div>
 
-MobiCodex 是一个 Android App：在手机上查看并继续电脑上的 Codex、DeepSeek Harness、Claude Code、CC Desk 或 OpenCode 会话，跟随输出，发送文字、图片和语音，处理审批与提问；用「事项」把工作交给 Agent，进度自动回写，由你验收。
+<p align="center">
+  <img src="docs/images/screens/codex-session.jpg" width="240" alt="Codex 会话：工具摘要、代码块和最终结论" />
+  <img src="docs/images/screens/agent-picker.jpg" width="240" alt="选择 Agent：Codex、Claude Code、DeepSeek、CC Desk 都在线" />
+  <img src="docs/images/screens/approval.jpg" width="240" alt="在手机上处理 Agent 的审批请求" />
+</p>
 
-当前版本 **0.3.1 / versionCode 42**（2026-11-15）：任务完成通知改为在屏幕上方弹出并震动；可以在手机上查看并继续电脑上的 CC Desk 会话；修复后台结束的任务回到 App 后「正在恢复连接」不消失。0.3.0 起任务完成和审批会发系统通知，Codex 额度用完可以在原线程里换渠道，也可以从其他 App 分享内容进来，详见[更新说明](CHANGELOG.md)。
+## 为什么用它
 
-MobiCodex 从 0.2.0 起是独立 App（包名 `com.mobilecodex.app`），不再和 Kelivo 的 AI 聊天打包在一起；Kelivo 整合版停止更新，历史版本与源码仍保留在仓库。
+Agent 一跑就是几十分钟，中间常常要你点一下审批、回答一个问题，或者看一眼结果再决定下一步。人不在电脑前，它就只能干等。MobiCodex 让这些事在手机上就能做完。
+
+- **会话跟着你走**：电脑上正在跑的会话，在手机上按项目找到，实时看输出，接着发文字、图片和语音。
+- **需要你时才提醒**：任务完成、等你审批或回答时，手机弹出通知，点开直接进入那条会话。
+- **用嘴派活**：语音最长 10 分钟，边说边转文字，还能先整理成提示词再发出去。
+- **把活交出去，回来验收**：用「事项」把工作交给指定的 Agent，进度自动回写成进行中、待验证，由你验收或退回。
+- **额度用完不断档**：Codex 额度用完，在原线程里换个渠道接着做，上下文不丢。
+- **不用同一个 Wi-Fi**：电脑网关主动连接你自己的 HTTPS Broker，手机在哪都能连，消息不经过第三方服务。
+
+<p align="center">
+  <img src="docs/images/screens/work-items.jpg" width="240" alt="事项：进行中、待验证、已完成" />
+  <img src="docs/images/screens/codex-session-dark.jpg" width="240" alt="深色模式下的 Codex 会话" />
+</p>
+
+## 支持的 Agent
+
+所有 Agent 共用同一套会话界面：输入框、附件、语音、草稿和运行中的操作都一样，按钮按各通道实际支持的能力显示。
+
+| Agent | 在手机上能做什么 |
+| --- | --- |
+| Codex 桌面端 | 查看并继续电脑上的会话；文字、图片、语音；审批、回答提问、停止；额度用完原线程换渠道 |
+| Claude Code | 打开已加载插件的会话，看输出、排队输入、审批、回答提问、中断 |
+| DeepSeek Harness | 查看电脑上的会话和历史，继续原线程，回答提问 |
+| CC Desk | 查看 CC Desk 会话，发消息、审批、中断 |
+| OpenCode | 打开现有会话，看输出、回答提问 |
+
+新的 Agent 只要实现标准的 SessionAdapter，就能直接用上这套界面，见[其他 Agent 接入](docs/agent-gateway.md)。
 
 ## 下载
 
-| 文件 | 用途 |
+| 文件 | 说明 |
 | --- | --- |
-| [Android APK：0.3.1（下载页）](https://zyzlz.xin/mobile-codex/releases/android/preview/index.html) | Android 6.0+；预览证书签名，可直接覆盖安装旧版 Mobile Codex 1.x |
-| [GitHub Release](https://github.com/luoz76070-art/MobiCodex/releases/tag/mobicodex-v0.3.1) | 同一源码由 GitHub Actions 构建，含 APK、界面更新包与校验值 |
-| [版本说明与校验值](releases/android/mobicodex/0.3.1/) | 本版内容、签名说明与安装步骤 |
+| [Android APK 0.3.1（下载页）](https://zyzlz.xin/mobile-codex/releases/android/preview/index.html) | Android 6.0+，可直接覆盖安装旧版 |
+| [GitHub Release](https://github.com/luoz76070-art/MobiCodex/releases/tag/mobicodex-v0.3.1) | 同一份源码由 GitHub Actions 构建，附校验值 |
+| [版本说明](releases/android/mobicodex/0.3.1/) | 本版内容、签名说明和安装步骤 |
 
-**从 Kelivo 整合版换过来**：新 App 与 Kelivo 版是两个不同的应用，可以同时安装。装好后在电脑上运行 `pair` 生成配对信息，在 App「设置」里粘贴，配对一次即可；确认正常后再卸载 Kelivo 版。Kelivo 里的 AI 聊天记录和手机上保存的语音转写记录不会迁移。
+装好以后在「设置 → 应用更新」检查更新。只改界面的更新会在后台下载，下次打开时生效，不用重装。
 
-**以后的更新**：打开「设置 → 应用更新」。只改界面的更新会在后台下载、下次打开时生效，不用重装；需要新安装包时在同一页下载安装。
+> 从 Kelivo 整合版（0.1.x）换过来：两者是不同的应用，可以同时安装。按下面的步骤重新配对一次，确认正常后再卸载旧版。Kelivo 里的 AI 聊天记录和手机上保存的语音转写记录不会迁移。
 
-## 界面预览
+## 三步上手
 
-<p align="center">
-  <img src="docs/images/remote-rendering-light.jpg" width="260" alt="电脑页浅色：折叠执行摘要、图片和紧凑代码" />
-  <img src="docs/images/remote-rendering-dark.jpg" width="260" alt="电脑页深色：相同布局与图片展示" />
-</p>
+电脑上需要运行 Codex 桌面端和本项目的网关；手机不在同一个 Wi-Fi 时，还需要一台你自己的 HTTPS Broker（[部署说明](docs/remote-broker.md)）。
 
-<p align="center">
-  <img src="docs/images/agent-parity-deepseek-summary.png" width="260" alt="code9 DeepSeek：执行说明常显、工具摘要和共用输入" />
-  <img src="docs/images/agent-parity-deepseek-light.png" width="260" alt="code9 DeepSeek：同款图片大图与代码展示" />
-</p>
-
-截图来自隔离浏览器中的合成会话与图片（Kelivo 整合版时期），独立 App 的电脑页与之相同；不包含个人项目或模型任务。
-
-## 功能
-
-| 部分 | 能做什么 |
-| --- | --- |
-| 会话 | 按项目查看各 Agent 会话，跟随输出，发送文字、附件与语音，处理已适配的问答、审批、排队和停止操作 |
-| 事项 | 把工作交给指定 Agent，进度自动回写为进行中/待验证，由你验收或退回 |
-| 语音 | 最长 10 分钟，边录边转文字，可整理成提示词再回填 |
-| 设置 | 配对与设备、语音；外观（主题、跟随系统取色、聊天字号、工具显示）；应用更新与界面更新 |
-
-电脑页能力（所有通道共用）：
-
-- 执行说明和记录按顺序直接显示；连续工具调用合并为动态摘要，默认只收起命令/输出，点击一次查看明细，最终回复单独显示。
-- 默认正文 15px、代码 12px、工具输出约 11px；长输出在块内滚动，聊天字号可在设置中调整。
-- Markdown 图片直接显示，点击查看大图，可切换原尺寸并重试加载。
-- Codex 与各 Agent 共用输入框、附件、语音、独立草稿和运行中操作；按钮以原通道能力为准，Claude 保持只支持排队。
-- DeepSeek 原生/PTC、Claude 原工具和 OpenCode 混合消息投影命令与可见输出；推理和私有内部结果不进入手机展示。
-- 后续通道实现标准 SessionAdapter 并登记能力后直接复用这一套界面，无需复制页面。
-- 本地图片经过电脑网关鉴权，支持当前会话项目目录内的 PNG、JPEG、GIF、WebP、AVIF，以及同一会话助手 Markdown 明确引用的项目外精确图片，单图不超过 8 MiB。HTTPS 图片也可显示。
-
-本地图片需要 **本版本配套网关**；旧网关会显示升级提示。Codex、DeepSeek Harness、Claude Code、OpenCode 及注册 SessionAdapter 的后续通道均共用取图接口；后三类需要已连接的原会话订阅。只有路径、没有 Markdown 图片引用的文本不会自动变成图片。
-
-## 开始使用
-
-### 连接电脑
-
-电脑需运行 Codex Desktop 和本项目网关；跨网络访问还需你自己的 HTTPS Broker。网关通过主动连接 Broker 传输消息，手机不需要与电脑处于同一 Wi-Fi。
-
-首次从源码准备：
+**1. 在电脑上装好网关**
 
 ```sh
 git clone https://github.com/luoz76070-art/MobiCodex.git
 cd MobiCodex
 corepack pnpm install --frozen-lockfile
 corepack pnpm build:plugin
-node dist-plugin/mobile-codex/scripts/mobile-codex.mjs status
 node dist-plugin/mobile-codex/scripts/mobile-codex.mjs init --workspace /absolute/path/to/your/project
 ```
 
-按照[网关配置说明](plugins/mobile-codex/README.md)补全私有 Broker 配置，再执行：
+**2. 填好 Broker 配置后启动，生成配对信息**（配置项见[网关说明](plugins/mobile-codex/README.md)）
 
 ```sh
 node dist-plugin/mobile-codex/scripts/mobile-codex.mjs start
 node dist-plugin/mobile-codex/scripts/mobile-codex.mjs pair
 ```
 
-在手机 App「设置」粘贴一次性配对信息，连接后选择已有会话。`pair` 只生成短期配对信息，不调用模型。已有配置请先 `status`，沿用原配置和工作目录，按[版本包说明](releases/android/kelivo-preview/0.1.7/README.md)切换网关程序。
+**3. 在手机 App 的「设置」里粘贴配对信息**，连上后选择会话即可。`pair` 只生成短期有效的配对信息，不调用模型。
 
-[Broker 部署](docs/remote-broker.md) · [网关管理](plugins/mobile-codex/README.md) · [其他 Agent 接入](docs/agent-gateway.md) · [CC Desk 接入](integrations/cc-desk/README.md)
+已经配置过的电脑，先运行 `mobile-codex.mjs status`，沿用原来的配置和工作目录。要接 CC Desk，见 [CC Desk 接入](integrations/cc-desk/README.md)。
+
+## 工作原理
+
+```mermaid
+flowchart LR
+  P["MobiCodex（手机）"] -- HTTPS --> B["你的 Broker"]
+  G["电脑网关"] -- 主动连接 --> B
+  G --> C["Codex 桌面端"]
+  G --> A["Claude Code / DeepSeek / CC Desk / OpenCode"]
+```
+
+网关跑在你的电脑上，主动连到 Broker，电脑不用开放端口。手机经 Broker 和网关通信，配对后才能访问；本地图片也要经过网关鉴权才能取到。
 
 ## 反馈问题
 
-使用中遇到问题，请提到 [GitHub Issues](https://github.com/luoz76070-art/MobiCodex/issues)，写清手机型号、App 版本和复现步骤。
+遇到问题请提到 [GitHub Issues](https://github.com/luoz76070-art/MobiCodex/issues)，写清手机型号、App 版本和复现步骤。
 
 0.3.1 的已知问题：
 
