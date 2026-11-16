@@ -1,14 +1,12 @@
+import { WorkspaceHeader } from "../shared/WorkspaceHeader";
+import { GlobalSettings, type CodexPreferences, type CodexSettingsTools } from "./GlobalSettings";
 import { SystemNotice } from "../shared/SystemNotice";
-import { ConnectionCard } from "../features/connection/ConnectionCard";
-import { AgentIcon } from "../features/agents/AgentIcon";
 import { PullToRefresh } from "../shared/PullToRefresh";
 import { EmptyState } from "../shared/EmptyState";
 import { ListSkeleton, MessageSkeleton } from "../shared/Skeleton";
-import { hapticsEnabled, setHapticsEnabled } from "../shared/haptics";
 import { WorkItemsPage } from "../features/workItems/WorkItemsPage";
 import { ThreadRow } from "../features/threads/ThreadRow";
 import { SidebarScrim } from "../features/threads/SidebarScrim";
-import { DisclosureSummary } from "../shared/DisclosureSummary";
 import type { HandoffTarget } from '../../../../shared/handoff';
 import { CapturePanel } from '../features/capture/CapturePanel';
 import { Intake, intakeAvailable, shareFiles, shareText, type SharePayload, type ShortcutPayload } from '../features/intake/plugin';
@@ -22,17 +20,16 @@ import { ComposerSessionStatus } from "../features/chat/SessionStatus";
 import { codexSessionStatus, readActivityEvidence, resultStatus } from "../features/chat/sessionStatusModel";
 import { createPortal } from "react-dom";
 import { ProductRemoteShell } from "../features/product/ProductRemoteShell";
-import { attentionAfterSend, codexAttentionKey, parseAttentionKey, setAttentionViewing, useAttention, useNotifySettings } from "../features/notify/attention";
-import { isKelivoHost, navigateProduct, productBeforeNavigate, productOpenUpdates, takeProductSettingsLaunch, ProductHost } from "../features/product/host";
-import { productVersionCode, productVersionLabel } from "../features/product/identity";
+import { attentionAfterSend, codexAttentionKey, parseAttentionKey, setAttentionViewing, useAttention } from "../features/notify/attention";
+import { isKelivoHost, productBeforeNavigate, takeProductSettingsLaunch, ProductHost } from "../features/product/host";
+import { productVersionCode } from "../features/product/identity";
 import { HandoffCard } from '../features/product/HandoffCard';
 import { handoffReceiptAcceptance, type ProductHandoff } from '../features/product/handoff';
 import { loadReadingPositions, saveReadingPositions } from "../features/chat/readingPositions";
 import { loadWorkspaceCache, saveWorkspaceCache } from "../features/threads/cache";
-import { PairingPanel } from "../features/connection/PairingPanel";
 import React, { useState, useRef, useMemo, useEffect, useCallback } from "react";
-import { type ConnectionProfile, type ThemeMode, type SplitMode, type ApprovalPolicy, type SandboxMode, type ThreadSummary, type ThreadRuntime, type DiagnosticStep, type RelayStatus, type LoadThreadsOptions, type DesktopActiveResponse, type CodexMessage, type LiveTurnSnapshot, type SendRoute, type PendingAttachment, type DesktopControlResponse, type UploadResponse, type DesktopStreamSnapshot, type LiveApproval, type LiveApprovalDecision, type UserInputRequest } from "./types";
-import { defaultProfileId, defaultTheme, defaultSplitMode, defaultApprovalPolicy, defaultSandboxMode, defaultSidePaneSize, defaultTopPaneSize, newThreadId, appVersionCode as standaloneVersionCode, desktopPollActiveMs, desktopPollIdleMs, liveSnapshotThrottleMs, livePollFallbackMs, statusKeepaliveMs, appVersionLabel as standaloneVersionLabel } from "./config";
+import { type ConnectionProfile, type SplitMode, type ApprovalPolicy, type SandboxMode, type ThreadSummary, type ThreadRuntime, type RelayStatus, type LoadThreadsOptions, type DesktopActiveResponse, type CodexMessage, type LiveTurnSnapshot, type SendRoute, type PendingAttachment, type DesktopControlResponse, type UploadResponse, type DesktopStreamSnapshot, type LiveApproval, type LiveApprovalDecision, type UserInputRequest } from "./types";
+import { defaultProfileId, defaultSplitMode, defaultApprovalPolicy, defaultSandboxMode, defaultSidePaneSize, defaultTopPaneSize, newThreadId, appVersionCode as standaloneVersionCode, desktopPollActiveMs, desktopPollIdleMs, liveSnapshotThrottleMs, livePollFallbackMs, statusKeepaliveMs } from "./config";
 import { loadThreadRuntimeCache, readThreadMessageCacheForDiagnostics, defaultRuntime, getRuntime, saveThreadRuntimeCache, turnProgressPatch, desktopSendControl, desktopRejectedSendPatch, desktopControlOfflinePatch, desktopControlResponsePatch, desktopMessageReceived, desktopInterruptResponsePatch, approvalResponsePatch, threadCacheSaveNotice, type ThreadCacheSaveResult } from "../features/chat/runtime";
 import { makeMessageDiagnostics, readDiagnosticDom } from "../features/chat/messageDiagnostics";
 import { readDiagnosticEnvironment, makeDiagnosticsExport, saveDiagnosticFile } from "../features/chat/diagnosticExport";
@@ -40,21 +37,19 @@ import { createConnectionJournal } from "../features/connection/diagnosticJourna
 import { createPollScope } from "../features/chat/sync";
 import { createRuntimeSync } from "../features/chat/runtimeSync";
 import { messagesForRender, capMessages, mergeMessages, mergeMessagesById, turnStatusText, desktopActionText, canUseEventSource } from "../features/chat/messages";
-import { groupThreadsByProject, projectGroupLabel, mergeThreads, shortPath, isDesktopSource, firstLine, sourceClass, sourceLabel, retainCodexThread, sessionInRange, sessionListRefreshMs, type SessionRange, type SourceFilter } from "../features/threads/model";
+import { groupThreadsByProject, projectGroupLabel, mergeThreads, isDesktopSource, firstLine, sourceClass, sourceLabel, retainCodexThread, sessionInRange, sessionListRefreshMs, type SessionRange, type SourceFilter } from "../features/threads/model";
 import { ProjectGroups } from "../features/threads/ProjectGroups";
 import { SessionRangeControl } from "../features/threads/SessionRangeControl";
-import { loadConnectionProfiles, saveConnectionSettings, profileNameFromEndpoint, upsertConnectionProfile, saveConnectionProfiles } from "../features/connection/profiles";
+import { loadConnectionProfiles, saveConnectionSettings } from "../features/connection/profiles";
 import { loadThreadList, loadActiveTurns, threadFromLiveTurn, readThread } from "../features/connection/queries";
-import { assertSecureEndpoint, toFriendlyFetchError, apiGet as requestGet, buildUrl, normalizeEndpoint, apiPost as requestPost } from "../features/connection/http";
-import { makeDiagnosticText, openHealthUrl } from "../features/connection/diagnostics";
+import { toFriendlyFetchError, apiGet as requestGet, buildUrl, normalizeEndpoint, apiPost as requestPost } from "../features/connection/http";
 import { Capacitor } from "@capacitor/core";
 import { NativeHotUpdate } from "../features/updates/native";
 import { composeMessageWithAttachments, attachmentSummaryText, fileToBase64, mimeTypeFromName, revokeAttachmentPreviews } from "../features/chat/attachments";
 import { isNearBottom, scrollMessagesToBottom } from "../features/chat/viewport";
 import { clamp } from "../shared/preferences";
-import { cachedSystemPalette, chatFontScales, loadProductDisplay, saveProductDisplay, saveThemeMode, type ProductDisplay } from "../features/product/standalone";
 import { stageHotUpdate } from "../features/updates/hotUpdate";
-import { Bell, ListTodo, Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Loader2, Wifi, Columns3, Rows3, Copy, Activity, AlertCircle, FileUp, Send, ExternalLink, Server, KeyRound, EyeOff, Eye, Clipboard, Sun, Moon, CheckCircle2, Terminal, ChevronDown, Download } from "lucide-react";
+import { Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Columns3, Rows3, Copy, Activity, AlertCircle, ChevronDown } from "lucide-react";
 import { UserInputCard } from "../features/chat/UserInputCard";
 import { QuotaSwitchCard } from "../features/quota/QuotaSwitchCard";
 import { dismissQuota, loadSwitchRecords, needsQuotaSwitch, quotaDismissed, saveSwitchRecord, standInNotice, switchPrompt, type QuotaSwitchOptions } from "../features/quota/quotaSwitch";
@@ -67,12 +62,10 @@ import { registerVoiceCodexDrafts } from "../features/voice/draftRecovery";
 import type { VoiceRecoveryPort } from "../features/voice/useVoiceRecovery";
 import { useVoiceRecovery } from "../features/voice/useVoiceRecovery";
 import { VoiceInput } from "../features/voice/VoiceInput";
-import { VoiceSettings } from "../features/voice/VoiceSettings";
 
 import { createSnapshotReducer } from "../features/connection/snapshotPatch";
 import { releasedStreamState, subscribeEvents, type SubscriptionState } from "../features/connection/subscription";
 const appVersionCode = isKelivoHost ? productVersionCode : standaloneVersionCode;
-const appVersionLabel = isKelivoHost ? productVersionLabel : standaloneVersionLabel;
 const AgentWorkspace = React.lazy(() => import("../features/agents/AgentWorkspace"));
 
 type CaptureInitialDraft = NonNullable<React.ComponentProps<typeof CapturePanel>["initialDraft"]>;
@@ -83,6 +76,12 @@ export function App() {
     return profiles.find((profile) => profile.id === defaultProfileId) ?? profiles[0];
   });
   const scope = `${connection.id}:${connection.cacheNamespace ?? connection.updatedAt}:${normalizeEndpoint(connection.endpoint)}`;
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [splitMode, setSplitMode] = useState<SplitMode>(defaultSplitMode);
+  const [approvalPolicy, setApprovalPolicy] = useState<ApprovalPolicy>(defaultApprovalPolicy);
+  const [sandboxMode, setSandboxMode] = useState<SandboxMode>(defaultSandboxMode);
+  const preferences = { splitMode, setSplitMode, approvalPolicy, setApprovalPolicy, sandboxMode, setSandboxMode };
+  const [codexSettings, setCodexSettings] = useState<CodexSettingsTools | null>(null);
   const [handoffTarget, setHandoffTarget] = useState<HandoffTarget | null>(null);
   const targetOpened = useCallback(() => setHandoffTarget(null), []);
   const [captureOpen, setCaptureOpen] = useState(false);
@@ -110,19 +109,20 @@ export function App() {
     setAgentMode(value);
   }
   const openComputerSettings = useCallback(() => {
-    setAgentMode(false);
-    try { localStorage.setItem("productRemoteMode", "codex"); } catch { /* The current settings page is still usable. */ }
+    takeProductSettingsLaunch();
+    setSettingsOpen(true);
   }, []);
   useEffect(() => {
     const back = (event: Event) => {
       if (event.defaultPrevented || intakeShares.length) return;
-      if (captureOpen) { event.preventDefault(); setCaptureOpen(false); }
+      if (settingsOpen) { event.preventDefault(); setSettingsOpen(false); }
+      else if (captureOpen) { event.preventDefault(); setCaptureOpen(false); }
       else if (itemsOpen) { event.preventDefault(); setItemsOpen(false); }
     };
     // Capture phase: these sheets sit above the workspace's own back handling.
     window.addEventListener("product-back", back, { capture: true });
     return () => window.removeEventListener("product-back", back, { capture: true });
-  }, [captureOpen, itemsOpen, intakeShares.length]);
+  }, [settingsOpen, captureOpen, itemsOpen, intakeShares.length]);
   const openFromNotification = useCallback((target: { agentId: string; sessionId: string; title: string }) => {
     // CC Desk is no handoff agent, but its notifications still open its own session: AgentWorkspace looks the id up at runtime.
     const agentId = (["codex", "claude", "deepseek", "opencode", "ccdesk"].includes(target.agentId) ? target.agentId : "codex") as HandoffTarget["agentId"];
@@ -148,8 +148,9 @@ export function App() {
     setCaptureOpen(false); setItemsOpen(false); setHandoffTarget(target); selectAgentMode(target.agentId !== 'codex');
   }
   return <ProductRemoteShell onComputerSettings={openComputerSettings} onHandoff={receiveHandoff}><WorkItemsPage open={itemsOpen} onClose={() => setItemsOpen(false)} onNew={() => { setOpenItemUid(null); setCaptureOpen(true); }} onOpenItem={uid => { setOpenItemUid(uid); setCaptureOpen(true); }} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} /><CapturePanel initialDraft={initialDraft} itemUid={openItemUid} onOpenTarget={openHandoffTarget} open={captureOpen} onClose={() => { setCaptureOpen(false); setInitialDraft(undefined); }} key={`capture:${scope}:${connection.token}`} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} />{agentMode
-    ? <React.Suspense fallback={<main className="agent-workspace"><p className="inline-loading">正在打开 Agent…</p></main>}><AgentWorkspace handoffTarget={handoffTarget} onTargetOpened={targetOpened} onCapture={() => setItemsOpen(true)} voiceRecovery={recoveredVoice.recovery} key={scope} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} onBack={() => selectAgentMode(false)} /></React.Suspense>
-    : <Workspace intakeShare={intakeShares[0] ?? null} onShareDone={finishIntakeShare} onCaptureIntake={captureIntake} intakeShortcut={intakeShortcut} onShortcutOpened={shortcutOpened} handoffTarget={handoffTarget} onTargetOpened={targetOpened} onCapture={() => setItemsOpen(true)} voiceRecovery={recoveredVoice.recovery} key={scope} connection={connection} scope={scope} onApply={setConnection} onOpenAgents={() => selectAgentMode(true)} handoff={handoff} onHandoff={setHandoff} />}
+    ? <React.Suspense fallback={<main className="agent-workspace"><p className="inline-loading">正在打开 Agent…</p></main>}><AgentWorkspace onOpenSettings={openComputerSettings} handoffTarget={handoffTarget} onTargetOpened={targetOpened} onCapture={() => setItemsOpen(true)} voiceRecovery={recoveredVoice.recovery} key={scope} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} onBack={() => selectAgentMode(false)} /></React.Suspense>
+    : <Workspace settingsOpen={settingsOpen} preferences={preferences} onOpenSettings={openComputerSettings} onSettingsTools={setCodexSettings} intakeShare={intakeShares[0] ?? null} onShareDone={finishIntakeShare} onCaptureIntake={captureIntake} intakeShortcut={intakeShortcut} onShortcutOpened={shortcutOpened} handoffTarget={handoffTarget} onTargetOpened={targetOpened} onCapture={() => setItemsOpen(true)} voiceRecovery={recoveredVoice.recovery} key={scope} connection={connection} scope={scope} onOpenAgents={() => selectAgentMode(true)} handoff={handoff} onHandoff={setHandoff} />}
+    <GlobalSettings key={`settings:${scope}`} connection={connection} settingsOpen={settingsOpen} onClose={() => setSettingsOpen(false)} onApply={setConnection} preferences={preferences} codex={agentMode ? null : codexSettings} />
     {recoveredVoice.notice && createPortal(<div className="voice-scrim"><section className="voice-sheet" role="dialog" aria-modal="true" aria-label="语音结果已取回">
         <header><strong>语音结果已取回</strong></header>
         <p>{recoveredVoice.notice.message}</p>
@@ -158,7 +159,7 @@ export function App() {
       </section></div>, document.body)}</ProductRemoteShell>;
 }
 
-function Workspace({ intakeShare, onShareDone, onCaptureIntake, intakeShortcut, onShortcutOpened, handoffTarget, onTargetOpened, onCapture, voiceRecovery, connection, scope, onApply, onOpenAgents, handoff, onHandoff }: { intakeShare: SharePayload | null; onShareDone: (id: string) => void; onCaptureIntake: (draft: CaptureInitialDraft) => void; intakeShortcut: ShortcutPayload | null; onShortcutOpened: () => void; handoffTarget: HandoffTarget | null; onTargetOpened: () => void; onCapture: () => void; voiceRecovery: VoiceRecoveryPort; connection: ConnectionProfile; scope: string; onApply: (profile: ConnectionProfile) => void; onOpenAgents: () => void; handoff: ProductHandoff | null; onHandoff: (value: ProductHandoff | null) => void }) {
+function Workspace({ settingsOpen, preferences, onOpenSettings, onSettingsTools, intakeShare, onShareDone, onCaptureIntake, intakeShortcut, onShortcutOpened, handoffTarget, onTargetOpened, onCapture, voiceRecovery, connection, scope, onOpenAgents, handoff, onHandoff }: { settingsOpen: boolean; preferences: CodexPreferences; onOpenSettings: () => void; onSettingsTools: (tools: CodexSettingsTools | null) => void; intakeShare: SharePayload | null; onShareDone: (id: string) => void; onCaptureIntake: (draft: CaptureInitialDraft) => void; intakeShortcut: ShortcutPayload | null; onShortcutOpened: () => void; handoffTarget: HandoffTarget | null; onTargetOpened: () => void; onCapture: () => void; voiceRecovery: VoiceRecoveryPort; connection: ConnectionProfile; scope: string; onOpenAgents: () => void; handoff: ProductHandoff | null; onHandoff: (value: ProductHandoff | null) => void }) {
   const scopeAbortRef = useRef(new AbortController());
   const diagnosticJournalRef = useRef(createConnectionJournal());
   const diagnosticEpochRef = useRef(0);
@@ -178,20 +179,7 @@ function Workspace({ intakeShare, onShareDone, onCaptureIntake, intakeShortcut, 
     scopeAbortRef.current = controller;
     return () => { controller.abort(); threadListRequestRef.current?.abort(); };
   }, []);
-  const [connectionProfiles, setConnectionProfiles] = useState<ConnectionProfile[]>(() => loadConnectionProfiles());
-  const [activeProfileId, setActiveProfileId] = useState(connection.id);
-  const [draftEndpoint, setDraftEndpoint] = useState(endpoint);
-  const [draftToken, setDraftToken] = useState(token);
-  const [theme, setTheme] = useState<ThemeMode>(defaultTheme);
-  const [display, setDisplay] = useState<ProductDisplay>(loadProductDisplay);
-  function changeDisplay(patch: Partial<ProductDisplay>) {
-    const next = { ...display, ...patch };
-    setDisplay(next);
-    saveProductDisplay(next);
-  }
-  const [splitMode, setSplitMode] = useState<SplitMode>(defaultSplitMode);
-  const [approvalPolicy, setApprovalPolicy] = useState<ApprovalPolicy>(defaultApprovalPolicy);
-  const [sandboxMode, setSandboxMode] = useState<SandboxMode>(defaultSandboxMode);
+  const { splitMode, setSplitMode, approvalPolicy, sandboxMode } = preferences;
   const [quotaSwitch, setQuotaSwitch] = useState<{ key: string; options: QuotaSwitchOptions | null; loading: boolean; busy: boolean; error: string; unsupported?: boolean } | null>(null);
   const [switchRecords, setSwitchRecords] = useState(loadSwitchRecords);
   const [switchingChannel, setSwitchingChannel] = useState(false);
@@ -217,16 +205,9 @@ function Workspace({ intakeShare, onShareDone, onCaptureIntake, intakeShortcut, 
   const [liveStatus, setLiveStatus] = useState("live 未检测");
   const [desktopControlStatus, setDesktopControlStatus] = useState("desktop control 未检测");
   const [connectionState, setConnectionState] = useState<"idle" | "testing" | "ok" | "error">("idle");
-  const [haptics, setHaptics] = useState(hapticsEnabled);
-  const [diagnostics, setDiagnostics] = useState<DiagnosticStep[]>([]);
-  const [diagnosticText, setDiagnosticText] = useState("");
-  const [showToken, setShowToken] = useState(false);
-  const [copied, setCopied] = useState("");
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(() => !selected && !isNewThread);
   const previousSplitMode = useRef(splitMode);
-  const [settingsOpen, setSettingsOpen] = useState(() => isKelivoHost && takeProductSettingsLaunch());
-  const notify = useNotifySettings();
   const [copyingMessageDiagnostics, setCopyingMessageDiagnostics] = useState(false);
   const [messageDiagnosticsStatus, setMessageDiagnosticsStatus] = useState("");
   const messageDiagnosticsLock = useRef(false);
@@ -252,6 +233,13 @@ function Workspace({ intakeShare, onShareDone, onCaptureIntake, intakeShortcut, 
   const atBottomRef = useRef(!selected || scrollPositionsRef.current[selected.id] === undefined);
   const activeThreadKey = selected?.id ?? (isNewThread ? newThreadId : "");
   useEffect(() => { diagnosticEpochRef.current++; setMessageDiagnosticsStatus(""); }, [activeThreadKey, settingsOpen]);
+  const settingsActions = useRef({ exportMessageDiagnostics, refreshThreads: () => { void loadThreads(); } });
+  settingsActions.current = { exportMessageDiagnostics, refreshThreads: () => { void loadThreads(); } };
+  useEffect(() => {
+    onSettingsTools({ available: Boolean(selected?.id), busy: copyingMessageDiagnostics, message: messageDiagnosticsStatus,
+      exportDiagnostics: mode => settingsActions.current.exportMessageDiagnostics(mode), refreshThreads: () => settingsActions.current.refreshThreads() });
+    return () => onSettingsTools(null);
+  }, [onSettingsTools, selected?.id, copyingMessageDiagnostics, messageDiagnosticsStatus]);
   const activeRuntime = getRuntime(threadState, activeThreadKey);
   const pendingInputId = activeRuntime.userInputs?.[0]?.id;
   const messages = activeRuntime.messages;
@@ -278,7 +266,6 @@ function Workspace({ intakeShare, onShareDone, onCaptureIntake, intakeShortcut, 
 
   const workspaceTitle = selected?.threadName || (isNewThread ? "新线程" : "MobiCodex");
   const workspaceProject = selected?.cwd ? projectGroupLabel(selected.cwd) : "";
-  const workspaceReady = Boolean(endpoint && token) && connectionState !== "error";
   const workspaceConnectionLabel = connectionState === "ok" ? "已连接" : connectionState === "testing" ? "正在连接" : connectionState === "error" ? "连接不上" : "未连接";
   const workspaceSubtitle =
     selected?.cwd ||
@@ -430,87 +417,6 @@ function Workspace({ intakeShare, onShareDone, onCaptureIntake, intakeShortcut, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sidebarOpen, splitMode, selected?.id, isNewThread, threadRange, threadPage.search, threadPage.offset, deviceRevoked]);
 
-  async function testConnection() {
-    if (normalizeEndpoint(draftEndpoint) !== endpoint || draftToken !== token) {
-      await saveCurrentProfile();
-      return;
-    }
-    setConnectionState("testing");
-    setStatus("测试连接中");
-    setLiveStatus("live 检测中");
-    setDiagnostics([]);
-    setDiagnosticText("");
-    setCopied("");
-    saveConnectionSettings(endpoint, token);
-
-    const steps: DiagnosticStep[] = [];
-    const startedAt = new Date().toISOString();
-
-    async function runStep(name: string, action: () => Promise<string>) {
-      try {
-        const detail = await action();
-        steps.push({ name, ok: true, detail });
-      } catch (error) {
-        steps.push({ name, ok: false, detail: toFriendlyFetchError(error) });
-        throw error;
-      } finally {
-        setDiagnostics([...steps]);
-      }
-    }
-
-    try {
-      await runStep("Relay /health", async () => {
-        const data = await apiGet<{ ok: boolean }>(buildUrl(endpoint, "/health"));
-        if (!data.ok) throw new Error("Relay health returned ok=false");
-        return "ok";
-      });
-
-      await runStep("Token /api/threads", async () => {
-        const data = await apiGet<{ threads: ThreadSummary[] }>(buildUrl(endpoint, "/api/threads?limit=1"), token);
-        return `ok, threads=${data.threads.length}`;
-      });
-
-      await runStep("Live /api/live/health", async () => {
-        const data = await apiGet<{ ok: boolean; mode: string; error?: string }>(buildUrl(endpoint, "/api/live/health"), token);
-        if (!data.ok) throw new Error(data.error ?? "live health returned ok=false");
-        return `ok, mode=${data.mode}`;
-      });
-
-      await runStep("Desktop control /api/desktop/control/health", async () => {
-        const data = await apiGet<{ ok: boolean; mode: string; error?: string }>(buildUrl(endpoint, "/api/desktop/control/health"), token);
-        if (!data.ok) throw new Error(data.error ?? "desktop control returned ok=false");
-        return `ok, mode=${data.mode}`;
-      });
-
-      await runStep("Status /api/status", async () => {
-        const data = await refreshRelayStatus();
-        const executable =
-          typeof data.codexExecutable === "string"
-            ? data.codexExecutable
-            : data.codexExecutable?.executable;
-        const executableSource =
-          typeof data.codexExecutable === "string"
-            ? "legacy"
-            : data.codexExecutable?.source ?? "unknown";
-        const codexDetail = executable
-          ? `codex=${shortPath(executable)}`
-          : `codex 未找到（${executableSource}）`;
-        return `ok, ${codexDetail}, upload=${shortPath(data.uploadDir)}, cwd=${shortPath(data.defaultCwd)}`;
-      });
-
-      setConnectionState("ok");
-      setStatus("连接测试通过");
-      setLiveStatus("live 已连接");
-      setDesktopControlStatus("desktop control 已连接");
-      setDiagnosticText(makeDiagnosticText(startedAt, endpoint, steps));
-      await loadThreads({ selectLatest: !selected && !isNewThread });
-    } catch {
-      setConnectionState("error");
-      setStatus("连接测试失败");
-      setDiagnosticText(makeDiagnosticText(startedAt, endpoint, steps));
-    }
-  }
-
   useEffect(() => {
     if (handoffTarget?.agentId !== 'codex') return;
     const target = handoffTarget; onTargetOpened();
@@ -652,84 +558,6 @@ function Workspace({ intakeShare, onShareDone, onCaptureIntake, intakeShortcut, 
     patchRuntime(newThreadId, { messages: [], draft: "", attachments: [], loaded: true, status: "新线程" });
     setSidebarOpen(false);
     setStatus("新线程");
-  }
-
-  async function persistProfiles(profiles: ConnectionProfile[], activeId: string) {
-    try {
-      assertSecureEndpoint(profiles.find(profile => profile.id === activeId)!.endpoint);
-      await saveConnectionProfiles(profiles, activeId);
-      return true;
-    } catch (error) { setStatus(toFriendlyFetchError(error)); return false; }
-  }
-
-  async function applyPairedConnection(pairedEndpoint: string, pairedToken: string) {
-    const profile: ConnectionProfile = { id: activeProfileId, name: profileNameFromEndpoint(pairedEndpoint), endpoint: pairedEndpoint, token: pairedToken, cacheNamespace: crypto.randomUUID(), updatedAt: new Date().toISOString() };
-    const next = upsertConnectionProfile(connectionProfiles, profile);
-    if (!await persistProfiles(next, profile.id)) throw new Error("设备凭证保存失败，请重新生成配对信息");
-    saveConnectionSettings(pairedEndpoint, pairedToken);
-    onApply(profile);
-  }
-
-  async function saveCurrentProfile() {
-    const normalizedEndpoint = normalizeEndpoint(draftEndpoint);
-    const now = new Date().toISOString();
-    const nextProfile: ConnectionProfile = {
-      id: activeProfileId || `profile-${Date.now()}`,
-      name: profileNameFromEndpoint(normalizedEndpoint),
-      endpoint: normalizedEndpoint,
-      token: draftToken,
-      cacheNamespace: endpoint === normalizedEndpoint && token === draftToken ? connection.cacheNamespace ?? connection.updatedAt : crypto.randomUUID(),
-      updatedAt: now,
-    };
-    const next = upsertConnectionProfile(connectionProfiles, nextProfile);
-    if (!await persistProfiles(next, nextProfile.id)) return;
-    setConnectionProfiles(next);
-    setActiveProfileId(nextProfile.id);
-    saveConnectionSettings(normalizedEndpoint, draftToken);
-    onApply(nextProfile);
-    setStatus("连接档案已保存");
-  }
-
-  async function addConnectionProfile() {
-    const id = `profile-${Date.now()}`;
-    const nextProfile: ConnectionProfile = {
-      id,
-      name: "新连接",
-      endpoint: "http://127.0.0.1:8787",
-      token: "",
-      updatedAt: new Date().toISOString(),
-    };
-    const next = upsertConnectionProfile(connectionProfiles, nextProfile);
-    if (!await persistProfiles(next, id)) return;
-    setConnectionProfiles(next);
-    setActiveProfileId(id);
-    onApply(nextProfile);
-    setStatus("已新建连接档案");
-  }
-
-  async function selectConnectionProfile(profileId: string) {
-    const profile = connectionProfiles.find((item) => item.id === profileId);
-    if (!profile) return;
-    if (!await persistProfiles(connectionProfiles, profile.id)) return;
-    setActiveProfileId(profile.id);
-    onApply(profile);
-    saveConnectionSettings(profile.endpoint, profile.token);
-    setStatus(`已切换到 ${profile.name}`);
-  }
-
-  async function deleteConnectionProfile() {
-    if (connectionProfiles.length <= 1) {
-      setStatus("至少保留一个连接档案");
-      return;
-    }
-    const next = connectionProfiles.filter((profile) => profile.id !== activeProfileId);
-    const fallback = next[0];
-    if (!await persistProfiles(next, fallback.id)) return;
-    setConnectionProfiles(next);
-    setActiveProfileId(fallback.id);
-    onApply(fallback);
-    saveConnectionSettings(fallback.endpoint, fallback.token);
-    setStatus("连接档案已删除");
   }
 
   async function sendMessage(delivery?: "steer" | "queue") {
@@ -1393,17 +1221,15 @@ function Workspace({ intakeShare, onShareDone, onCaptureIntake, intakeShortcut, 
     window.addEventListener("pointercancel", stopResize);
   }
 
-  useEffect(() => { if (!isKelivoHost) saveThemeMode(theme); }, [theme]);
   // Android back closes the settings sheet or the thread drawer before leaving.
   useEffect(() => {
     const back = (event: Event) => {
       if (event.defaultPrevented) return;
-      if (settingsOpen) { event.preventDefault(); setSettingsOpen(false); }
-      else if (sidebarOpen && (selected || isNewThread)) { event.preventDefault(); setSidebarOpen(false); }
+      if (sidebarOpen && (selected || isNewThread)) { event.preventDefault(); setSidebarOpen(false); }
     };
     window.addEventListener("product-back", back);
     return () => window.removeEventListener("product-back", back);
-  }, [settingsOpen, sidebarOpen, selected, isNewThread]);
+  }, [sidebarOpen, selected, isNewThread]);
 
   useEffect(() => {
     localStorage.setItem("splitMode", splitMode);
@@ -1423,13 +1249,7 @@ function Workspace({ intakeShare, onShareDone, onCaptureIntake, intakeShortcut, 
     localStorage.setItem("topPaneSize", String(Math.round(topPaneSize)));
   }, [topPaneSize]);
 
-  useEffect(() => {
-    localStorage.setItem("approvalPolicy", approvalPolicy);
-  }, [approvalPolicy]);
 
-  useEffect(() => {
-    localStorage.setItem("sandboxMode", sandboxMode);
-  }, [sandboxMode]);
 
   const cacheStateRef = useRef(threadState);
   const workspaceCacheRef = useRef({ threads, selectedId: selected?.id ?? null, isNewThread });
@@ -1776,26 +1596,9 @@ function Workspace({ intakeShare, onShareDone, onCaptureIntake, intakeShortcut, 
         ready={Boolean(nativeDesktop && desktopSend.ready && !submittingMessage && !uploading && !activeRuntime.pendingMessageId && (!isLiveTurnActive || canQueue))}
         queue={isLiveTurnActive} changed={onHandoff} select={thread => void openThread(thread)}
         migrate={migrateLegacyHandoff} refresh={() => { setThreadRange('all'); void loadThreads({ range: 'all', append: threadRange === 'all' && threadPage.hasMore }); }} upload={uploadHandoffFile} send={sendHandoffMessage} />}
-      <header className="topbar glass-surface">
-        <button className="icon-button mobile-menu" onClick={() => setSidebarOpen(true)} aria-label="打开线程列表">
-          <Menu size={22} />
-        </button>
-        <div className="workspace-title">
-          <button type="button" className="workspace-switch" onClick={onOpenAgents} title="切换 Agent"
-            aria-label={`${workspaceTitle}，${workspaceConnectionLabel}${workspaceProject ? `，项目 ${workspaceProject}` : ""}，点按切换 Agent`}>
-            <span className="agent-glyph"><AgentIcon id="codex" size={18} /></span>
-            <span className="workspace-switch-text">
-              <span className="workspace-name"><strong>{workspaceTitle}</strong><span className={`status-dot ${connectionState === "error" ? "error" : connectionState === "ok" ? "ok" : ""}`} /></span>
-              {workspaceProject ? <span className="project-chip">{workspaceProject}</span> : <small>{connection.name}</small>}
-            </span>
-          </button>
-        </div>
-        <div className="top-actions">
-          {workspaceReady
-            ? <button className="icon-button" onClick={onCapture} aria-label="事项" title="事项"><ListTodo size={18} /></button>
-            : <button className="icon-button" onClick={() => setSettingsOpen(true)} aria-label="设置" title="设置"><Settings size={18} /></button>}
-        </div>
-      </header>
+      <WorkspaceHeader agentId="codex" title={workspaceTitle} subtitle={connection.name} project={workspaceProject}
+        connection={{ label: workspaceConnectionLabel, state: connectionState }} leading="menu" leadingLabel="打开线程列表"
+        onLeading={() => setSidebarOpen(true)} onSwitchAgent={onOpenAgents} onOpenItems={onCapture} onOpenSettings={onOpenSettings} />
 
       <section className="workspace-grid" ref={workspaceGridRef}>
         <aside ref={sidebarRef} className={`thread-sidebar glass-surface ${sidebarOpen ? "open" : ""}`}>
@@ -1811,7 +1614,7 @@ function Workspace({ intakeShare, onShareDone, onCaptureIntake, intakeShortcut, 
               <button className="icon-button" onClick={() => void loadThreads()} aria-label="刷新线程" title="刷新线程" disabled={loading}>
                 <RefreshCcw size={18} className={loading ? "spin" : ""} />
               </button>
-              <button className="icon-button" onClick={() => { setSidebarOpen(false); setSettingsOpen(true); }} aria-label="设置" title="设置">
+              <button className="icon-button" onClick={() => { setSidebarOpen(false); onOpenSettings(); }} aria-label="设置" title="设置">
                 <Settings size={18} />
               </button>
               <button className="icon-button sidebar-close" onClick={() => setSidebarOpen(false)} aria-label="关闭线程列表">
@@ -1902,7 +1705,7 @@ function Workspace({ intakeShare, onShareDone, onCaptureIntake, intakeShortcut, 
               <button className="icon-button" onClick={() => void (selected ? openThread(selected) : loadThreads())} aria-label="重新加载">
                 <RefreshCcw size={17} className={loadingMessages ? "spin" : ""} />
               </button>
-              <button className="icon-button" onClick={() => copyText(selected?.cwd ?? workspaceTitle, "thread")} aria-label="复制当前信息">
+              <button className="icon-button" onClick={() => copyText(selected?.cwd ?? workspaceTitle)} aria-label="复制当前信息">
                 <Copy size={17} />
               </button>
             </div>
@@ -2002,240 +1805,7 @@ function Workspace({ intakeShare, onShareDone, onCaptureIntake, intakeShortcut, 
       </section>
 
       <SidebarScrim open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className={`settings-scrim ${settingsOpen ? "show" : ""}`} onClick={() => setSettingsOpen(false)} />
 
-      <aside className={`settings-sheet glass-surface ${settingsOpen ? "open" : ""}`} aria-label="设置">
-        <div className="settings-heading">
-          <div>
-            <h2>设置</h2>
-            <p>{status}</p>
-          </div>
-          <button className="icon-button" onClick={() => setSettingsOpen(false)} aria-label="关闭设置">
-            <X size={18} />
-          </button>
-        </div>
-
-        <ConnectionCard endpoint={endpoint} token={token} connectionState={connectionState} open={settingsOpen} />
-        <PairingPanel endpoint={endpoint} token={token} onPaired={applyPairedConnection} />
-        {settingsOpen && <section className="settings-section"><VoiceSettings endpoint={endpoint} token={token} /></section>}
-        <section className="settings-section"><details className="settings-disclosure advanced-settings"><DisclosureSummary>高级</DisclosureSummary>
-          <p className="setting-description">手动填写电脑地址和访问令牌、检查连接、导出诊断。配对成功后一般不需要改。</p>
-          <div className="settings-subsection">
-          <h3>手动连接</h3>
-          <div className="profile-row">
-            <label className="input-field">
-              <Server size={16} />
-              <select value={activeProfileId} onChange={(event) => selectConnectionProfile(event.target.value)} aria-label="连接档案">
-                {connectionProfiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {profile.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button className="icon-button" onClick={addConnectionProfile} aria-label="新增连接档案">
-              <Sparkles size={17} />
-            </button>
-            <button className="icon-button" onClick={deleteConnectionProfile} aria-label="删除连接档案">
-              <X size={17} />
-            </button>
-          </div>
-          <div className="field-row">
-            <label className="input-field">
-              <Server size={16} />
-              <input value={draftEndpoint} onChange={(event) => setDraftEndpoint(event.target.value)} placeholder="电脑地址，例如 https://…" aria-label="电脑地址" />
-            </label>
-            <button className="icon-button" onClick={() => openHealthUrl(endpoint)} aria-label="在浏览器里检查电脑地址" title="在浏览器里检查电脑地址">
-              <ExternalLink size={17} />
-            </button>
-          </div>
-          <div className="field-row">
-            <label className="input-field">
-              <KeyRound size={16} />
-              <input
-                value={draftToken}
-                onChange={(event) => setDraftToken(event.target.value)}
-                placeholder="访问令牌" aria-label="访问令牌"
-                type={showToken ? "text" : "password"}
-              />
-            </label>
-            <button className="icon-button" onClick={() => setShowToken((value) => !value)} aria-label="显示或隐藏访问令牌">
-              {showToken ? <EyeOff size={17} /> : <Eye size={17} />}
-            </button>
-          </div>
-          <div className="settings-actions">
-            <button className="action-button primary" onClick={() => void testConnection()} disabled={connectionState === "testing"}>
-              {connectionState === "testing" ? <Loader2 size={16} className="spin" /> : <Wifi size={16} />}
-              <span>测试连接</span>
-            </button>
-            <button className="action-button" onClick={() => void loadThreads()} disabled={loading}>
-              <RefreshCcw size={16} className={loading ? "spin" : ""} />
-              <span>保存刷新</span>
-            </button>
-            <button className="action-button" onClick={saveCurrentProfile}>
-              <Clipboard size={16} />
-              <span>保存档案</span>
-            </button>
-          </div>
-        </div>
-        <div className="settings-subsection">
-          <h3>电脑状态</h3>
-          <div className="status-grid">
-            <span>电脑</span>
-            <strong>{connectionState === "ok" ? "在线" : connectionState === "testing" ? "检测中" : "待确认"}</strong>
-            <span>实时会话</span>
-            <strong>{relayStatus?.live?.ok ? "可用" : relayStatus?.live?.error ?? "未检测"}</strong>
-            <span>桌面端 Codex</span>
-            <strong>{relayStatus?.desktopControl?.ok ? "可控制" : relayStatus?.desktopControl?.error ?? "未检测"}</strong>
-            <span>上传目录</span>
-            <strong>{relayStatus?.uploadDir ? shortPath(relayStatus.uploadDir) : "未检测"}</strong>
-          </div>
-          <div className="settings-actions">
-            <button className="action-button" onClick={() => void refreshRelayStatus()}>
-              <Activity size={16} />
-              <span>刷新状态</span>
-            </button>
-            {relayStatus?.uploadDir && (
-              <button className="action-button" onClick={() => copyText(relayStatus.uploadDir, "upload-dir")}>
-                <Clipboard size={16} />
-                <span>{copied === "upload-dir" ? "已复制" : "复制上传目录"}</span>
-              </button>
-            )}
-          </div>
-        </div>
-          <div className="settings-subsection"><details className="settings-disclosure"><DisclosureSummary>会话显示诊断</DisclosureSummary>
-          <p className="update-note">出现显示或连接问题时，可复制不超过 2 KB 的摘要。详细报告单独保存为文件，最多 64 KB。仅含版本、身份指纹、数量及连接状态，不含正文、附件路径或密钥。</p>
-          <div className="settings-actions"><button className="action-button" disabled={!selected?.id || copyingMessageDiagnostics} onClick={() => void exportMessageDiagnostics("copy")}>
-            {copyingMessageDiagnostics ? <Loader2 size={16} className="spin" /> : <Copy size={16} />}
-            <span>{copyingMessageDiagnostics ? "正在生成诊断…" : "复制诊断摘要"}</span>
-          </button>
-          <button className="action-button" disabled={!selected?.id || copyingMessageDiagnostics} onClick={() => void exportMessageDiagnostics("file")}><Download size={16} /><span>保存详细报告</span></button></div>
-          {messageDiagnosticsStatus && <p className="update-note" role="status">{messageDiagnosticsStatus}</p>}
-        </details></div>
-        </details></section>
-        <section className="settings-section"><h3>应用版本</h3><p>{appVersionLabel}</p><button className="action-button" onClick={() => window.dispatchEvent(new Event(productOpenUpdates))}><Download size={18} /><span>应用更新</span></button></section>
-
-        <section className="settings-section">
-          <h3>外观与触感</h3>
-          {isKelivoHost ? <button className="action-button" onClick={() => void navigateProduct("settings").catch(() => setStatus("请等待草稿保存后再切换设置。"))}><Settings size={16} />统一外观设置</button> : <div className="segmented">
-            <button className={theme === "system" ? "active" : ""} onClick={() => setTheme("system")}>
-              <Monitor size={15} />
-              <span>系统</span>
-            </button>
-            <button className={theme === "light" ? "active" : ""} onClick={() => setTheme("light")}>
-              <Sun size={15} />
-              <span>浅色</span>
-            </button>
-            <button className={theme === "dark" ? "active" : ""} onClick={() => setTheme("dark")}>
-              <Moon size={15} />
-              <span>深色</span>
-            </button>
-          </div>}
-          {!isKelivoHost && <>
-            {cachedSystemPalette() && <label className="haptics-setting">跟随系统取色
-              <button type="button" className="action-button" role="switch" aria-label="跟随系统取色" aria-checked={display.dynamicColor} onClick={() => changeDisplay({ dynamicColor: !display.dynamicColor })}>{display.dynamicColor ? "已开启" : "已关闭"}</button>
-            </label>}
-            <div className="display-setting"><span>聊天字号</span><div className="segmented four" role="radiogroup" aria-label="聊天字号">{chatFontScales.map(option => <button key={option.value} role="radio" aria-checked={display.chatFontScale === option.value} className={display.chatFontScale === option.value ? "active" : ""} onClick={() => changeDisplay({ chatFontScale: option.value })}><span>{option.label}</span></button>)}</div></div>
-            <label className="haptics-setting">显示工具卡片
-              <button type="button" className="action-button" role="switch" aria-label="显示工具卡片" aria-checked={display.showToolCards} onClick={() => changeDisplay({ showToolCards: !display.showToolCards })}>{display.showToolCards ? "已开启" : "已关闭"}</button>
-            </label>
-            <label className="haptics-setting">显示工具结果摘要
-              <button type="button" className="action-button" role="switch" aria-label="显示工具结果摘要" aria-checked={display.showToolResultSummary} onClick={() => changeDisplay({ showToolResultSummary: !display.showToolResultSummary })}>{display.showToolResultSummary ? "已开启" : "已关闭"}</button>
-            </label>
-          </>}
-          <label className="haptics-setting">发送和审批时轻微震动
-            <button type="button" className="action-button" role="switch" aria-label="发送和审批时轻微震动" aria-checked={haptics}
-              onClick={() => { setHapticsEnabled(!haptics); setHaptics(!haptics); }}>{haptics ? "已开启" : "已关闭"}</button>
-          </label>
-        </section>
-
-        {notify.available && <section className="settings-section">
-          <h3>通知</h3>
-          <p className="update-note">手机上发出的任务完成、失败或需要审批时提醒你。只在有任务运行时保持连接，结束后自动断开。</p>
-          {notify.permission && notify.permission !== "granted" && <button className="action-button" onClick={() => void notify.allow()}><Bell size={16} /><span>{notify.permission === "denied" ? "通知被系统关掉了，去打开" : "允许通知"}</span></button>}
-          <label className="haptics-setting">任务完成时通知
-            <button type="button" className="action-button" role="switch" aria-label="任务完成时通知" aria-checked={notify.settings.finished} onClick={() => notify.change({ finished: !notify.settings.finished })}>{notify.settings.finished ? "已开启" : "已关闭"}</button>
-          </label>
-          {notify.alertHint && <p className="update-note">{notify.alertHint === "off" ? "系统关掉了“任务完成”通知的弹出或震动，任务完成时不会在屏幕上方弹出。" : "任务完成时在屏幕上方弹出并震动。有的手机还要在系统里单独打开“悬浮通知”（或“横幅”）和震动。"}</p>}
-          {notify.alertHint && <button className="action-button" onClick={() => void notify.openAlertSettings()}><Bell size={16} /><span>{notify.alertHint === "off" ? "去打开弹出和震动" : "检查“任务完成”通知设置"}</span></button>}
-          <label className="haptics-setting">需要审批时通知
-            <button type="button" className="action-button" role="switch" aria-label="需要审批时通知" aria-checked={notify.settings.approvals} onClick={() => notify.change({ approvals: !notify.settings.approvals })}>{notify.settings.approvals ? "已开启" : "已关闭"}</button>
-          </label>
-        </section>}
-
-        <section className="settings-section">
-          <h3>运行策略</h3>
-          <div className="segmented">
-            <button className={approvalPolicy === "never" ? "active" : ""} onClick={() => setApprovalPolicy("never")}>
-              <CheckCircle2 size={15} />
-              <span>直接执行</span>
-            </button>
-            <button className={approvalPolicy === "on-request" ? "active" : ""} onClick={() => setApprovalPolicy("on-request")}>
-              <AlertCircle size={15} />
-              <span>需要审批</span>
-            </button>
-            <button className={sandboxMode === "read-only" ? "active" : ""} onClick={() => setSandboxMode("read-only")}>
-              <Eye size={15} />
-              <span>只读</span>
-            </button>
-          </div>
-          <div className="segmented">
-            <button className={sandboxMode === "workspace-write" ? "active" : ""} onClick={() => setSandboxMode("workspace-write")}>
-              <Terminal size={15} />
-              <span>工程写入</span>
-            </button>
-            <button className={sandboxMode === "danger-full-access" ? "active" : ""} onClick={() => setSandboxMode("danger-full-access")}>
-              <KeyRound size={15} />
-              <span>完整权限</span>
-            </button>
-          </div>
-        </section>
-
-        <section className="settings-section">
-          <h3>分屏</h3>
-          <div className="segmented four">
-            <button className={splitMode === "auto" ? "active" : ""} onClick={() => setSplitMode("auto")}>
-              <Monitor size={15} />
-              <span>自动</span>
-            </button>
-            <button className={splitMode === "left" ? "active" : ""} onClick={() => setSplitMode("left")}>
-              <Columns3 size={15} />
-              <span>左侧</span>
-            </button>
-            <button className={splitMode === "top" ? "active" : ""} onClick={() => setSplitMode("top")}>
-              <Rows3 size={15} />
-              <span>顶部</span>
-            </button>
-            <button className={splitMode === "drawer" ? "active" : ""} onClick={() => setSplitMode("drawer")}>
-              <Menu size={15} />
-              <span>抽屉</span>
-            </button>
-          </div>
-        </section>
-
-        {(diagnostics.length > 0 || diagnosticText) && (
-          <section className={`diagnostics ${connectionState}`}>
-            <div className="diagnostics-heading">
-              <span>
-                {connectionState === "ok" ? <CheckCircle2 size={16} /> : connectionState === "error" ? <AlertCircle size={16} /> : <Activity size={16} />}
-                {connectionState === "ok" ? "连接可用" : connectionState === "testing" ? "正在检测" : "连接诊断"}
-              </span>
-              <button className="text-button" onClick={() => copyText(diagnosticText, "diagnostics")}>
-                <Clipboard size={15} />
-                <span>{copied === "diagnostics" ? "已复制" : "复制"}</span>
-              </button>
-            </div>
-            <div className="diagnostic-list">
-              {diagnostics.map((step) => (
-                <div key={step.name} className={`diagnostic-step ${step.ok ? "ok" : "fail"}`}>
-                  <strong>{step.name}</strong>
-                  <span>{step.detail}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-      </aside>
     </main>
   );
 
@@ -2275,13 +1845,11 @@ function Workspace({ intakeShare, onShareDone, onCaptureIntake, intakeShortcut, 
     }
   }
 
-  async function copyText(text: string, key: string) {
+  async function copyText(text: string) {
     if (!text) return;
     try {
       await writeClipboard(text);
-      setCopied(key);
       setStatus("已复制");
-      window.setTimeout(() => setCopied(""), 1600);
     } catch (error) {
       setStatus(`复制失败：${toFriendlyFetchError(error)}`);
     }

@@ -40,9 +40,10 @@ test('approval decisions: confirm for allow, warn for decline/cancel, in Codex c
   assert.doesNotMatch(card.slice(0, card.indexOf('\n}\n')), /onClick={\(\) => onRespond\(/);
   assert.match(agents, /if \(locked \|\| submitted\.current\) return; submitted\.current = true; setSent\(true\); haptic\(decision === "reject" \? "warn" : "confirm"\);/);
 });
-test('settings has a switch to turn haptics off', () => {
-  assert.match(app, /role="switch" aria-label="发送和审批时轻微震动" aria-checked={haptics}/);
-  assert.match(app, /useState\(hapticsEnabled\)/);
+test('settings has a switch to turn haptics off', async () => {
+  const settings = await fs.readFile('apps/mobile/src/app/GlobalSettings.tsx', 'utf8');
+  assert.match(settings, /role="switch" aria-label="发送和审批时轻微震动" aria-checked={haptics}/);
+  assert.match(settings, /useState\(hapticsEnabled\)/);
 });
 test('motion: messages and cards rise in, sheets slide both ways, reduced motion shortens everything', () => {
   const tail = css.slice(css.indexOf('/* U7: motion'));

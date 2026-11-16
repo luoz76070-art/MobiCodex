@@ -1,3 +1,4 @@
+import { WorkspaceHeader } from "../../shared/WorkspaceHeader";
 import type { HandoffTarget } from "../../../../../shared/handoff";
 import { SystemNotice } from "../../shared/SystemNotice";
 import { useDeviceRevoked } from "../connection/useDeviceRevoked";
@@ -10,11 +11,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { registerVoiceAgentDrafts } from "../voice/draftRecovery";
 import type { VoiceRecoveryPort } from "../voice/useVoiceRecovery";
 import { VoiceInput } from "../voice/VoiceInput";
-import { ListTodo, ChevronLeft, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { AgentPickRow } from "./AgentPickRow";
 import { checkingSummary, offlineSummary, summarizeSessions, type AgentSummary } from "./agentSummary";
 import { loadWorkspaceCache } from "../threads/cache";
-import { AgentIcon } from "./AgentIcon";
 import { PullToRefresh } from "../../shared/PullToRefresh";
 import { EmptyState } from "../../shared/EmptyState";
 import { ListSkeleton, MessageSkeleton } from "../../shared/Skeleton";
@@ -55,7 +55,7 @@ const friendlyError = (error: unknown) => {
     : status === 409 ? "会话状态已变化，请等待重新同步后再操作。" : "无法连接 Agent，请确认电脑上的网关与 Agent 服务正在运行。";
 };
 
-export default function AgentWorkspace({ handoffTarget, onTargetOpened, onCapture, endpoint, token, scope, onBack, voiceRecovery }: { handoffTarget: HandoffTarget | null; onTargetOpened: () => void; onCapture: () => void; endpoint: string; token: string; scope: string; onBack: () => void; voiceRecovery: VoiceRecoveryPort }) {
+export default function AgentWorkspace({ onOpenSettings, handoffTarget, onTargetOpened, onCapture, endpoint, token, scope, onBack, voiceRecovery }: { onOpenSettings: () => void; handoffTarget: HandoffTarget | null; onTargetOpened: () => void; onCapture: () => void; endpoint: string; token: string; scope: string; onBack: () => void; voiceRecovery: VoiceRecoveryPort }) {
   const deviceRevoked = useDeviceRevoked(endpoint, token);
   const restoreView = useRef(loadAgentView(scope));
   const [agents, setAgents] = useState<Agent[]>([]), [agent, setAgent] = useState<Agent | null>(null);
@@ -171,16 +171,10 @@ export default function AgentWorkspace({ handoffTarget, onTargetOpened, onCaptur
   const codexSummary: AgentSummary = reachable === null ? checkingSummary : !reachable ? offlineSummary : summarizeSessions(codexThreads, codexThreads.length >= 120);
   const title = selected?.title || agent?.label || "选择 Agent";
   const subtitle = selected ? `${agent?.label} · 原服务会话` : "同一连接，分别管理会话";
-  const titleText = <span className="workspace-switch-text"><span className="workspace-name"><strong>{title}</strong></span>
-    {selected?.directory ? <span className="project-chip">{projectGroupLabel(selected.directory)}</span> : <small>{subtitle}</small>}</span>;
   return <main className="agent-workspace">
-    <header className="topbar glass-surface">
-      <button className="icon-button" aria-label={selected ? "返回 Agent 会话列表" : agent ? "返回 Agent 列表" : "返回 Codex"} onClick={back}><ChevronLeft size={21} /></button>
-      <div className="workspace-title">{agent
-        ? <button type="button" className="workspace-switch" onClick={switchAgent} title="切换 Agent" aria-label={`${title}，点按切换 Agent`}><span className="agent-glyph"><AgentIcon id={agent.id} size={18} /></span>{titleText}</button>
-        : <div className="workspace-switch static"><span className="agent-glyph"><AgentIcon id="" size={18} /></span>{titleText}</div>}</div>
-      <button className="icon-button" aria-label="事项" title="事项" onClick={onCapture}><ListTodo size={18} /></button>
-    </header>
+    <WorkspaceHeader agentId={agent?.id ?? ""} title={title} subtitle={subtitle} project={selected?.directory ? projectGroupLabel(selected.directory) : undefined}
+      leading="back" leadingLabel={selected ? "返回 Agent 会话列表" : agent ? "返回 Agent 列表" : "返回 Codex"}
+      onLeading={back} onSwitchAgent={agent ? switchAgent : undefined} onOpenItems={onCapture} onOpenSettings={onOpenSettings} />
     {(deviceRevoked || error) && <SystemNotice error>{deviceRevoked ? deviceRevokedMessage : error}</SystemNotice>}
     {selected && agent ? <AgentChat voiceRecovery={voiceRecovery} key={`${agent.id}:${selected.id}`} endpoint={endpoint} token={token} agent={agent} session={selected}
       scopeKey={scope} draft={drafts[`${agent.id}:${selected.id}`] ?? ""} onDraft={value => setDrafts(current => {

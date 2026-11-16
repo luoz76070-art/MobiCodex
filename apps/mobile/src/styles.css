@@ -131,7 +131,7 @@ button {
   height: 100dvh;
   padding: max(var(--space-12), env(safe-area-inset-top)) var(--space-12) max(var(--space-12), env(safe-area-inset-bottom));
   display: grid;
-  grid-template-rows: 58px minmax(0, 1fr);
+  grid-template-rows: minmax(64px, auto) minmax(0, 1fr);
   gap: var(--space-12);
   overflow: hidden;
 }
@@ -2249,9 +2249,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .user-input-card p { margin: var(--space-12) 0 0; color: var(--muted); font-size: var(--font-size-12); text-align: center; }
 
 .agent-workspace { height: 100dvh; display: flex; flex-direction: column; background: var(--bg-0); color: var(--text); padding-top: env(safe-area-inset-top); overflow: hidden; }
-.agent-workspace .topbar { flex-shrink: 0; padding-inline: var(--space-12); }
-.agent-workspace .workspace-title { min-width: 0; flex: 1; }
-.agent-workspace .workspace-title > div { min-width: 0; }
 .agent-workspace h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-session-list { flex: 1; overflow-y: auto; min-height: 0; padding: var(--space-16) max(var(--space-16), calc((100% - 760px) / 2)); }
 .agent-session-row { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-8); width: 100%; min-height: 72px; margin: var(--space-8) 0; padding: var(--space-16); border: 0; border-radius: var(--radius-16); background: var(--panel-solid); color: var(--text); text-align: left; overflow-wrap: anywhere; }
@@ -2479,6 +2476,10 @@ input, textarea { caret-color: var(--signal); }
 /* U4: one-line title that switches Agent, status dot after the name, project chip instead of a path. */
 .workspace-switch { min-width: 0; flex: 1; display: flex; align-items: center; gap: var(--space-8); padding: var(--space-4) var(--space-8) var(--space-4) var(--space-4); border: 0; border-radius: var(--radius-12); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .workspace-switch.static { cursor: default; }
+.workspace-header { grid-template-columns: 44px minmax(0, 1fr) 44px 44px; flex-shrink: 0; gap: var(--space-4); padding-inline: var(--space-12); }
+.workspace-header > .icon-button { width: 44px; height: 44px; flex-shrink: 0; }
+.workspace-header .workspace-switch { width: 100%; }
+.workspace-switch-arrow { flex-shrink: 0; color: var(--muted); }
 button.workspace-switch:active, button.workspace-switch:focus-visible { background: var(--panel-soft); }
 .agent-glyph { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--radius-pill); background: var(--avatar-surface); color: var(--text); }
 .workspace-switch-text { min-width: 0; flex: 1; display: grid; gap: var(--space-4); }
