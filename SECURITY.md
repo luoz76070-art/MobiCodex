@@ -1,20 +1,17 @@
-# Security Policy
+# 安全策略
 
-## Supported scope
+MobiCodex 会连到你电脑上的 Agent 会话，安全问题请私下报告，不要提公开 issue。
 
-Security fixes target the current source version on the default branch. Prebuilt APK and desktop application bundles are not committed to this repository.
+## 怎么报告
 
-## Deployment rules
+在仓库的 **Security → Report a vulnerability** 提交（GitHub 私密漏洞报告），只有维护者能看到。请写清：
 
-- Use a unique Relay API token and a different Broker relay secret.
-- Configure allowed relays with `MOBILE_CODEX_BROKER_RELAYS`.
-- Use HTTPS/WSS for every public deployment.
-- Keep `config.json`, `.env.local`, SSH keys, logs, uploads and build artifacts out of Git.
-- Run the Broker with a non-root service account and place it behind a maintained reverse proxy.
-- Restrict access to the Mac account because the input helper can control the visible Codex Desktop window.
+- 受影响的部分（手机 App、电脑网关、Broker 或某个 Agent 接入）和版本；
+- 复现步骤和影响；
+- 如果有，附上修复建议。
 
-`MOBILE_CODEX_BROKER_ALLOW_DYNAMIC_RELAYS=true` is intended only for local development. It allows an unconfigured relay ID to connect and must not be enabled on a public Broker.
+收到后会尽快确认，修复发布前不会公开细节。
 
-## Reporting
+## 支持的版本
 
-Do not open a public issue containing credentials, private endpoints, Codex session data or local file paths. Report the minimum reproducible detail to the repository owner through a private GitHub security advisory.
+只修最新发布的版本（见 [CHANGELOG](CHANGELOG.md)）。已停止的 Kelivo 整合版（0.1.x）不再修复。
