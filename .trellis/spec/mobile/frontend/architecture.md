@@ -86,3 +86,7 @@ U11：线程行由ThreadRow展示标题/时间，项目路径只留分组标题�
 U1：MessageTimeline 只在展示层标记同 turnId 的非工具助手消息，工具过程卡片不打断该组，用户消息或换 turnId 时重新分组；缺 turnId 的消息仅按相邻助手正文分组。组首显示 Agent 图标/名字，正文和 data-message-id/role 仍逐条保留。用户正文用 --accent-soft（宿主 primaryContainer），助手无气泡。消息可聚焦；点击/聚焦才挂载时间与复制，焦点移入复制按钮不关闭。长按触摸/笔 550ms 复制，移动超过10px、取消、移出、放开、失焦或卸载取消计时；链接/按钮等交互子元素与已有选区不触发整条复制；从 pre、code、.code-block、table 及其子元素开始的长按不启动整条复制计时，这些区域的 contextmenu 不 preventDefault，保留原生文本选择。剪贴板结果必须 await，失败不能报成功，卸载后的结果不更新提示。系统提示使用图标细横幅；工具卡与代码块继续单独分隔。
 
 U2：SessionStatus 的 composer 变体与 ComposerSessionStatus 统一接收 S2 推断结果，不从 running 自行猜测思考/执行。消息流和顶栏不再重复本轮执行/终态标签，工具过程摘要保留。状态栏保留有效 lastTurn 的原因、结束时间及 observed 标记；新轮运行时显示上轮结果，同 turn 的终态只展示一次。思考/执行点用 --signal 呼吸，prefers-reduced-motion 时禁用；失败用 --danger。停止和发送沿原能力门控，键盘快捷键、默认排队与草稿保护不变。
+
+
+#19 外部入口：通知、分享、快捷方式和交接目标统一经 App 的 `openSessionTarget`。导航 `SessionTarget` 独立于后端支持的 `HandoffTarget`，不能通过强转扩展交接 Agent 范围。非 Codex 目的地核对当前连接的 sessionApi/旧传输注册表，未知或 failed 提示且不回落 Codex；unprobed 不等同于不可用。Agent 再次加载时已消失也保留当前页并明确报错。
+入口按连接 scope 在内存排队，离开前保留上传/草稿保存保护；异步解析中止、页面或 scope 改变不得移动新页面。分享处理完成或用户明确取消才清理对应 native cache，不自动发送。新任务/语音快捷方式固定 Codex，线程快捷方式解析 attention key；每次原生事件分配独立序号，工作区成功消费才 ACK，并防 effect 重放。宿主重复交接只更新已有卡片，不重复导航或发送；旧交接迁移回执原位更新，不作为新入口。通知监听保持一次注册并通过 ref 使用最新连接回调，忽略卸载后的事件。

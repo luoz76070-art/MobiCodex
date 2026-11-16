@@ -138,18 +138,35 @@ test('connection changes restore each scope before rendering, never persist the 
     assert.deepEqual(find(f.render(), 'AgentWorkspace').props.navigation, m.agentSession('claude', 'original'));
   } finally { f.stop(); }
 });
-test('notifications, intake, shortcuts and handoff use the compatibility adapter with their previous destinations', () => {
-  const f = appNavigationFixture(m.agentSession('claude', 'previous'));
-  try {
-    f.notify({ agentId: 'ccdesk', sessionId: 'notified', title: '合成提醒' });
-    assert.deepEqual(find(f.render(), 'AgentWorkspace').props.navigation, m.agentSession('ccdesk', 'notified'));
-    find(f.render(), 'Capture').props.onOpenTarget({ agentId: 'deepseek', sessionId: 'handed-off', title: '', cwd: '' });
-    assert.deepEqual(find(f.render(), 'AgentWorkspace').props.navigation, m.agentSession('deepseek', 'handed-off'));
-    f.intake.onShare({ id: 'share', images: [] }); assert.equal(find(f.render(), 'Workspace').props.intakeShare.id, 'share');
-    f.intake.onShortcut({ target: 'voice' }); assert.equal(find(f.render(), 'Workspace').props.intakeShortcut.target, 'voice');
-    f.intake.onShortcut({ target: 'thread', key: 'codex:test' });
-    assert.deepEqual(find(f.render(), 'Workspace').props.navigation, m.agentSession('codex', 'test'));
-  } finally { f.stop(); }
+test('all external destinations use the unified entry path, including CC Desk thread shortcuts', async t => {
+  const f = appNavigationFixture(m.agentSession('claude', 'previous')); t.after(() => f.stop());
+  f.notify({ agentId: 'ccdesk', sessionId: 'notified', title: '合成提醒' }); await f.settle();
+  assert.deepEqual(find(f.render(), 'AgentWorkspace').props.navigation, m.agentSession('ccdesk', 'notified'));
+  find(f.render(), 'Capture').props.onOpenTarget({ agentId: 'deepseek', sessionId: 'handed-off', title: '', cwd: '' }); await f.settle();
+  assert.deepEqual(find(f.render(), 'AgentWorkspace').props.navigation, m.agentSession('deepseek', 'handed-off'));
+  f.intake.onShortcut({ target: 'thread', key: 'agent:ccdesk:thread' }); await f.settle();
+  assert.deepEqual(find(f.render(), 'AgentWorkspace').props.navigation, m.agentSession('ccdesk', 'thread'));
+  f.intake.onShortcut({ target: 'thread', key: 'desktop:test' }); await f.settle();
+  assert.deepEqual(find(f.render(), 'Workspace').props.navigation, m.agentSession('codex', 'test'));
+});
+test('a delayed external target cannot move a different connection or a manually changed page', async t => {
+  let finish;
+  const f = appNavigationFixture(m.agentSession('claude', 'original'), [], { readAgents: () => new Promise(resolve => { finish = resolve; }) });
+  t.after(() => f.stop());
+  f.notify({ agentId: 'ccdesk', sessionId: 'late', title: '' }); f.render();
+  find(f.render(), 'AgentWorkspace').props.onOpenAgents(); f.render();
+  finish({ agents: [{ id: 'ccdesk', sessionApi: 1 }] }); await f.settle();
+  assert.ok(find(f.render(), 'Picker')); assert.match(find(f.render(), 'Notice').props.children[0], /页面已变化/);
+  f.retry();
+  find(f.render(), 'Settings').props.onApply({ id: 'second', cacheNamespace: 'fixed', endpoint: '', token: '', name: '合成连接' }); f.render();
+  finish({ agents: [{ id: 'ccdesk', sessionApi: 1 }] }); await f.settle();
+  assert.ok(find(f.render(), 'Picker')); assert.equal(find(f.render(), 'Notice'), undefined);
+});
+test('there is no compatibility adapter or navigation cast that widens server handoff support', async () => {
+  const app = await fs.readFile('apps/mobile/src/app/App.tsx', 'utf8');
+  const navigation = await fs.readFile('apps/mobile/src/app/navigation.ts', 'utf8');
+  assert.doesNotMatch(navigation + app, /externalNavigation|openExternal|as HandoffTarget/);
+  assert.match(app, /const openSessionTarget = useCallback/);
 });
 test('Codex list refresh cannot auto-select a thread, and both workspaces retain production leave guards', async () => {
   const app = await fs.readFile('apps/mobile/src/app/App.tsx', 'utf8');
@@ -160,4 +177,18 @@ test('Codex list refresh cannot auto-select a thread, and both workspaces retain
   assert.match(agents, /if \(!flush\(\)\) { event.preventDefault\(\)/);
   assert.match(agents, /if \(uploadScope.current\) { event.preventDefault\(\)/);
   assert.match(app, /useBackLayer\(sidebarOpen && navigation.level === "session"/);
+});
+
+test('pending shares stay in their connection scope and are not handed to a different Relay workspace', async t => {
+  const f = appNavigationFixture(m.agentSession('claude', 'original')); t.after(() => f.stop());
+  const protect = event => event.preventDefault(); f.events.addEventListener('product-before-navigate', protect);
+  f.intake.onShare({ id: 'scoped-share', images: [], text: '合成说明' }); await f.settle();
+  f.events.removeEventListener('product-before-navigate', protect);
+  const settings = find(f.render(), 'Settings');
+  settings.props.onApply({ id: 'second', cacheNamespace: 'fixed', endpoint: '', token: '', name: '另一合成连接' }); await f.settle();
+  assert.ok(find(f.render(), 'Picker')); assert.equal(find(f.render(), 'Notice'), undefined); assert.deepEqual(f.cleared, []);
+  find(f.render(), 'Picker').props.onSelect('codex'); await f.settle();
+  assert.equal(find(f.render(), 'Workspace').props.intakeShare, null);
+  settings.props.onApply({ id: 'test', cacheNamespace: 'fixed', endpoint: '', token: '', name: '合成连接' }); await f.settle();
+  assert.equal(find(f.render(), 'Workspace').props.intakeShare.id, 'scoped-share'); assert.deepEqual(f.cleared, []);
 });

@@ -1,3 +1,4 @@
+import { appNavigationFixture, navigationModel, findElement as find } from './helpers/mobile-navigation-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
@@ -259,4 +260,38 @@ test('actual shared send never writes to a stale selected closure or legacy fall
     assert.equal(await f.send('12345678-1234-4234-8234-123456789abc', '任务', '', [], seed().id, 'start', undefined, true), 'rejected');
     assert.equal(f.requests.length, 0);
   }
+});
+
+for (const cold of [true, false]) {
+  test(`${cold ? 'cold' : 'warm'} host handoff opens the Codex confirmation card without submitting; duplicates do not navigate again`, async t => {
+    const f = appNavigationFixture(cold ? navigationModel.agentPicker() : navigationModel.agentSession('ccdesk', 'original')); t.after(() => f.stop());
+    const card = seed(), receive = find(f.render(), 'Shell').props.onHandoff;
+    receive(card); receive({ ...card }); await f.settle();
+    let workspace = find(f.render(), 'Workspace'); assert.equal(workspace.props.handoff.id, card.id);
+    assert.equal(workspace.props.navigation.agentId, 'codex'); assert.equal(workspace.props.intakeShortcut, null);
+    workspace.props.onOpenAgents(); f.render();
+    receive({ ...card }); await f.settle(); assert.ok(find(f.render(), 'Picker'), 'a host refresh must not reopen an already received card');
+    assert.deepEqual(f.requests, [], 'host handoff does not probe Agents or send work');
+  });
+}
+test('blocked handoff remains pending, updates to the latest host state and opens only after retry', async t => {
+  const f = appNavigationFixture(navigationModel.agentSession('deepseek', 'original')); t.after(() => f.stop());
+  const protect = event => event.preventDefault(); f.events.addEventListener('product-before-navigate', protect);
+  const card = seed(), receive = find(f.render(), 'Shell').props.onHandoff;
+  receive(card); await f.settle();
+  assert.equal(find(f.render(), 'AgentWorkspace').props.navigation.sessionId, 'original');
+  assert.match(find(f.render(), 'Notice').props.children[0], /入口已保留/);
+  receive({ ...card, text: '宿主里的更新说明' });
+  f.events.removeEventListener('product-before-navigate', protect); f.retry(); await f.settle();
+  assert.equal(find(f.render(), 'Workspace').props.handoff.text, '宿主里的更新说明'); assert.deepEqual(f.requests, []);
+});
+test('opening a business handoff target uses its own Agent and session; CC Desk remains outside that business contract', async t => {
+  const f = appNavigationFixture(); t.after(() => f.stop());
+  find(f.render(), 'Capture').props.onOpenTarget({ agentId: 'claude', sessionId: 'handed-off', title: '交接目的地', cwd: '~/code/weather-app' });
+  await f.settle();
+  const workspace = find(f.render(), 'AgentWorkspace');
+  assert.deepEqual(workspace.props.navigation, navigationModel.agentSession('claude', 'handed-off'));
+  assert.equal(workspace.props.handoffTarget.cwd, '~/code/weather-app');
+  const contract = await readFile(path.join(root, 'shared/handoff.d.ts'), 'utf8');
+  assert.doesNotMatch(contract, /ccdesk/);
 });

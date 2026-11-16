@@ -1,7 +1,7 @@
-import { agentPicker, agentSession, type Navigation } from "../../app/navigation";
+import { agentSession, type Navigation } from "../../app/navigation";
 import { availableAgents, type Agent } from "./catalog";
 import { WorkspaceHeader } from "../../shared/WorkspaceHeader";
-import type { HandoffTarget } from "../../../../../shared/handoff";
+import type { SessionTarget } from "../../app/sessionTargets";
 import { SystemNotice } from "../../shared/SystemNotice";
 import { useDeviceRevoked } from "../connection/useDeviceRevoked";
 import { deviceRevokedMessage } from "../connection/authorization";
@@ -53,7 +53,7 @@ const friendlyError = (error: unknown) => {
     : status === 409 ? "会话状态已变化，请等待重新同步后再操作。" : "无法连接 Agent，请确认电脑上的网关与 Agent 服务正在运行。";
 };
 
-export default function AgentWorkspace({ navigation, onNavigate, onOpenAgents, onOpenSettings, handoffTarget, onTargetOpened, onCapture, endpoint, token, scope, onBack, voiceRecovery }: { navigation: Navigation; onNavigate: (next: Navigation) => boolean; onOpenAgents: () => void; onOpenSettings: () => void; handoffTarget: HandoffTarget | null; onTargetOpened: () => void; onCapture: () => void; endpoint: string; token: string; scope: string; onBack: () => void; voiceRecovery: VoiceRecoveryPort }) {
+export default function AgentWorkspace({ navigation, onNavigate, onOpenAgents, onOpenSettings, handoffTarget, onTargetOpened, onCapture, endpoint, token, scope, onBack, voiceRecovery }: { navigation: Navigation; onNavigate: (next: Navigation) => boolean; onOpenAgents: () => void; onOpenSettings: () => void; handoffTarget: SessionTarget | null; onTargetOpened: () => void; onCapture: () => void; endpoint: string; token: string; scope: string; onBack: () => void; voiceRecovery: VoiceRecoveryPort }) {
   const deviceRevoked = useDeviceRevoked(endpoint, token);
   const [agents, setAgents] = useState<Agent[]>([]);
   const agent = agents.find(item => item.id === navigation.agentId) ?? null;
@@ -92,7 +92,7 @@ export default function AgentWorkspace({ navigation, onNavigate, onOpenAgents, o
       if (!Array.isArray(data.agents)) throw new Error("invalid agents");
       const available = availableAgents(data.agents);
       setAgents(available);
-      if (!available.some(item => item.id === navigation.agentId)) onNavigate(agentPicker());
+      if (!available.some(item => item.id === navigation.agentId)) setError("此 Agent 未知或当前连接未提供，请返回选择 Agent。");
     } catch (caught) { if (!request.signal.aborted) setError(friendlyError(caught)); }
     finally { if (!request.signal.aborted) setLoading(false); }
   }

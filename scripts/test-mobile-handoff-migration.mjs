@@ -1,3 +1,4 @@
+import { appNavigationFixture, navigationModel, findElement as find } from './helpers/mobile-navigation-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -173,4 +174,19 @@ test('failed Web cleanup resumes after native ACK and removes only the unchanged
   f.storage.removeItem = remove;
   assert.equal((await migrateHandoff(f.options)).count, 1);
   assert.equal(f.storage.getItem(draftKey), null); assert.equal(f.storage.getItem(migrationKey), null); assert.equal(f.records.size, 1);
+});
+
+test('handoff migration clears the confirmation card in place; repeated host state does not replay navigation', async t => {
+  const legacy = fixture(), app = appNavigationFixture(navigationModel.agentSession('ccdesk', 'original')); t.after(() => app.stop());
+  const receive = find(app.render(), 'Shell').props.onHandoff;
+  receive(legacy.handoff); await app.settle();
+  const workspace = find(app.render(), 'Workspace'); assert.equal(workspace.props.handoff.id, legacy.handoff.id);
+  const result = await migrateHandoff(legacy.options);
+  workspace.props.onHandoff(result.handoff); await app.settle();
+  assert.equal(find(app.render(), 'Workspace').props.handoff, null);
+  find(app.render(), 'Workspace').props.onOpenAgents(); app.render();
+  receive({ ...legacy.handoff }); await app.settle();
+  assert.ok(find(app.render(), 'Picker')); assert.equal(find(app.render(), 'Workspace'), undefined);
+  assert.deepEqual(legacy.calls.map(call => call.method), ['GET', 'POST', 'GET', 'ackMigration']);
+  assert.equal(legacy.calls.some(call => ['submit', 'confirm'].includes(call.method)), false);
 });

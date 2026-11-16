@@ -6,7 +6,7 @@ import { ProductUpdatesPage } from "./ProductUpdatesPage";
 import { startStandaloneAppearance } from "./standalone";
 import type { ProductHandoff } from './handoff';
 
-export function ProductRemoteShell({ children, onComputerSettings, onHandoff }: { children: ReactNode; onComputerSettings: () => void; onHandoff: (value: ProductHandoff | null) => void }) {
+export function ProductRemoteShell({ children, onComputerSettings, onHandoff, notice }: { children: ReactNode; notice?: ReactNode; onComputerSettings: () => void; onHandoff: (value: ProductHandoff | null) => void }) {
   const [ready, setReady] = useState(!isKelivoHost), [error, setError] = useState("");
   const [updates, setUpdates] = useState(false);
   useEffect(() => isKelivoHost ? undefined : startStandaloneAppearance(), []);
@@ -48,6 +48,7 @@ export function ProductRemoteShell({ children, onComputerSettings, onHandoff }: 
   // The standalone app keeps the same page frame, without Kelivo's AI and settings tabs.
   if (!isKelivoHost) return <div className="product-remote-shell product-standalone">
     <div className="product-remote-content">{updates ? <ProductUpdatesPage onBack={leaveUpdates} /> : children}</div>
+    {notice}
   </div>;
   async function navigate(tab: "ai" | "settings") {
     try { setError(""); await navigateProduct(tab); }
@@ -55,6 +56,7 @@ export function ProductRemoteShell({ children, onComputerSettings, onHandoff }: 
   }
   return <div className="product-remote-shell">
     <div className="product-remote-content">{ready ? updates ? <ProductUpdatesPage onBack={() => void navigate("settings")} /> : children : <p className="inline-loading">正在打开…</p>}</div>
+    {notice}
     {error && <p className="product-navigation-error" role="alert">{error}</p>}
     <nav className="product-navigation" aria-label="主导航">
       <button onClick={() => void navigate("ai")}><span><MessageCircle size={24} /></span><label>AI</label></button>

@@ -1,5 +1,7 @@
+import { SessionTargetError, sessionTargetNavigation, type SessionTarget, type OpenSessionTarget } from "./sessionTargets";
+import type { Agent } from "../features/agents/catalog";
 import { AgentPicker } from "../features/agents/AgentPicker";
-import { agentList, agentPicker, agentSession, externalNavigation, handleNavigationBack, loadNavigation, saveNavigation, requestNavigationBack, type Navigation } from "./navigation";
+import { agentList, agentPicker, agentSession, handleNavigationBack, loadNavigation, saveNavigation, requestNavigationBack, type Navigation } from "./navigation";
 import { BackLayer, BackLayersContext, createBackLayers, useBackLayer } from "../shared/BackLayers";
 import { WorkspaceHeader } from "../shared/WorkspaceHeader";
 import { GlobalSettings, type CodexPreferences, type CodexSettingsTools } from "./GlobalSettings";
@@ -71,6 +73,15 @@ import { releasedStreamState, subscribeEvents, type SubscriptionState } from "..
 const appVersionCode = isKelivoHost ? productVersionCode : standaloneVersionCode;
 const AgentWorkspace = React.lazy(() => import("../features/agents/AgentWorkspace"));
 
+type SessionEntryRequest = { target: OpenSessionTarget } & (
+  | { kind: "notification" | "target" }
+  | { kind: "share"; payload: SharePayload }
+  | { kind: "shortcut"; payload: ShortcutPayload }
+  | { kind: "handoff"; payload: ProductHandoff }
+);
+type SessionEntry = SessionEntryRequest & { id: number; scope: string; ready?: boolean };
+type IntakeShortcut = { id: number; payload: ShortcutPayload };
+
 type CaptureInitialDraft = NonNullable<React.ComponentProps<typeof CapturePanel>["initialDraft"]>;
 
 export function App() {
@@ -85,17 +96,24 @@ export function App() {
   const [sandboxMode, setSandboxMode] = useState<SandboxMode>(defaultSandboxMode);
   const preferences = { splitMode, setSplitMode, approvalPolicy, setApprovalPolicy, sandboxMode, setSandboxMode };
   const [codexSettings, setCodexSettings] = useState<CodexSettingsTools | null>(null);
-  const [handoffTarget, setHandoffTarget] = useState<HandoffTarget | null>(null);
-  const targetOpened = useCallback(() => setHandoffTarget(null), []);
+  const [openedTarget, setOpenedTarget] = useState<{ scope: string; target: SessionTarget } | null>(null);
+  const handoffTarget = openedTarget?.scope === scope ? openedTarget.target : null;
+  const targetOpened = useCallback(() => setOpenedTarget(null), []);
   const [captureOpen, setCaptureOpen] = useState(false);
-  const [intakeShares, setIntakeShares] = useState<SharePayload[]>([]);
-  const [intakeShortcut, setIntakeShortcut] = useState<ShortcutPayload | null>(null);
+  const [entries, setEntries] = useState<SessionEntry[]>([]);
+  const entrySequence = useRef(0);
+  const seenShares = useRef(new Set<string>());
+  const receivedHandoffs = useRef(new Map<string, ProductHandoff>());
+  const [entryNotice, setEntryNotice] = useState<{ scope: string; id: number; text: string } | null>(null);
+  const [entryRetry, setEntryRetry] = useState(0);
   const [initialDraft, setInitialDraft] = useState<CaptureInitialDraft | undefined>();
   const finishIntakeShare = useCallback((id: string) => {
-    setIntakeShares(current => current.filter(payload => payload.id !== id));
+    setEntries(current => current.filter(entry => entry.kind !== "share" || entry.payload.id !== id));
     if (intakeAvailable()) void Intake.clear({ id }).catch(() => undefined);
   }, []);
-  const shortcutOpened = useCallback(() => setIntakeShortcut(null), []);
+  const shortcutOpened = useCallback((id: number) => {
+    setEntries(current => current.filter(entry => entry.id !== id));
+  }, []);
   const captureIntake = useCallback((draft: CaptureInitialDraft) => {
     setOpenItemUid(null); setInitialDraft(draft); setCaptureOpen(true);
   }, []);
@@ -121,12 +139,64 @@ export function App() {
     return true;
   }, [scope]);
   useEffect(() => saveNavigation(scope, navigation), [scope, navigation]);
-  const openExternal = useCallback((target?: { agentId: string; sessionId: string }) =>
-    navigate(externalNavigation(scope, navigationRef.current.value, target)), [scope, navigate]);
   const [handoff, setHandoff] = useState<ProductHandoff | null>(null);
+  const enqueue = useCallback((value: SessionEntryRequest) => {
+    const entry = { ...value, id: ++entrySequence.current, scope };
+    setEntries(current => [...current, entry]);
+  }, [scope]);
+  const pendingEntry = entries.find(entry => entry.scope === scope);
+  const intakeShare = pendingEntry?.ready && pendingEntry.kind === "share" ? pendingEntry.payload : null;
+  const intakeShortcut = useMemo(() => pendingEntry?.ready && pendingEntry.kind === "shortcut"
+    ? { id: pendingEntry.id, payload: pendingEntry.payload } : null, [pendingEntry]);
+  const openSessionTarget = useCallback(async (entry: SessionEntry, signal: AbortSignal) => {
+    const startedAt = navigationRef.current;
+    try {
+      const next = await sessionTargetNavigation(entry.target, startedAt.value, scope, async () => {
+        const data = await requestGet<{ agents: Agent[] }>(buildUrl(normalizeEndpoint(connection.endpoint), "/api/agents"), connection.token, signal);
+        if (!Array.isArray(data.agents)) throw new Error("无法读取当前连接的 Agent 列表，请稍后重试。");
+        return data.agents;
+      });
+      if (signal.aborted || navigationRef.current.scope !== entry.scope) return;
+      if (navigationRef.current !== startedAt) throw new SessionTargetError("当前页面已变化，入口已保留，请重试打开。");
+      // Flush even for the same destination: a new-task shortcut may reset its draft.
+      if (!window.dispatchEvent(new Event(productBeforeNavigate, { cancelable: true }))) {
+        throw new SessionTargetError("当前上传未结束或草稿未能保存，入口已保留，请稍后重试打开。");
+      }
+      if (!navigate(next, true)) return;
+      setSettingsOpen(false); setCaptureOpen(false); setItemsOpen(false); setEntryNotice(null);
+      setOpenedTarget(entry.target.sessionId !== null && entry.target.sessionId !== newThreadId ? { scope, target: entry.target } : null);
+      if (entry.kind === "handoff") setHandoff(receivedHandoffs.current.get(scope) ?? entry.payload);
+      setEntries(current => entry.kind === "share" || entry.kind === "shortcut"
+        ? current.map(value => value.id === entry.id ? { ...value, ready: true } : value)
+        : current.filter(value => value.id !== entry.id));
+    } catch (caught) {
+      if (!signal.aborted && navigationRef.current.scope === entry.scope) {
+        const text = caught instanceof SessionTargetError ? caught.message : "无法核对目标 Agent，请检查连接后重试。";
+        setEntryNotice({ scope: entry.scope, id: entry.id, text });
+      }
+    }
+  }, [scope, connection.endpoint, connection.token, navigate]);
+  useEffect(() => {
+    if (!pendingEntry || pendingEntry.ready) return;
+    const controller = new AbortController();
+    void openSessionTarget(pendingEntry, controller.signal);
+    return () => controller.abort();
+  }, [pendingEntry, openSessionTarget, entryRetry]);
   const receiveHandoff = useCallback((value: ProductHandoff | null) => {
-    if (!value || openExternal()) setHandoff(value);
-  }, [openExternal]);
+    const previous = receivedHandoffs.current.get(scope);
+    if (!value) {
+      receivedHandoffs.current.delete(scope); setHandoff(null);
+      setEntries(current => current.filter(entry => entry.scope !== scope || entry.kind !== "handoff"));
+      return;
+    }
+    receivedHandoffs.current.set(scope, value);
+    if (previous?.id === value.id) {
+      setHandoff(current => current?.id === value.id ? value : current);
+      return; // Host state refreshes update the card, never replay navigation or submission.
+    }
+    setEntries(current => current.filter(entry => entry.scope !== scope || entry.kind !== "handoff"));
+    enqueue({ kind: "handoff", target: { agentId: "codex", sessionId: null }, payload: value });
+  }, [scope, enqueue]);
   const openComputerSettings = useCallback(() => {
     takeProductSettingsLaunch();
     setSettingsOpen(true);
@@ -144,40 +214,41 @@ export function App() {
     return () => window.removeEventListener("product-back", back, { capture: true });
   }, [backLayers, navigate]);
   const openFromNotification = useCallback((target: { agentId: string; sessionId: string; title: string }) => {
-    // CC Desk is no handoff agent, but its notifications still open its own session: AgentWorkspace looks the id up at runtime.
-    const agentId = (["codex", "claude", "deepseek", "opencode", "ccdesk"].includes(target.agentId) ? target.agentId : "codex") as HandoffTarget["agentId"];
-    if (!openExternal({ agentId, sessionId: target.sessionId })) return;
-    setCaptureOpen(false); setItemsOpen(false); setHandoffTarget({ agentId, sessionId: target.sessionId, title: target.title, cwd: "" });
-  }, [openExternal]);
+    enqueue({ kind: "notification", target: { ...target, cwd: "" } });
+  }, [enqueue]);
   useAttention(normalizeEndpoint(connection.endpoint), connection.token, openFromNotification);
   useIntake({
     onShare: payload => {
-      if (!openExternal()) return;
-      setCaptureOpen(false); setItemsOpen(false);
-      setIntakeShares(current => current.some(value => value.id === payload.id) ? current : [...current, payload]);
+      if (seenShares.current.has(payload.id)) return;
+      seenShares.current.add(payload.id);
+      enqueue({ kind: "share", target: { agentId: "codex", sessionId: null }, payload });
     },
     onShortcut: payload => {
       if (payload.target === "thread") {
         const target = parseAttentionKey(payload.key ?? "");
-        if (target?.agentId === "codex") { openFromNotification({ ...target, title: payload.title ?? "" }); return; }
+        if (!target) { setEntryNotice({ scope, id: -1, text: "快捷方式的会话入口无效，无法打开。" }); return; }
+        enqueue({ kind: "notification", target: { ...target, title: payload.title ?? "", cwd: "" } });
+      } else {
+        enqueue({ kind: "shortcut", target: { agentId: "codex", sessionId: newThreadId, title: "新任务", cwd: "" }, payload });
       }
-      if (!openExternal()) return;
-      setCaptureOpen(false); setItemsOpen(false);
-      if (payload.target !== "thread") { setHandoffTarget(null); setIntakeShortcut(payload); }
     },
   });
   function openHandoffTarget(target: HandoffTarget) {
-    if (!openExternal(target)) return;
-    setCaptureOpen(false); setItemsOpen(false); setHandoffTarget(target);
+    enqueue({ kind: "target", target });
   }
-  return <BackLayersContext.Provider value={backLayers}><ProductRemoteShell onComputerSettings={openComputerSettings} onHandoff={receiveHandoff}>
+  return <BackLayersContext.Provider value={backLayers}><ProductRemoteShell onComputerSettings={openComputerSettings} onHandoff={receiveHandoff} notice={entryNotice?.scope === scope && <SystemNotice error>{entryNotice.text}
+      {pendingEntry?.id === entryNotice.id && !pendingEntry.ready && <button type="button" className="text-action" onClick={() => setEntryRetry(value => value + 1)}>重试打开</button>}
+      {(pendingEntry?.id !== entryNotice.id || pendingEntry.kind !== "share") && <button type="button" className="text-action" onClick={() => {
+        setEntries(current => current.filter(entry => entry.id !== entryNotice.id)); setEntryNotice(null);
+      }}>关闭提示</button>}
+    </SystemNotice>}>
     <BackLayer open={itemsOpen} close={() => setItemsOpen(false)} priority={205}><WorkItemsPage open={itemsOpen} onClose={() => setItemsOpen(false)} onNew={() => { setOpenItemUid(null); setCaptureOpen(true); }} onOpenItem={uid => { setOpenItemUid(uid); setCaptureOpen(true); }} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} /></BackLayer>
     <BackLayer open={captureOpen} close={() => { setCaptureOpen(false); setInitialDraft(undefined); }} priority={210}><CapturePanel initialDraft={initialDraft} itemUid={openItemUid} onOpenTarget={openHandoffTarget} open={captureOpen} onClose={() => { setCaptureOpen(false); setInitialDraft(undefined); }} key={`capture:${scope}:${connection.token}`} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} /></BackLayer>
     {navigation.level === "picker"
       ? <AgentPicker key={scope} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} onSelect={id => navigate(agentList(id))} onOpenItems={() => setItemsOpen(true)} onOpenSettings={openComputerSettings} />
       : navigation.agentId !== "codex"
         ? <React.Suspense fallback={<main className="agent-workspace"><p className="inline-loading">正在打开 Agent…</p></main>}><AgentWorkspace navigation={navigation} onNavigate={navigate} onBack={requestNavigationBack} onOpenAgents={() => navigate(agentPicker())} onOpenSettings={openComputerSettings} handoffTarget={handoffTarget} onTargetOpened={targetOpened} onCapture={() => setItemsOpen(true)} voiceRecovery={recoveredVoice.recovery} key={`${scope}:${navigation.agentId}`} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} /></React.Suspense>
-        : <Workspace navigation={navigation} onSelectSession={(id, internal) => navigate(id ? agentSession("codex", id) : agentList("codex"), internal)} settingsOpen={settingsOpen} preferences={preferences} onOpenSettings={openComputerSettings} onSettingsTools={setCodexSettings} intakeShare={intakeShares[0] ?? null} onShareDone={finishIntakeShare} onCaptureIntake={captureIntake} intakeShortcut={intakeShortcut} onShortcutOpened={shortcutOpened} handoffTarget={handoffTarget} onTargetOpened={targetOpened} onCapture={() => setItemsOpen(true)} voiceRecovery={recoveredVoice.recovery} key={scope} connection={connection} scope={scope} onOpenAgents={() => navigate(agentPicker())} handoff={handoff} onHandoff={setHandoff} />}
+        : <Workspace navigation={navigation} onSelectSession={(id, internal) => navigate(id ? agentSession("codex", id) : agentList("codex"), internal)} settingsOpen={settingsOpen} preferences={preferences} onOpenSettings={openComputerSettings} onSettingsTools={setCodexSettings} intakeShare={intakeShare} onShareDone={finishIntakeShare} onCaptureIntake={captureIntake} intakeShortcut={intakeShortcut} onShortcutOpened={shortcutOpened} handoffTarget={handoffTarget} onTargetOpened={targetOpened} onCapture={() => setItemsOpen(true)} voiceRecovery={recoveredVoice.recovery} key={scope} connection={connection} scope={scope} onOpenAgents={() => navigate(agentPicker())} handoff={handoff} onHandoff={setHandoff} />}
     <BackLayer open={settingsOpen} close={() => setSettingsOpen(false)} priority={50}><GlobalSettings key={`settings:${scope}`} connection={connection} settingsOpen={settingsOpen} onClose={() => setSettingsOpen(false)} onApply={profile => { if (window.dispatchEvent(new Event(productBeforeNavigate, { cancelable: true }))) setConnection(profile); }} preferences={preferences} codex={navigation.agentId === "codex" ? codexSettings : null} /></BackLayer>
     <BackLayer open={Boolean(recoveredVoice.notice)} close={recoveredVoice.dismiss} priority={100}>{recoveredVoice.notice && createPortal(<div className="voice-scrim"><section className="voice-sheet" role="dialog" aria-modal="true" aria-label="语音结果已取回">
         <header><strong>语音结果已取回</strong></header>
@@ -187,7 +258,7 @@ export function App() {
       </section></div>, document.body)}</BackLayer></ProductRemoteShell></BackLayersContext.Provider>;
 }
 
-function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onOpenSettings, onSettingsTools, intakeShare, onShareDone, onCaptureIntake, intakeShortcut, onShortcutOpened, handoffTarget, onTargetOpened, onCapture, voiceRecovery, connection, scope, onOpenAgents, handoff, onHandoff }: { navigation: Navigation; onSelectSession: (id: string | null, internal?: boolean) => boolean; settingsOpen: boolean; preferences: CodexPreferences; onOpenSettings: () => void; onSettingsTools: (tools: CodexSettingsTools | null) => void; intakeShare: SharePayload | null; onShareDone: (id: string) => void; onCaptureIntake: (draft: CaptureInitialDraft) => void; intakeShortcut: ShortcutPayload | null; onShortcutOpened: () => void; handoffTarget: HandoffTarget | null; onTargetOpened: () => void; onCapture: () => void; voiceRecovery: VoiceRecoveryPort; connection: ConnectionProfile; scope: string; onOpenAgents: () => void; handoff: ProductHandoff | null; onHandoff: (value: ProductHandoff | null) => void }) {
+function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onOpenSettings, onSettingsTools, intakeShare, onShareDone, onCaptureIntake, intakeShortcut, onShortcutOpened, handoffTarget, onTargetOpened, onCapture, voiceRecovery, connection, scope, onOpenAgents, handoff, onHandoff }: { navigation: Navigation; onSelectSession: (id: string | null, internal?: boolean) => boolean; settingsOpen: boolean; preferences: CodexPreferences; onOpenSettings: () => void; onSettingsTools: (tools: CodexSettingsTools | null) => void; intakeShare: SharePayload | null; onShareDone: (id: string) => void; onCaptureIntake: (draft: CaptureInitialDraft) => void; intakeShortcut: IntakeShortcut | null; onShortcutOpened: (id: number) => void; handoffTarget: SessionTarget | null; onTargetOpened: () => void; onCapture: () => void; voiceRecovery: VoiceRecoveryPort; connection: ConnectionProfile; scope: string; onOpenAgents: () => void; handoff: ProductHandoff | null; onHandoff: (value: ProductHandoff | null) => void }) {
   const scopeAbortRef = useRef(new AbortController());
   const diagnosticJournalRef = useRef(createConnectionJournal());
   const diagnosticEpochRef = useRef(0);
@@ -214,6 +285,7 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
   const [voiceOpenRequest, setVoiceOpenRequest] = useState(0);
   const recentThreadsRef = useRef("");
   const voiceRequestSequence = useRef(0);
+  const consumedShortcut = useRef<number | null>(null);
   const cancelIntakeShare = useCallback(() => { if (intakeShare) onShareDone(intakeShare.id); }, [intakeShare, onShareDone]);
   const channelAttemptRef = useRef<{ key: string; clientMessageId: string } | null>(null);
   const [sidePaneSize, setSidePaneSize] = useState(defaultSidePaneSize);
@@ -450,10 +522,11 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
     void openThread(known ?? { id: target.sessionId, threadName: target.title, cwd: target.cwd || null, updatedAt: new Date().toISOString(), source: 'vscode', originator: 'desktop' });
   }, [handoffTarget, onTargetOpened]);
   useEffect(() => {
-    if (!intakeShortcut) return;
-    startNewThread();
-    if (intakeShortcut.target === "voice") setVoiceOpenRequest(++voiceRequestSequence.current);
-    onShortcutOpened();
+    if (!intakeShortcut || consumedShortcut.current === intakeShortcut.id) return;
+    if (!startNewThread()) return;
+    consumedShortcut.current = intakeShortcut.id;
+    if (intakeShortcut.payload.target === "voice") setVoiceOpenRequest(++voiceRequestSequence.current);
+    onShortcutOpened(intakeShortcut.id);
     // The shortcut is a one-shot command, independent of subsequent workspace updates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intakeShortcut, onShortcutOpened]);

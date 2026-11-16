@@ -1,5 +1,5 @@
 import { Capacitor, registerPlugin, type PluginListenerHandle } from "@capacitor/core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiGet, buildUrl } from "../connection/http";
 
 /** F1: system notifications for work the phone sent to the computer (finished / needs approval). */
@@ -74,6 +74,7 @@ export async function attentionAfterSend() {
  * when the computer still has work for this phone, and open the thread a notification was tapped for.
  */
 export function useAttention(endpoint: string, token: string, open: (target: { agentId: string; sessionId: string; title: string }) => void) {
+  const latestOpen = useRef(open); latestOpen.current = open;
   useEffect(() => {
     if (!attentionAvailable()) return;
     let cancelled = false;
@@ -98,10 +99,10 @@ export function useAttention(endpoint: string, token: string, open: (target: { a
     let handle: PluginListenerHandle | undefined, active = true;
     Attention.addListener("open", value => {
       const target = parseAttentionKey(value.key);
-      if (target) open({ ...target, title: value.title || "" });
+      if (active && target) latestOpen.current({ ...target, title: value.title || "" });
     }).then(value => { if (active) handle = value; else void value.remove(); }).catch(() => undefined);
     return () => { active = false; void handle?.remove(); };
-  }, [open]);
+  }, []);
 }
 
 export function finishedAlertHint(state: Pick<NativeState, "permission" | "banner" | "vibrate"> | null, finished: boolean): FinishedAlertHint {

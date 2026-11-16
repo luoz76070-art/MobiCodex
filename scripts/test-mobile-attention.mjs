@@ -1,3 +1,4 @@
+import ts from 'typescript';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, rm, readFile } from 'node:fs/promises';
@@ -5,6 +6,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+
+import { appNavigationFixture, navigationModel, findElement as find } from './helpers/mobile-navigation-fixture.mjs';
 
 // F1: the phone's notification bridge (keys shared with the gateway, settings, when to ask and start).
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -117,9 +120,62 @@ test('#18 finished-task notifications pop up and vibrate on a new channel that r
   assert.match(bridge, /result\.put\("vibrate", vibrate\)/);
 });
 
-test('a CC Desk notification opens the CC Desk session instead of falling back to Codex', async () => {
-  const app = await readFile(path.join(root, 'apps/mobile/src/app/App.tsx'), 'utf8');
-  const list = app.match(/const agentId = \((\[[^\]]+\])\.includes\(target\.agentId\)/);
-  assert.ok(list, 'notification agent list not found');
-  assert.deepEqual(JSON.parse(list[1]).sort(), ['ccdesk', 'claude', 'codex', 'deepseek', 'opencode']);
+for (const cold of [true, false]) {
+  test(`${cold ? 'cold' : 'warm'} notification opens CC Desk without a Codex fallback`, async t => {
+    const target = { agentId: 'ccdesk', sessionId: 'desk-session', title: '合成会话' };
+    const f = appNavigationFixture(cold ? navigationModel.agentPicker() : navigationModel.agentSession('claude', 'existing'), [], cold ? { coldNotification: target } : {});
+    t.after(() => f.stop()); if (!cold) f.notify(target);
+    await f.settle();
+    const workspace = find(f.render(), 'AgentWorkspace');
+    assert.deepEqual(workspace.props.navigation, navigationModel.agentSession('ccdesk', 'desk-session'));
+    assert.equal(workspace.props.handoffTarget.title, '合成会话');
+    assert.equal(find(f.render(), 'Workspace'), undefined);
+    assert.equal(find(f.render(), 'Notice'), undefined);
+  });
+}
+test('unknown and unavailable Agents show an explanation and keep the current page', async t => {
+  for (const [id, agents, message] of [
+    ['missing', [], /未知|未提供/], ['ccdesk', [{ id: 'ccdesk', sessionApi: 1, state: 'failed' }], /不可用/],
+  ]) {
+    const f = appNavigationFixture(navigationModel.agentSession('claude', 'existing'), [], { agents }); t.after(() => f.stop());
+    f.notify({ agentId: id, sessionId: 'session', title: '' }); await f.settle();
+    assert.deepEqual(find(f.render(), 'AgentWorkspace').props.navigation, navigationModel.agentSession('claude', 'existing'));
+    assert.match(find(f.render(), 'Notice').props.children[0], message);
+    assert.equal(find(f.render(), 'Workspace'), undefined);
+  }
+});
+test('a temporarily unprobed Agent is not mistaken for a missing Agent', async t => {
+  const f = appNavigationFixture(undefined, [], { agents: [{ id: 'claude', transport: 'claude-mods-http', state: 'unprobed' }] }); t.after(() => f.stop());
+  f.notify({ agentId: 'claude', sessionId: 'session', title: '' }); await f.settle();
+  assert.equal(find(f.render(), 'AgentWorkspace').props.navigation.agentId, 'claude');
+});
+
+test('native open listener delivers retained cold events once, uses the latest connection callback and ignores events after unmount', async () => {
+  const source = await readFile(path.join(root, 'apps/mobile/src/features/notify/attention.ts'), 'utf8');
+  const ast = ts.createSourceFile('attention.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const body = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'useAttention').getText(ast).replace(/^export /, '');
+  const js = ts.transpileModule(body, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const slots = [], setups = [], calls = [], events = new EventTarget(); let cursor = 0, listener, release, removed = 0, registrations = 0;
+  const ports = {
+    useRef(value) { return slots[cursor++] ??= { current: value }; },
+    useEffect(setup, deps) { const index = cursor++, old = slots[index]; if (!old || deps.some((v, i) => v !== old.deps[i])) setups.push(() => { old?.cleanup?.(); slots[index] = { deps, cleanup: setup() }; }); },
+    attentionAvailable: () => true, parseAttentionKey: m.parseAttentionKey, loadNotifySettings: () => m.defaultNotifySettings,
+    changedEvent: 'settings', window: events, document: Object.assign(new EventTarget(), { visibilityState: 'hidden' }),
+    Attention: { configure: async () => {},
+      addListener(name, callback) {
+        assert.equal(name, 'open'); registrations++; listener = callback;
+        callback({ key: 'agent:ccdesk:cold', title: '冷启动提醒' });
+        return new Promise(resolve => { release = resolve; });
+      },
+    },
+  };
+  const hook = new Function(...Object.keys(ports), js + '; return useAttention;')(...Object.values(ports));
+  hook('first', '', target => calls.push(['first', target.sessionId])); for (const setup of setups.splice(0)) setup();
+  cursor = 0; hook('second', '', target => calls.push(['second', target.sessionId])); for (const setup of setups.splice(0)) setup();
+  listener({ key: 'agent:ccdesk:warm' });
+  assert.equal(registrations, 1); assert.deepEqual(calls, [['first', 'cold'], ['second', 'warm']]);
+  for (const slot of slots) slot?.cleanup?.();
+  listener({ key: 'agent:ccdesk:late' }); release({ remove: async () => { removed++; } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(removed, 1); assert.equal(calls.length, 2);
 });

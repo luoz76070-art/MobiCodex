@@ -1,3 +1,4 @@
+import { appNavigationFixture, navigationModel, findElement as find } from './helpers/mobile-navigation-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -158,12 +159,12 @@ test('voice shortcut requests open the existing panel and can be repeated withou
 
 test('App wiring: outer listener, exact cache cleanup, shared notification route, shortcut counter and deduplicated recent threads', () => {
   assert.match(app, /useIntake\(\{/);
-  assert.match(app, /onShare: payload => \{\s*if \(!openExternal\(\)\) return;\s*setCaptureOpen\(false\); setItemsOpen\(false\)/);
+  assert.match(app, /enqueue\(\{ kind: "share", target: \{ agentId: "codex", sessionId: null \}, payload \}\)/);
   assert.match(app, /Intake\.clear\(\{ id \}\)/);
   assert.match(app, /<CapturePanel initialDraft=\{initialDraft\}/);
   assert.match(app, /parseAttentionKey\(payload\.key \?\? ""\)/);
-  assert.match(app, /openFromNotification\(\{ \.\.\.target, title: payload\.title/);
-  assert.match(app, /startNewThread\(\);\s*if \(intakeShortcut.target === "voice"\) setVoiceOpenRequest\(\+\+voiceRequestSequence.current\)/);
+  assert.match(app, /enqueue\(\{ kind: "notification", target: \{ \.\.\.target, title: payload\.title/);
+  assert.match(app, /if \(!startNewThread\(\)\) return;[\s\S]*intakeShortcut.payload.target === "voice"/);
   assert.match(app, /<VoiceInput openRequest=\{voiceOpenRequest\}/);
   assert.match(app, /sort\(.*updatedAt.*\)\.slice\(0, 3\)/);
   assert.match(app, /key: codexAttentionKey\(thread.id, isDesktopSource\(thread\)\)/);
@@ -299,4 +300,71 @@ test('recent thread shortcuts follow updated time and skip equivalent list refre
   assert.equal(calls.length, 2); assert.equal(calls[1].threads[0].key, 'live:old');
   assert.match(app, /if \(selected && !intakeShortcut && !handoffTarget\) void openThread\(selected\)/, 'cached selection must not replace a cold-start shortcut');
   assert.match(app, /dismissLayer: backLayers.dismiss/, 'App dispatches back to the highest registered layer');
+});
+
+for (const cold of [true, false]) {
+  test(`${cold ? 'cold' : 'warm'} shares queue before navigating, survive a blocked leave and clear only after handling`, async t => {
+    const one = payload({ id: 'queued-one' }), two = payload({ id: 'queued-two' });
+    const f = appNavigationFixture(navigationModel.agentSession('claude', 'original'), [], cold ? { coldShare: one } : {}); t.after(() => f.stop());
+    const protect = event => event.preventDefault(); f.events.addEventListener('product-before-navigate', protect);
+    if (!cold) f.intake.onShare(one);
+    f.intake.onShare(two); f.intake.onShare(one); await f.settle();
+    assert.equal(find(f.render(), 'AgentWorkspace').props.navigation.sessionId, 'original');
+    assert.match(find(f.render(), 'Notice').props.children[0], /入口已保留/); assert.deepEqual(f.cleared, []);
+    f.events.removeEventListener('product-before-navigate', protect); f.retry(); await f.settle();
+    let workspace = find(f.render(), 'Workspace'); assert.equal(workspace.props.intakeShare.id, one.id); assert.deepEqual(f.cleared, []);
+    workspace.props.onShareDone(one.id); await f.settle();
+    workspace = find(f.render(), 'Workspace'); assert.equal(workspace.props.intakeShare.id, two.id);
+    assert.deepEqual(f.cleared, [{ id: one.id }]);
+    workspace.props.onShareDone(two.id); await f.settle(); assert.equal(find(f.render(), 'Workspace').props.intakeShare, null);
+    assert.deepEqual(f.cleared, [{ id: one.id }, { id: two.id }]);
+  });
+}
+
+test('new-task and voice shortcuts target Codex, retain blocked commands, and use distinct one-shot envelopes', async t => {
+  const f = appNavigationFixture(navigationModel.agentSession('ccdesk', 'original')); t.after(() => f.stop());
+  const protect = event => event.preventDefault(); f.events.addEventListener('product-before-navigate', protect);
+  f.intake.onShortcut({ target: 'voice' }); await f.settle();
+  assert.equal(find(f.render(), 'AgentWorkspace').props.navigation.agentId, 'ccdesk');
+  f.events.removeEventListener('product-before-navigate', protect); f.retry(); await f.settle();
+  let workspace = find(f.render(), 'Workspace');
+  assert.equal(workspace.props.navigation.sessionId, '__new_thread__');
+  const first = workspace.props.intakeShortcut; assert.equal(first.payload.target, 'voice');
+  assert.equal(find(f.render(), 'Workspace').props.intakeShortcut, first, 'rerenders do not manufacture another command');
+  workspace.props.onShortcutOpened(first.id); await f.settle();
+  assert.equal(find(f.render(), 'Workspace').props.intakeShortcut, null);
+  f.intake.onShortcut({ target: 'voice' }); f.intake.onShortcut({ target: 'new-task' }); await f.settle();
+  workspace = find(f.render(), 'Workspace'); const second = workspace.props.intakeShortcut;
+  assert.notEqual(second.id, first.id, 'a second intentional tap is a new command');
+  workspace.props.onShortcutOpened(first.id); await f.settle();
+  assert.equal(find(f.render(), 'Workspace').props.intakeShortcut.id, second.id, 'a stale ACK cannot consume the next command');
+  workspace.props.onShortcutOpened(second.id); await f.settle();
+  assert.equal(find(f.render(), 'Workspace').props.intakeShortcut.payload.target, 'new-task');
+});
+
+test('the actual Workspace shortcut effect executes once, leaves blocked commands pending, and supports a later tap', () => {
+  let callback;
+  function visit(node) {
+    if (ts.isCallExpression(node) && node.expression.getText(ast) === 'useEffect' && node.arguments[0]?.getText(ast).includes('consumedShortcut.current')) callback = node.arguments[0].getText(ast);
+    ts.forEachChild(node, visit);
+  }
+  visit(ast); assert.ok(callback);
+  const calls = [], consumedShortcut = { current: null }, voiceRequestSequence = { current: 0 };
+  let allowed = false;
+  const run = new Function('ports', `with (ports) { return (${transpile('const run = ' + callback).replace(/^const run = /, '').replace(/;\s*$/, '')})(); }`);
+  const ports = { intakeShortcut: { id: 1, payload: { target: 'voice' } }, consumedShortcut, voiceRequestSequence,
+    startNewThread: () => { if (allowed) calls.push('new'); return allowed; }, setVoiceOpenRequest: n => calls.push(['voice', n]), onShortcutOpened: id => calls.push(['ack', id]) };
+  run(ports); assert.deepEqual(calls, []); assert.equal(consumedShortcut.current, null);
+  allowed = true; run(ports); run(ports); assert.deepEqual(calls, ['new', ['voice', 1], ['ack', 1]]);
+  ports.intakeShortcut = { id: 2, payload: { target: 'new-task' } }; run(ports); run(ports);
+  assert.deepEqual(calls.slice(3), ['new', ['ack', 2]]);
+});
+
+test('cold voice and Agent thread shortcuts reach their own destinations', async t => {
+  for (const shortcut of [{ target: 'voice' }, { target: 'thread', key: 'agent:ccdesk:session', title: '合成会话' }]) {
+    const f = appNavigationFixture(navigationModel.agentPicker(), [], { coldShortcut: shortcut }); t.after(() => f.stop());
+    await f.settle();
+    if (shortcut.target === 'voice') assert.equal(find(f.render(), 'Workspace').props.intakeShortcut.payload.target, 'voice');
+    else assert.deepEqual(find(f.render(), 'AgentWorkspace').props.navigation, navigationModel.agentSession('ccdesk', 'session'));
+  }
 });

@@ -56,12 +56,6 @@ export function parentNavigation(value: Navigation): Navigation | null {
   return value.level === "session" ? agentList(value.agentId) : agentPicker();
 }
 
-/** PR2 compatibility adapter: keep the old destinations without changing the intake protocol. */
-export function externalNavigation(scope: string, current: Navigation, target?: { agentId: string; sessionId: string }): Navigation {
-  if (target) return agentSession(target.agentId, target.sessionId);
-  return current.agentId === "codex" ? current : codexWorkspaceLocation(scope);
-}
-
 export function handleNavigationBack({ dismissLayer, current, beforeLeave, navigate }: {
   dismissLayer: () => boolean; current: Navigation; beforeLeave: () => boolean; navigate: (next: Navigation) => void;
 }): boolean {

@@ -6,7 +6,7 @@ import { build } from 'esbuild';
 import ts from 'typescript';
 
 const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-navigation-'));
-await build({ stdin: { contents: "export * from './apps/mobile/src/app/navigation.ts'; export { createBackLayers } from './apps/mobile/src/shared/BackLayers.tsx';", resolveDir: process.cwd(), loader: 'ts' },
+await build({ stdin: { contents: "export * from './apps/mobile/src/app/navigation.ts'; export * from './apps/mobile/src/app/sessionTargets.ts'; export { parseAttentionKey } from './apps/mobile/src/features/notify/attention.ts'; export { createBackLayers } from './apps/mobile/src/shared/BackLayers.tsx';", resolveDir: process.cwd(), loader: 'ts' },
   outfile: path.join(dir, 'navigation.cjs'), bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', nodePaths: [path.resolve('apps/mobile/node_modules')], define: { 'import.meta.env': '{}' } });
 const oldStorage = globalThis.localStorage;
 globalThis.localStorage = { getItem: () => null };
@@ -25,12 +25,13 @@ const source = await fs.readFile('apps/mobile/src/app/App.tsx', 'utf8');
 const ast = ts.createSourceFile('App.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const body = ast.statements.find(n => ts.isFunctionDeclaration(n) && n.name?.text === 'App').getText(ast).replace('export function', 'function');
 const js = ts.transpileModule(body, { compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
-export const findElement = (tree, type) => tree?.type === type ? tree : tree?.props?.children?.flat(Infinity).map(child => findElement(child, type)).find(Boolean);
+export const findElement = (tree, type) => !tree || typeof tree !== 'object' ? undefined : tree.type === type ? tree : [tree.props?.notice, ...(tree.props?.children?.flat(Infinity) ?? [])].map(child => findElement(child, type)).find(Boolean);
 
 // Execute the actual App handlers, state and effects with synthetic workspaces/network ports.
-export function appNavigationFixture(initial = navigationModel.agentPicker(), entries = []) {
+export function appNavigationFixture(initial = navigationModel.agentPicker(), entries = [], options = {}) {
   const storage = memoryStorage(entries), events = new EventTarget(), slots = [], effects = [];
   let cursor = 0, dirty = true, tree, intake, notification, layerCleanups = [];
+  const cleared = [], requests = [];
   const profile = { id: 'test', cacheNamespace: 'fixed', endpoint: '', token: '', name: '测试连接' };
   const scope = 'test:fixed:';
   if (initial) withStorage(storage, () => navigationModel.saveNavigation(scope, initial));
@@ -47,13 +48,28 @@ export function appNavigationFixture(initial = navigationModel.agentPicker(), en
     useEffect(setup, deps) { const index = cursor++, old = slots[index]; if (!old || deps.some((v, i) => v !== old.deps[i])) effects.push(() => { old?.cleanup?.(); slots[index] = { deps, cleanup: setup() }; }); },
     loadNavigation: (...args) => withStorage(storage, () => navigationModel.loadNavigation(...args)),
     saveNavigation: (...args) => withStorage(storage, () => navigationModel.saveNavigation(...args)),
-    externalNavigation: (...args) => withStorage(storage, () => navigationModel.externalNavigation(...args)),
+    sessionTargetNavigation: (...args) => withStorage(storage, () => navigationModel.sessionTargetNavigation(...args)),
     requestNavigationBack() { events.dispatchEvent(new Event('product-back', { cancelable: true })); },
     loadConnectionProfiles: () => [profile], defaultProfileId: profile.id,
     normalizeEndpoint: value => value, defaultSplitMode: 'auto', defaultApprovalPolicy: 'never', defaultSandboxMode: 'workspace-write',
-    useVoiceRecovery: () => ({ recovery: {}, notice: null }), useAttention(_endpoint, _token, callback) { notification = callback; },
-    useIntake(callbacks) { intake = callbacks; }, takeProductSettingsLaunch() {}, intakeAvailable: () => false,
-    productBeforeNavigate: "product-before-navigate", localStorage: storage, window: events, Event, parseAttentionKey: key => key === 'codex:test' ? { agentId: 'codex', sessionId: 'test' } : null,
+    useVoiceRecovery: () => ({ recovery: {}, notice: null }), useAttention(_endpoint, _token, callback) {
+      notification = callback;
+      hooks.useEffect(() => { if (options.coldNotification) callback(options.coldNotification); }, []);
+    },
+    useIntake(callbacks) {
+      intake = callbacks;
+      hooks.useEffect(() => {
+        if (options.coldShare) callbacks.onShare(options.coldShare);
+        if (options.coldShortcut) callbacks.onShortcut(options.coldShortcut);
+      }, []);
+    }, takeProductSettingsLaunch() {}, intakeAvailable: () => true,
+    Intake: { async clear(value) { cleared.push(value); } },
+    async requestGet(...args) {
+      requests.push(args);
+      return options.readAgents ? options.readAgents(...args) : { agents: options.agents ?? ['claude', 'deepseek', 'ccdesk', 'opencode'].map(id => ({ id, sessionApi: 1, state: 'connected' })) };
+    },
+    buildUrl: (_endpoint, route) => route, newThreadId: '__new_thread__', SystemNotice: 'Notice', AbortController,
+    productBeforeNavigate: "product-before-navigate", localStorage: storage, window: events, Event,
     BackLayersContext: { Provider: 'Provider' }, BackLayer: 'BackLayer', AgentPicker: 'Picker',
     ProductRemoteShell: 'Shell', WorkItemsPage: 'Items', CapturePanel: 'Capture', AgentWorkspace: 'AgentWorkspace', Workspace: 'Workspace', GlobalSettings: 'Settings',
   };
@@ -74,8 +90,14 @@ export function appNavigationFixture(initial = navigationModel.agentPicker(), en
     }
     register(tree); return tree;
   }
-  const fixture = { storage: storage.values, storagePort: storage, events, scope, render, get intake() { return intake; },
+  const fixture = { cleared, requests, storage: storage.values, storagePort: storage, events, scope, render, get intake() { return intake; },
     notify: target => notification(target),
+    async settle() { for (let i = 0; i < 6; i++) { render(); await new Promise(resolve => setImmediate(resolve)); } return render(); },
+    retry() {
+      const notice = findElement(render(), 'Notice');
+      const button = notice?.props.children.flat(Infinity).find(child => child?.type === 'button' && child.props.children.includes('重试打开'));
+      if (!button) throw new Error('retry action missing'); button.props.onClick(); render();
+    },
     back() { const event = new Event('product-back', { cancelable: true }); events.dispatchEvent(event); render(); return event; },
     stop() { layerCleanups.forEach(cleanup => cleanup()); for (const slot of slots) slot?.cleanup?.(); },
   };
