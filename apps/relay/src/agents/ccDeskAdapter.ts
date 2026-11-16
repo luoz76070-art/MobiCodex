@@ -11,17 +11,20 @@ import { agentError, type AgentDelivery, type AgentOperation, type AgentSessionS
 
 const run = promisify(execFile);
 const WATCHES = 8;
+const LINGER_MS = 120_000;
 const none = { inspectLoadedSessions: false, sendMessage: false, steer: false, interrupt: false, approve: false };
 type Listener = { receive: (snapshot: AgentSessionSnapshot) => void; disconnect: () => void };
 type Entry = {
   id: string; token: string; session: CcDeskSession | null; transcript: CcDeskTranscript; listeners: Set<Listener>;
   connection: CcDeskConnection | null; pending: Promise<void>; timer?: NodeJS.Timeout; dropped: boolean;
+  lingerTimer?: NodeJS.Timeout; lingerOrder?: number;
   submission: AgentSessionSnapshot["submission"]; operationError: AgentSessionSnapshot["operationError"];
 };
 export type CcDeskDependencies = {
   readToken?: (account: string) => Promise<string>;
   connection?: (options: CcDeskConnectionOptions) => CcDeskConnection;
   control?: CcDeskControl;
+  lingerMs?: number;
 };
 
 /** Reads the service token from the login keychain, where `mobile-codex ccdesk login` put it. */
@@ -46,6 +49,7 @@ export class CcDeskAdapter implements AgentAdapter, SessionAdapter {
   private state: AgentStatus = { id: "ccdesk", label: "CC Desk", state: "unprobed", transport: "ccdesk-ws", usesAccessibility: false,
     sameDesktopThreadVerified: false, capabilities: { ...none }, loadedSessions: null, checkedAt: null, errorCode: null };
   private readonly entries = new Map<string, Entry>();
+  private lingerOrder = 0;
   private readonly control: CcDeskControl;
   private probing: Promise<AgentStatus> | null = null;
   private token: string | null = null;
@@ -123,7 +127,12 @@ export class CcDeskAdapter implements AgentAdapter, SessionAdapter {
     if (this.stopped) throw agentError("CCDESK_STOPPED", 503);
     let entry = this.entries.get(id);
     if (!entry) {
-      if (this.entries.size >= WATCHES) throw agentError("CCDESK_BUSY", 429);
+      if (this.entries.size >= WATCHES) {
+        const oldest = [...this.entries.values()].filter(candidate => !candidate.listeners.size && candidate.lingerOrder !== undefined)
+          .sort((a, b) => a.lingerOrder! - b.lingerOrder!)[0];
+        if (!oldest) throw agentError("CCDESK_BUSY", 429);
+        this.drop(oldest, false);
+      }
       const created: Entry = { id, token: randomUUID(), session: null, transcript: new CcDeskTranscript(), listeners: new Set(), connection: null,
         pending: Promise.resolve(), dropped: false, submission: null, operationError: null };
       entry = created;
@@ -139,13 +148,22 @@ export class CcDeskAdapter implements AgentAdapter, SessionAdapter {
         created.transcript.load(page);
       })();
     }
+    this.clearLinger(entry);
     const listener = { receive, disconnect };
     entry.listeners.add(listener);
     try { await entry.pending; } catch (error) { entry.listeners.delete(listener); this.drop(entry, false); throw error; }
     if (entry.dropped) throw agentError("CCDESK_DISCONNECTED");
     receive(this.view(entry));
     const owned = entry;
-    return () => { owned.listeners.delete(listener); if (!owned.listeners.size) this.drop(owned, false); };
+    return () => {
+      if (!owned.listeners.delete(listener) || owned.listeners.size || owned.dropped) return;
+      // Keep reading while the phone is away; writes still require a live listener in writable().
+      owned.lingerOrder = ++this.lingerOrder;
+      owned.lingerTimer = setTimeout(() => {
+        if (!owned.listeners.size) this.drop(owned, false);
+      }, this.deps.lingerMs ?? LINGER_MS);
+      owned.lingerTimer.unref();
+    };
   }
 
   async sendMessage(id: string, input: AgentOperation & { text: string; delivery: "steer" | "queue" }): Promise<AgentDelivery> {
@@ -347,10 +365,17 @@ export class CcDeskAdapter implements AgentAdapter, SessionAdapter {
     entry.timer.unref();
   }
 
+  private clearLinger(entry: Entry) {
+    clearTimeout(entry.lingerTimer);
+    entry.lingerTimer = undefined;
+    entry.lingerOrder = undefined;
+  }
+
   private drop(entry: Entry, notify = true) {
     if (entry.dropped) return;
     entry.dropped = true;
     clearTimeout(entry.timer);
+    this.clearLinger(entry);
     if (this.entries.get(entry.id) === entry) this.entries.delete(entry.id);
     entry.connection?.close();
     if (notify) for (const listener of [...entry.listeners]) { try { listener.disconnect(); } catch { /* already gone */ } }

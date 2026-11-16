@@ -11,6 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { WebSocketServer } from 'ws';
 import { CcDeskAdapter } from '../dist/agents/ccDeskAdapter.js';
+import { CcDeskConnection } from '../dist/agents/ccDeskConnection.js';
 import { CcDeskControl } from '../dist/agents/ccDeskControl.js';
 import { ccDeskConfigSchema } from '../dist/agents/ccDeskProtocol.js';
 import { parseManagedConfig } from '../dist/gateway/config.js';
@@ -128,9 +129,9 @@ async function controlSocket(url, { writable = true, device = { id: MAC, name: '
     close: () => new Promise(resolve => { for (const client of clients) client.destroy(); server.close(resolve); }) };
 }
 
-function adapter(fake, control, extra = {}) {
+function adapter(fake, control, extra = {}, deps = {}) {
   const config = ccDeskConfigSchema.parse({ url: fake.url, fingerprint, deviceId: MAC, ...(control ? { controlDirectory: control.directory } : { controlDirectory: path.join(scratch, 'none') }), ...extra });
-  return new CcDeskAdapter(config, { readToken: async () => TOKEN });
+  return new CcDeskAdapter(config, { readToken: async () => TOKEN, ...deps });
 }
 function watcher(instance, id) {
   const seen = []; let disconnected = false;
@@ -138,6 +139,122 @@ function watcher(instance, id) {
     .then(close => ({ seen, close, last: () => seen.at(-1), disconnected: () => disconnected }));
 }
 const op = (snapshot) => ({ controlToken: snapshot.control.token, clientMessageId: randomUUID() });
+
+test('lingering watches reuse the connection and immediately deliver text received while away', async t => {
+  const fake = await service(), connections = [];
+  const id = fake.session(randomUUID(), 'warm', MAC), run = randomUUID();
+  const instance = adapter(fake, null, {}, { lingerMs: 1000, connection: options => {
+    const connection = new CcDeskConnection(options); connections.push(connection); return connection;
+  } });
+  t.after(async () => { await instance.stop(); await fake.close(); });
+  const first = await watcher(instance, id), second = await watcher(instance, id);
+  first.close();
+  assert.equal(connections[0].closed, false, 'another listener still owns the connection');
+  second.close();
+  const incoming = new Promise(resolve => {
+    const received = message => {
+      if (message.type !== 'session.event') return;
+      connections[0].off('message', received); resolve();
+    };
+    connections[0].on('message', received);
+  });
+  fake.record(id, run, { type: 'text.delta', messageId: randomUUID(), text: '后台收到的新回复' });
+  await incoming;
+  const returned = await watcher(instance, id);
+  assert.equal(returned.seen.length, 1, 'current view is delivered before watchSession resolves');
+  assert.equal(returned.last().messages.at(-1).text, '后台收到的新回复');
+  assert.equal(returned.last().control.token, first.last().control.token);
+  assert.equal(connections.length, 1);
+  assert.equal(fake.frames.filter(frame => frame.type === 'session.subscribe').length, 1);
+  await sleep(1100);
+  assert.equal(connections[0].closed, false, 'returning cancels the old linger deadline');
+  first.close(); second.close();
+  assert.equal(connections[0].closed, false, 'old cancellation functions are idempotent');
+  returned.close();
+});
+
+test('the last listener starts a deadline; expiry closes the connection and a later watch subscribes anew', async t => {
+  const fake = await service();
+  const id = fake.session(randomUUID(), 'expires', MAC);
+  const instance = adapter(fake, null, {}, { lingerMs: 40 });
+  t.after(async () => { await instance.stop(); await fake.close(); });
+  const first = await watcher(instance, id);
+  first.close();
+  assert.equal(fake.peers.size, 1);
+  await until(() => fake.peers.size === 0, 'linger expired');
+  assert.equal(first.disconnected(), false, 'leaving does not notify an already removed listener');
+  const returned = await watcher(instance, id);
+  assert.notEqual(returned.last().control.token, first.last().control.token);
+  assert.equal(fake.frames.filter(frame => frame.type === 'session.subscribe').length, 2);
+});
+
+test('at capacity only the oldest lingering entry is evicted, even after an entry returns and leaves again', async t => {
+  const fake = await service();
+  const ids = Array.from({ length: 9 }, (_, index) => fake.session(randomUUID(), `capacity-${index}`, MAC));
+  const instance = adapter(fake, null);
+  t.after(async () => { await instance.stop(); await fake.close(); });
+  const watches = [];
+  for (const id of ids.slice(0, 8)) watches.push(await watcher(instance, id));
+  await assert.rejects(watcher(instance, ids[8]), { code: 'CCDESK_BUSY', statusCode: 429 });
+  watches[0].close(); watches[1].close();
+  const returned = await watcher(instance, ids[0]);
+  returned.close();
+  await watcher(instance, ids[8]);
+  await until(() => ![...fake.peers].some(peer => peer.subscription === ids[1]), 'oldest linger evicted');
+  assert.ok([...fake.peers].some(peer => peer.subscription === ids[0]), 'most recently parked entry survives');
+  assert.ok(watches.slice(2).every(watch => !watch.disconnected()), 'active listeners survive');
+  const auths = fake.auths;
+  const surviving = await watcher(instance, ids[0]);
+  assert.equal(fake.auths, auths, 'surviving linger is reused');
+  surviving.close();
+  await watcher(instance, ids[1]);
+  assert.equal(fake.auths, auths + 1, 'evicted session needs a new connection');
+});
+
+test('lingering entries reject every write with the previous control token', async t => {
+  const fake = await service(), control = await controlSocket(fake.url);
+  const id = fake.session(randomUUID(), 'read-only-while-away', MAC);
+  const instance = adapter(fake, control);
+  t.after(async () => { await instance.stop(); await control.close(); await fake.close(); });
+  const watch = await watcher(instance, id), input = op(watch.last());
+  assert.equal(watch.last().control.canSend, true);
+  watch.close();
+  for (const write of [
+    () => instance.sendMessage(id, { ...input, text: 'hello', delivery: 'queue' }),
+    () => instance.interruptSession(id, input),
+    () => instance.respondPermission(id, randomUUID(), { ...input, decision: 'once' }),
+    () => instance.respondQuestion(id, randomUUID(), { ...input, answers: [['yes']] }),
+  ]) await assert.rejects(write(), { code: 'CCDESK_STALE_CONTROL' });
+  assert.equal(control.commands.length, 0);
+});
+
+for (const reason of ['stop', 'connection close']) test(`default linger is unreferenced and cleared on ${reason}`, async t => {
+  const fake = await service(), connections = [];
+  const id = fake.session(randomUUID(), 'cleanup', MAC);
+  const instance = adapter(fake, null, {}, { connection: options => {
+    const connection = new CcDeskConnection(options); connections.push(connection); return connection;
+  } });
+  t.after(async () => { await instance.stop(); await fake.close(); });
+  const watch = await watcher(instance, id);
+  const scheduled = t.mock.method(globalThis, 'setTimeout');
+  const cleared = t.mock.method(globalThis, 'clearTimeout');
+  watch.close();
+  const deadlines = scheduled.mock.calls.filter(call => call.arguments[1] === 120_000);
+  assert.equal(deadlines.length, 1, 'two minutes by default');
+  const timer = deadlines[0].result;
+  assert.equal(timer.hasRef(), false, 'linger cannot keep the process alive');
+  watch.close();
+  assert.equal(scheduled.mock.calls.filter(call => call.arguments[1] === 120_000).length, 1, 'duplicate cancellation does not extend the deadline');
+  if (reason === 'stop') await instance.stop();
+  else connections[0].close();
+  assert.ok(cleared.mock.calls.some(call => call.arguments[0] === timer), 'the linger timer is cancelled');
+  assert.equal(connections[0].closed, true);
+  if (reason === 'stop') await assert.rejects(watcher(instance, id), { code: 'CCDESK_STOPPED' });
+  else {
+    await watcher(instance, id);
+    assert.equal(connections.length, 2, 'closed entry cannot be reused');
+  }
+});
 
 test('config: wss only, CC Desk fingerprints, managed config accepts the section', () => {
   assert.equal(ccDeskConfigSchema.safeParse({ url: 'ws://127.0.0.1:1/ws' }).success, false);
