@@ -9,7 +9,7 @@ const ast = ts.createSourceFile('VoiceInput.tsx', source, ts.ScriptTarget.Latest
 const body = ast.statements.filter(node => !ts.isImportDeclaration(node)).map(node => node.getText(ast)).join('\n').replace('export function VoiceInput', 'function VoiceInput');
 const js = ts.transpileModule(body, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.React, jsxFactory: 'h', jsxFragmentFactory: 'Fragment' } }).outputText;
 const dependencies = ['useEffect', 'useRef', 'useState', 'createPortal', 'VoiceRecorder', 'voiceRecordingSupported', 'voiceApi', 'mergeVoiceDraft', 'voiceError', 'writeClipboard', 'voiceDraftHash', 'document', 'HTMLElement', 'h', 'Fragment', 'Mic', 'X', 'Square', 'Loader2', 'Copy', 'findMissingVoiceDetails', 'buildAsrHints', 'voiceContextEnabled', 'recordVoiceTranscript'];
-const component = new Function(...dependencies, 'joinTranscripts', 'parseVoiceSegment', 'transcribeSegment', 'voiceSegmentMs', 'voiceSegmentedMaxMs', `${js}\nreturn VoiceInput;`);
+const component = new Function('useBackLayer', ...dependencies, 'joinTranscripts', 'parseVoiceSegment', 'transcribeSegment', 'voiceSegmentMs', 'voiceSegmentedMaxMs', `${js}\nreturn VoiceInput;`);
 // The real V5 piece helpers (their only import is a type).
 const segmentsSource = await fs.readFile(new URL('../../apps/mobile/src/features/voice/segments.ts', import.meta.url), 'utf8');
 const segmentsUrl = `data:text/javascript;base64,${Buffer.from(ts.transpileModule(segmentsSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText).toString('base64')}`;
@@ -39,7 +39,7 @@ export function voiceInputDriver({ api, recovery, mergeVoiceDraft, voiceError, v
     if (!previous || deps.some((value, i) => value !== previous.deps[i])) effects.push(() => { previous?.cleanup?.(); slots[index] = { deps, cleanup: setup() }; });
   };
   const h = (type, props, ...children) => ({ type, props: { ...props, children } });
-  const Component = component(useEffect, useRef, useState, child => child, native, () => true, () => api, mergeVoiceDraft, voiceError, async () => {}, voiceDraftHash, document, class {}, h, 'fragment', ...Array(5).fill('icon'), findMissingVoiceDetails, buildAsrHints, voiceContextEnabled, text => { transcripts.push(text); }, segments.joinTranscripts, segments.parseVoiceSegment, segments.transcribeSegment, segments.voiceSegmentMs, segments.voiceSegmentedMaxMs);
+  const Component = component(() => {}, useEffect, useRef, useState, child => child, native, () => true, () => api, mergeVoiceDraft, voiceError, async () => {}, voiceDraftHash, document, class {}, h, 'fragment', ...Array(5).fill('icon'), findMissingVoiceDetails, buildAsrHints, voiceContextEnabled, text => { transcripts.push(text); }, segments.joinTranscripts, segments.parseVoiceSegment, segments.transcribeSegment, segments.voiceSegmentMs, segments.voiceSegmentedMaxMs);
   function render(patch = {}) {
     assert.ok(mounted); Object.assign(props, patch);
     do { dirty = false; cursor = 0; tree = Component(props); for (const run of effects.splice(0)) run(); } while (dirty);

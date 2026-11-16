@@ -1,3 +1,4 @@
+import { useBackLayer } from "../../shared/BackLayers";
 import { useEffect, useRef, useState } from 'react';
 import type { PendingAttachment, ThreadSummary } from '../../app/types';
 import { isDesktopSource, shortPath } from '../threads/model';
@@ -86,6 +87,7 @@ export function HandoffCard({ handoff, scope, threads, selectedId, ready, queue,
     } catch (error) { setError(error instanceof Error ? error.message : '交接状态未能保存。'); }
     finally { busyRef.current = false; setBusy(false); }
   }
+  useBackLayer(visible, () => { if (!busyRef.current && !blocked.current) setVisible(false); }, 211);
   if (!visible) return <button className="handoff-resume" onClick={() => setVisible(true)}>查看交接任务{locked ? '状态' : '卡'}</button>;
   return <div className="handoff-scrim">
     <section ref={card} tabIndex={-1} className="handoff-card" role="dialog" aria-modal="true" aria-labelledby="handoff-title" onKeyDown={event => {

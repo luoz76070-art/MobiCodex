@@ -42,7 +42,7 @@ test('loading uses skeletons instead of spinners; the thread list no longer clai
 test('empty states use the brand illustration everywhere', () => {
   assert.match(app, /<EmptyState title={isNewThread \? "开始一个新线程" : "选择一个 Codex 线程"}>/);
   assert.match(app, /<EmptyState compact title={query\.trim\(\) \? "没有匹配的线程" : "还没有线程"}>/);
-  assert.match(agents, /<EmptyState compact title="还没有接入其他 Agent">/); assert.match(agents, /<EmptyState compact title="没有会话">/);
+  assert.match(agents, /<EmptyState compact title="没有会话">/);
   assert.match(items, /<EmptyState compact className="work-items-empty" title={emptyText\[current\]} \/>/);
 });
 test('skeleton shimmer is a CSS animation, so the reduced-motion rule stops it', () => {

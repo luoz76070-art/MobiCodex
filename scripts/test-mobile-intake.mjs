@@ -64,7 +64,7 @@ test('ShareSheet renders the three destinations, disabled current thread, previe
 });
 
 // Execute actual App handler bodies with synthetic state and upload ports; no model or real threads.
-function shareDriver(seed = payload(), upload = async () => []) {
+function shareDriver(seed = payload(), upload = async () => [], canNavigate = true) {
   let intakeShare = seed;
   const states = { current: { draft: '已有草稿', attachments: [] }, new: { draft: '旧新任务草稿', attachments: [] } };
   const selected = { id: 'current' }, activeThreadKey = selected.id, newThreadId = 'new';
@@ -75,10 +75,10 @@ function shareDriver(seed = payload(), upload = async () => []) {
   const setStatus = text => statuses.push(text), setUploading = () => {}, setSelected = () => {}, setIsNewThread = () => {};
   const refreshRelayStatus = async () => {}, revokeAttachmentPreviews = () => {}, toFriendlyFetchError = String;
   const shareFiles = async value => value.images.map(image => new File(['image'], image.name, { type: image.mimeType })), shareText = m.shareText;
-  const startNewThread = () => { states.new = { draft: '', attachments: [] }; };
+  const startNewThread = () => { if (!canNavigate) return false; states.new = { draft: '', attachments: [] }; return true; };
   const onCaptureIntake = draft => captured.push(draft), onShareDone = id => { done.push(id); intakeShare = null; };
   const create = new Function('ports', `with (ports) { ${transpile(findFunction('uploadFiles'))} ${transpile(findFunction('chooseIntakeShare'))} return chooseIntakeShare; }`);
-  const choose = create({ get intakeShare() { return intakeShare; }, selected, activeThreadKey, newThreadId, scopeAbortRef, uploadInputRef, updateRuntime, uploadAttachments, endpoint, token, setStatus, setUploading, setSelected, setIsNewThread, refreshRelayStatus, revokeAttachmentPreviews, toFriendlyFetchError, shareFiles, shareText, startNewThread, onCaptureIntake, onShareDone });
+  const choose = create({ get intakeShare() { return intakeShare; }, selected, activeThreadKey, newThreadId, scopeAbortRef, uploadInputRef, updateRuntime, uploadAttachments, endpoint, token, setStatus, setUploading, setSelected, setIsNewThread, onSelectSession: () => true, refreshRelayStatus, revokeAttachmentPreviews, toFriendlyFetchError, shareFiles, shareText, startNewThread, onCaptureIntake, onShareDone });
   return { states, done, captured, statuses, choose: (action, signal = new AbortController().signal) => choose(action, signal), dispose: () => scopeAbortRef.current.abort() };
 }
 
@@ -92,6 +92,13 @@ test('current/new shares only append drafts and attachments, with a blank line a
   assert.equal(fresh.states.new.draft, '标题\n正文 https://example.test/');
   assert.equal(fresh.states.current.draft, '已有草稿');
   assert.doesNotMatch(findFunction('chooseIntakeShare'), /sendMessage|sendDesktopMessage|apiPost|\/turns/);
+});
+
+test('a blocked new-task navigation keeps the share queued and the existing drafts intact', async () => {
+  const driver = shareDriver(payload(), async () => [], false);
+  await assert.rejects(driver.choose('new-task'), /当前草稿未能保存/);
+  assert.equal(driver.states.current.draft, '已有草稿'); assert.equal(driver.states.new.draft, '旧新任务草稿');
+  assert.deepEqual(driver.done, []);
 });
 
 test('capture destination hands local Files and text to initialDraft without upload or send', async () => {
@@ -151,7 +158,7 @@ test('voice shortcut requests open the existing panel and can be repeated withou
 
 test('App wiring: outer listener, exact cache cleanup, shared notification route, shortcut counter and deduplicated recent threads', () => {
   assert.match(app, /useIntake\(\{/);
-  assert.match(app, /onShare: payload => \{\s*setAgentMode\(false\); setCaptureOpen\(false\); setItemsOpen\(false\)/);
+  assert.match(app, /onShare: payload => \{\s*if \(!openExternal\(\)\) return;\s*setCaptureOpen\(false\); setItemsOpen\(false\)/);
   assert.match(app, /Intake\.clear\(\{ id \}\)/);
   assert.match(app, /<CapturePanel initialDraft=\{initialDraft\}/);
   assert.match(app, /parseAttentionKey\(payload\.key \?\? ""\)/);
@@ -180,7 +187,12 @@ function componentDriver(source, name, ports, initialProps) {
   const useMemo = (fn, deps) => { const i = cursor++; if (!slots[i] || deps.some((v, j) => v !== slots[i].deps[j])) slots[i] = { value: fn(), deps }; return slots[i].value; };
   const useEffect = (fn, deps) => { const i = cursor++, old = slots[i]; if (!old || deps.some((v, j) => v !== old.deps[j])) effects.push(() => { old?.cleanup?.(); slots[i] = { deps, cleanup: fn() }; }); };
   const h = (type, props, ...children) => ({ type, props: { ...props, children } });
-  const defaults = { useRef, useState, useMemo, useEffect, h, Fragment: 'fragment', createPortal: value => value,
+  const defaults = { useRef, useState, useMemo, useEffect,
+    useBackLayer: (open, close) => useEffect(() => {
+      if (!open) return;
+      const handler = event => { event.preventDefault(); close(); };
+      handlers.set('product-back', handler); return () => handlers.delete('product-back');
+    }, [open, close]), h, Fragment: 'fragment', createPortal: value => value,
     document: { body: {}, activeElement: null }, HTMLElement: class {}, navigator: { onLine: true },
     window: { addEventListener: (name, fn) => handlers.set(name, fn), removeEventListener: name => handlers.delete(name) },
   };
@@ -286,5 +298,5 @@ test('recent thread shortcuts follow updated time and skip equivalent list refre
   threads[0].updatedAt = '2026-11-16T00:00:00Z'; update(); await tick();
   assert.equal(calls.length, 2); assert.equal(calls[1].threads[0].key, 'live:old');
   assert.match(app, /if \(selected && !intakeShortcut && !handoffTarget\) void openThread\(selected\)/, 'cached selection must not replace a cold-start shortcut');
-  assert.match(app, /if \(event.defaultPrevented \|\| intakeShares.length\) return/, 'the share sheet receives back before underlying sheets');
+  assert.match(app, /dismissLayer: backLayers.dismiss/, 'App dispatches back to the highest registered layer');
 });

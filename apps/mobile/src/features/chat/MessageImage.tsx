@@ -1,3 +1,4 @@
+import { useBackLayer } from "../../shared/BackLayers";
 import { createContext, useContext, useMemo, useState, useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ImageIcon, X, RotateCw, Maximize2 } from "lucide-react";
@@ -64,6 +65,7 @@ export function MessageImage({ source, alt }: { source: string; alt: string }) {
   </span>;
 }
 function ImagePreview({ url, alt, close }: { url: string; alt: string; close: () => void }) {
+  useBackLayer(true, close, 1000);
   const ref = useRef<HTMLDialogElement>(null);
   const [original, setOriginal] = useState(false);
   useEffect(() => { ref.current?.showModal(); }, []);

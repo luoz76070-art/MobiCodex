@@ -59,8 +59,9 @@ test('shared top bar has exactly four controls in the same order for every Agent
 });
 test('the Agent picker retains the same four slots, without a redundant switch button', () => {
   const html = m.renderToStaticMarkup(m.createElement(m.WorkspaceHeader, { agentId: '', title: '选择 Agent', subtitle: '同一连接',
-    leading: 'back', leadingLabel: '返回 Codex', onLeading() {}, onOpenItems() {}, onOpenSettings() {} }));
-  assert.equal((html.match(/<button/g) ?? []).length, 3);
+    leading: 'none', leadingLabel: '', onLeading() {}, onOpenItems() {}, onOpenSettings() {} }));
+  assert.equal((html.match(/<button/g) ?? []).length, 2);
+  assert.doesNotMatch(html, /返回 Codex|lucide-chevron-left/);
   assert.match(html, /workspace-switch static/); assert.doesNotMatch(html, /workspace-switch-arrow/);
 });
 test('shared narrow header reserves action widths and truncates the title without Agent branches', async () => {
@@ -76,8 +77,8 @@ test('refresh moved to pull-to-refresh (with a fallback in the thread drawer); s
   assert.match(drawer, /aria-label="刷新线程"/); assert.match(drawer, /onOpenSettings\(\)[^]*aria-label="设置"/);
 });
 test('Agent top bar uses the shared controls, retains back and switch guards and list refresh', () => {
-  assert.match(agents, /<WorkspaceHeader agentId={agent\?\.id \?\? ""}[^]*?onLeading={back} onSwitchAgent={agent \? switchAgent : undefined} onOpenItems={onCapture} onOpenSettings={onOpenSettings}/);
+  assert.match(agents, /<WorkspaceHeader agentId={agent\?\.id \?\? ""}[^]*?onLeading={onBack} onSwitchAgent={switchAgent} onOpenItems={onCapture} onOpenSettings={onOpenSettings}/);
   assert.doesNotMatch(agents, /<header className="topbar/);
   assert.match(agents, /<PullToRefresh className="agent-session-list" onRefresh={\(\) => agent \? loadSessions\(agent\) : loadAgents\(\)}>/);
-  assert.match(agents, /function switchAgent\(\) {\s*if \(!agent \|\| !window\.dispatchEvent\(new Event\(productBeforeNavigate/);
+  assert.match(agents, /function switchAgent\(\) { onOpenAgents\(\); }/);
 });

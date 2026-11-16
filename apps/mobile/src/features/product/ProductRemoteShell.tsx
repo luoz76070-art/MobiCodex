@@ -1,3 +1,4 @@
+import { useBackLayer } from "../../shared/BackLayers";
 import { useEffect, useState, type ReactNode } from "react";
 import { MessageCircle, Monitor, Settings } from "lucide-react";
 import { applyProductAppearance, isKelivoHost, navigateProduct, ProductHost, productAppearanceChanged, productBeforeNavigate, productOpenUpdates, setProductSettingsLaunch, type ProductAppearance } from "./host";
@@ -37,16 +38,10 @@ export function ProductRemoteShell({ children, onComputerSettings, onHandoff }: 
     const open = () => {
       if (window.dispatchEvent(new Event(productBeforeNavigate, { cancelable: true }))) setUpdates(true);
     };
-    const back = (event: Event) => {
-      if (!updates) return;
-      event.preventDefault();
-      if (isKelivoHost) void navigate("settings");
-      else leaveUpdates();
-    };
     window.addEventListener(productOpenUpdates, open);
-    window.addEventListener("product-back", back);
-    return () => { window.removeEventListener(productOpenUpdates, open); window.removeEventListener("product-back", back); };
+    return () => { window.removeEventListener(productOpenUpdates, open); };
   }, [updates]);
+  useBackLayer(updates, () => { if (isKelivoHost) void navigate("settings"); else leaveUpdates(); }, 300);
   function leaveUpdates() {
     if (window.dispatchEvent(new Event(productBeforeNavigate, { cancelable: true }))) setUpdates(false);
   }

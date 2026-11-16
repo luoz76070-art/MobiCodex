@@ -1,3 +1,5 @@
+import { agentPicker, agentSession, type Navigation } from "../../app/navigation";
+import { availableAgents, type Agent } from "./catalog";
 import { WorkspaceHeader } from "../../shared/WorkspaceHeader";
 import type { HandoffTarget } from "../../../../../shared/handoff";
 import { SystemNotice } from "../../shared/SystemNotice";
@@ -7,14 +9,11 @@ import { ComposerSessionStatus } from "../chat/SessionStatus";
 import { agentSessionStatus } from "../chat/sessionStatusModel";
 import { loadReadingPositions, saveReadingPositions } from "../chat/readingPositions";
 import { productBeforeNavigate } from "../product/host";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { registerVoiceAgentDrafts } from "../voice/draftRecovery";
 import type { VoiceRecoveryPort } from "../voice/useVoiceRecovery";
 import { VoiceInput } from "../voice/VoiceInput";
 import { Loader2 } from "lucide-react";
-import { AgentPickRow } from "./AgentPickRow";
-import { checkingSummary, offlineSummary, summarizeSessions, type AgentSummary } from "./agentSummary";
-import { loadWorkspaceCache } from "../threads/cache";
 import { PullToRefresh } from "../../shared/PullToRefresh";
 import { EmptyState } from "../../shared/EmptyState";
 import { ListSkeleton, MessageSkeleton } from "../../shared/Skeleton";
@@ -33,14 +32,13 @@ import { createSnapshotReducer } from "../connection/snapshotPatch";
 import { writeClipboard } from "../../shared/clipboard";
 import { AgentQuestions } from "./AgentQuestions";
 import { AgentQueue } from "./AgentQueue";
-import { agentDelivery, agentHistoryWindow, loadAgentDrafts, loadAgentView, saveAgentView, loadPendingAgentDraft, savePendingAgentDraft, offlineAgent, reconcileAgentDraft, saveAgentDrafts, verifyAgentSnapshot, type PendingAgentDraft } from "./runtime";
+import { agentDelivery, agentHistoryWindow, loadAgentDrafts, loadPendingAgentDraft, savePendingAgentDraft, offlineAgent, reconcileAgentDraft, saveAgentDrafts, verifyAgentSnapshot, type PendingAgentDraft } from "./runtime";
 import type { AgentDelivery, AgentPermission, AgentSession, AgentSessionSnapshot } from "./types";
 import { groupByProject, projectGroupLabel, sessionInRange, sessionListRefreshMs } from "../threads/model";
 import { ProjectGroups } from "../threads/ProjectGroups";
 import { SessionRangeControl } from "../threads/SessionRangeControl";
 import { agentAttentionKey, attentionAfterSend, setAttentionViewing } from "../notify/attention";
 
-type Agent = { id: string; label: string; transport: string; sessionApi?: 1; state?: string };
 const ccDeskErrors: Record<string, string> = {
   CCDESK_OTHER_DEVICE: "这个会话在另一台电脑上，只能在那台电脑上操作。",
   CCDESK_CONTROL_UNAVAILABLE: "CC Desk 没有开启手机控制：请在电脑上打开“CC Desk Tunnel（手机控制）”后重试。",
@@ -55,11 +53,14 @@ const friendlyError = (error: unknown) => {
     : status === 409 ? "会话状态已变化，请等待重新同步后再操作。" : "无法连接 Agent，请确认电脑上的网关与 Agent 服务正在运行。";
 };
 
-export default function AgentWorkspace({ onOpenSettings, handoffTarget, onTargetOpened, onCapture, endpoint, token, scope, onBack, voiceRecovery }: { onOpenSettings: () => void; handoffTarget: HandoffTarget | null; onTargetOpened: () => void; onCapture: () => void; endpoint: string; token: string; scope: string; onBack: () => void; voiceRecovery: VoiceRecoveryPort }) {
+export default function AgentWorkspace({ navigation, onNavigate, onOpenAgents, onOpenSettings, handoffTarget, onTargetOpened, onCapture, endpoint, token, scope, onBack, voiceRecovery }: { navigation: Navigation; onNavigate: (next: Navigation) => boolean; onOpenAgents: () => void; onOpenSettings: () => void; handoffTarget: HandoffTarget | null; onTargetOpened: () => void; onCapture: () => void; endpoint: string; token: string; scope: string; onBack: () => void; voiceRecovery: VoiceRecoveryPort }) {
   const deviceRevoked = useDeviceRevoked(endpoint, token);
-  const restoreView = useRef(loadAgentView(scope));
-  const [agents, setAgents] = useState<Agent[]>([]), [agent, setAgent] = useState<Agent | null>(null);
-  const [sessions, setSessions] = useState<AgentSession[]>([]), [selected, setSelected] = useState<AgentSession | null>(null);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const agent = agents.find(item => item.id === navigation.agentId) ?? null;
+  const [sessions, setSessions] = useState<AgentSession[]>([]);
+  const [sessionDetails, setSessionDetails] = useState<AgentSession | null>(null);
+  const selected = navigation.level === "session" ? sessions.find(item => item.id === navigation.sessionId)
+    ?? (sessionDetails?.id === navigation.sessionId ? sessionDetails : { id: navigation.sessionId, title: "未命名会话", directory: "", updatedAt: "" }) : null;
   const [query, setQuery] = useState(""), [cursor, setCursor] = useState<string | null>(null);
   const [range, setRange] = useState<"recent" | "all">("recent");
   const [error, setError] = useState(""), [loading, setLoading] = useState(false);
@@ -70,8 +71,6 @@ export default function AgentWorkspace({ onOpenSettings, handoffTarget, onTarget
     write: value => { if (!saveAgentDrafts(scope, value)) return false; draftsRef.current = value; setDrafts(value); return true; },
   }), [scope]);
   const controller = useRef<AbortController | null>(null), requestId = useRef(0);
-  const summaryController = useRef<AbortController | null>(null);
-  const [summaries, setSummaries] = useState<Record<string, AgentSummary>>({}), [reachable, setReachable] = useState<boolean | null>(null);
   useEffect(() => {
     const flush = () => saveAgentDrafts(scope, draftsRef.current);
     const beforeNavigate = (event: Event) => { if (!flush()) { event.preventDefault(); setError("草稿保存失败，请保留当前页面并重试。"); } };
@@ -82,7 +81,7 @@ export default function AgentWorkspace({ onOpenSettings, handoffTarget, onTarget
   useEffect(() => { const timer = setTimeout(() => saveAgentDrafts(scope, draftsRef.current), 700); return () => clearTimeout(timer); }, [drafts, scope]);
   useEffect(() => {
     void loadAgents();
-    return () => { ++requestId.current; controller.current?.abort(); summaryController.current?.abort(); };
+    return () => { ++requestId.current; controller.current?.abort(); };
   }, [endpoint, token]);
   function begin(silent = false) { controller.current?.abort(); controller.current = new AbortController(); const id = ++requestId.current; if (!silent) { setError(""); setLoading(true); } return { signal: controller.current.signal, id }; }
   async function loadAgents() {
@@ -91,34 +90,14 @@ export default function AgentWorkspace({ onOpenSettings, handoffTarget, onTarget
       const data = await apiGet<{ agents: Agent[] }>(buildUrl(endpoint, "/api/agents"), token, request.signal);
       if (request.id !== requestId.current) return;
       if (!Array.isArray(data.agents)) throw new Error("invalid agents");
-      const available = data.agents.filter(item => /^[a-z][a-z0-9-]{0,63}$/u.test(item.id) && (item.sessionApi === 1
-        || (item.id === "opencode" && item.transport === "opencode-v2-http-sse") || (item.id === "claude" && item.transport === "claude-mods-http") || (item.id === "deepseek" && item.transport === "deepseek-cordis-http-sse")));
-      setAgents(available); setReachable(true);
-      void loadSummaries(available);
-      const restore = restoreView.current;
-      const target = available.find(item => item.id === restore?.agentId);
-      if (target) void loadSessions(target);
-      else restoreView.current = null;
-    } catch (caught) { if (!request.signal.aborted) { setError(friendlyError(caught)); setReachable(false); } }
+      const available = availableAgents(data.agents);
+      setAgents(available);
+      if (!available.some(item => item.id === navigation.agentId)) onNavigate(agentPicker());
+    } catch (caught) { if (!request.signal.aborted) setError(friendlyError(caught)); }
     finally { if (!request.signal.aborted) setLoading(false); }
   }
-  /** U13: the first page of each Agent's sessions tells whether it answers, how many sessions and the latest activity. */
-  async function loadSummaries(list: Agent[]) {
-    summaryController.current?.abort();
-    const current = new AbortController();
-    summaryController.current = current;
-    setSummaries(Object.fromEntries(list.map(item => [item.id, checkingSummary])));
-    await Promise.all(list.map(async item => {
-      try {
-        const data = await apiGet<{ sessions: AgentSession[]; cursor: string | null }>(buildUrl(endpoint, `/api/agents/${item.id}/sessions${item.id === "deepseek" ? "?range=recent" : ""}`), token, current.signal);
-        if (!Array.isArray(data.sessions)) throw new Error("invalid sessions");
-        if (!current.signal.aborted) setSummaries(previous => ({ ...previous, [item.id]: summarizeSessions(data.sessions, Boolean(data.cursor)) }));
-      } catch { if (!current.signal.aborted) setSummaries(previous => ({ ...previous, [item.id]: offlineSummary })); }
-    }));
-  }
   async function loadSessions(target: Agent, append = false, selectedRange = range, silent = false) {
-    const request = begin(silent); setAgent(target);
-    if (!restoreView.current) saveAgentView(scope, target.id, null);
+    const request = begin(silent);
     try {
       const params = new URLSearchParams({ ...(query.trim() ? { search: query.trim() } : {}), ...(append && cursor ? { cursor } : {}), ...(target.id === "deepseek" ? { range: selectedRange } : {}) });
       const data = await apiGet<{ sessions: AgentSession[]; cursor: string | null }>(buildUrl(endpoint, `/api/agents/${target.id}/sessions?${params}`), token, request.signal);
@@ -127,14 +106,14 @@ export default function AgentWorkspace({ onOpenSettings, handoffTarget, onTarget
       setSessions(current => silent ? [...new Map([...current, ...data.sessions].map(item => [item.id, item])).values()].filter(item => sessionInRange(item.updatedAt, selectedRange) || data.sessions.some(next => next.id === item.id)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
         : append ? [...new Map([...current, ...data.sessions].map(item => [item.id, item])).values()] : data.sessions);
       if (!silent || sessions.length < 50) setCursor(data.cursor);
-      if (restoreView.current?.agentId === target.id) {
-        const restored = data.sessions.find(item => item.id === restoreView.current?.sessionId);
-        restoreView.current = null;
-        if (restored) setSelected(restored);
-      }
     } catch (caught) { if (!request.signal.aborted) setError(friendlyError(caught)); }
     finally { if (!request.signal.aborted) setLoading(false); }
   }
+  useEffect(() => {
+    if (agent && (navigation.level === "agent" || sessions.length === 0)) void loadSessions(agent);
+    // Navigation owns selection; refreshing a list must never select a session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agent?.id, navigation.level]);
   useEffect(() => {
     if (deviceRevoked || agent?.id !== "deepseek" || selected || loading) return;
     const refresh = () => { if (!document.hidden) void loadSessions(agent, false, range, true); };
@@ -146,35 +125,19 @@ export default function AgentWorkspace({ onOpenSettings, handoffTarget, onTarget
     if (!handoffTarget || handoffTarget.agentId === 'codex') return;
     const target = agents.find(a => a.id === handoffTarget.agentId);
     if (!target) return;
-    restoreView.current = null;
-    setAgent(target); setSelected({ id: handoffTarget.sessionId, title: handoffTarget.title, directory: handoffTarget.cwd, updatedAt: new Date().toISOString() });
+    setSessionDetails({ id: handoffTarget.sessionId, title: handoffTarget.title, directory: handoffTarget.cwd, updatedAt: new Date().toISOString() });
     onTargetOpened();
   }, [handoffTarget, agents, onTargetOpened]);
   // F1: no notification for the session that is on screen.
   useEffect(() => { setAttentionViewing(agent && selected ? agentAttentionKey(agent.id, selected.id) : null); }, [agent?.id, selected?.id]);
   useEffect(() => () => setAttentionViewing(null), []);
-  function back() {
-    if (!window.dispatchEvent(new Event(productBeforeNavigate, { cancelable: true }))) return;
-    saveAgentView(scope, selected ? agent?.id ?? null : null, null);
-    if (selected) { setSelected(null); if (agent) void loadSessions(agent); }
-    else if (agent) { ++requestId.current; controller.current?.abort(); setAgent(null); setSessions([]); setCursor(null); setError(""); setLoading(false); }
-    else onBack();
-  }
-  /** U4: tapping the title goes straight back to the Agent list, from any depth. */
-  function switchAgent() {
-    if (!agent || !window.dispatchEvent(new Event(productBeforeNavigate, { cancelable: true }))) return;
-    saveAgentView(scope, null, null);
-    setSelected(null); ++requestId.current; controller.current?.abort(); setAgent(null); setSessions([]); setCursor(null); setError(""); setLoading(false);
-  }
-  // Codex lives in the phone workspace; its row uses the thread list cached there, and the gateway answering stands for online.
-  const codexThreads = useMemo(() => agent ? [] : loadWorkspaceCache(scope).threads, [agent, scope, reachable]);
-  const codexSummary: AgentSummary = reachable === null ? checkingSummary : !reachable ? offlineSummary : summarizeSessions(codexThreads, codexThreads.length >= 120);
+  function switchAgent() { onOpenAgents(); }
   const title = selected?.title || agent?.label || "选择 Agent";
   const subtitle = selected ? `${agent?.label} · 原服务会话` : "同一连接，分别管理会话";
   return <main className="agent-workspace">
     <WorkspaceHeader agentId={agent?.id ?? ""} title={title} subtitle={subtitle} project={selected?.directory ? projectGroupLabel(selected.directory) : undefined}
-      leading="back" leadingLabel={selected ? "返回 Agent 会话列表" : agent ? "返回 Agent 列表" : "返回 Codex"}
-      onLeading={back} onSwitchAgent={agent ? switchAgent : undefined} onOpenItems={onCapture} onOpenSettings={onOpenSettings} />
+      leading="back" leadingLabel={selected ? "返回 Agent 会话列表" : "返回 Agent 列表"}
+      onLeading={onBack} onSwitchAgent={switchAgent} onOpenItems={onCapture} onOpenSettings={onOpenSettings} />
     {(deviceRevoked || error) && <SystemNotice error>{deviceRevoked ? deviceRevokedMessage : error}</SystemNotice>}
     {selected && agent ? <AgentChat voiceRecovery={voiceRecovery} key={`${agent.id}:${selected.id}`} endpoint={endpoint} token={token} agent={agent} session={selected}
       scopeKey={scope} draft={drafts[`${agent.id}:${selected.id}`] ?? ""} onDraft={value => setDrafts(current => {
@@ -183,17 +146,11 @@ export default function AgentWorkspace({ onOpenSettings, handoffTarget, onTarget
         return { ...next, [key]: value };
       })} />
       : <PullToRefresh className="agent-session-list" onRefresh={() => agent ? loadSessions(agent) : loadAgents()}>
-        {!agent && <>
-          <AgentPickRow id="codex" label="Codex" description="电脑桌面会话与手机工作台" summary={codexSummary} onOpen={onBack} />
-          {agents.map(item => <AgentPickRow key={item.id} id={item.id} label={item.label} summary={summaries[item.id]} recentOnly={item.id === "deepseek"} onOpen={() => void loadSessions(item)}
-            description={item.id === "deepseek" ? "查看电脑会话与历史，继续原线程和处理提问" : item.id === "ccdesk" ? "查看 CC Desk 会话，发消息、审批与中断" : item.id === "claude" ? "打开已加载插件的会话，查看输出、排队输入与中断" : "打开现有会话，查看输出与处理提问"} />)}
-          {!loading && !agents.length && !error && <EmptyState compact title="还没有接入其他 Agent">配置 DeepSeek Harness、Claude Code 插件、CC Desk 或 OpenCode 服务后，下拉刷新此页。</EmptyState>}
-        </>}
         {agent && <>
           {agent.id === "deepseek" && <SessionRangeControl range={range} disabled={loading} onChange={next => { setRange(next); void loadSessions(agent, false, next); }} />}
           <form className="search-field" onSubmit={event => { event.preventDefault(); void loadSessions(agent); }}><input aria-label="搜索 Agent 会话" placeholder="搜索会话" value={query} maxLength={200} onChange={event => setQuery(event.target.value)} /><button type="submit" disabled={loading}>搜索</button></form>
           {<ProjectGroups key={agent.id} scope={scope} agentId={agent.id} groups={groupByProject(sessions, session => session.directory)} search={query}>
-            {session => <button className="agent-session-row" key={session.id} onClick={() => { saveAgentView(scope, agent.id, session.id); setSelected(session); }}><strong>{session.title || "未命名会话"}</strong><time>{new Date(session.updatedAt).toLocaleString()}</time></button>}
+            {session => <button className="agent-session-row" key={session.id} onClick={() => { onNavigate(agentSession(agent.id, session.id)); }}><strong>{session.title || "未命名会话"}</strong><time>{new Date(session.updatedAt).toLocaleString()}</time></button>}
           </ProjectGroups>}
           {!loading && !sessions.length && !error && <EmptyState compact title="没有会话">{agent.id === "deepseek" ? range === "recent" ? "近 30 天没有匹配会话，可查看更早会话。" : "没有匹配的 DeepSeek 会话，请检查电脑插件连接或搜索条件。" : agent.id === "ccdesk" ? "CC Desk 服务上没有匹配的会话。" : agent.id === "claude" ? `尚无已连接的 ${agent.label} 会话，请先在电脑会话中加载并配置插件。` : "当前目录没有可用的现有会话。"}</EmptyState>}
           {cursor && <button className="action-button" disabled={loading} onClick={() => void loadSessions(agent, true)}>加载更多会话</button>}

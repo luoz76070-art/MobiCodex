@@ -1,3 +1,4 @@
+import { useBackLayer } from "../../shared/BackLayers";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Mic, X, Square, Loader2, Copy } from "lucide-react";
@@ -38,6 +39,7 @@ export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, rec
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openRequest]);
 
+  useBackLayer(open, () => { cancel(); setOpen(false); setPhase("idle"); }, capture ? 220 : 100);
   function cancel() {
     const active = session.current; session.current = null;
     if (active) {

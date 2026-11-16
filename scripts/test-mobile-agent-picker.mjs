@@ -13,7 +13,7 @@ await build({
   outfile: path.join(dir, 'picker.cjs'), bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', nodePaths: [path.resolve('apps/mobile/node_modules')],
 });
 const m = createRequire(import.meta.url)(path.join(dir, 'picker.cjs'));
-const source = await fs.readFile('apps/mobile/src/features/agents/AgentWorkspace.tsx', 'utf8');
+const source = await fs.readFile('apps/mobile/src/features/agents/AgentPicker.tsx', 'utf8');
 const now = Date.parse('2026-11-14T12:00:00+08:00');
 
 test('summary keeps the latest valid activity and whether more sessions exist', () => {
@@ -51,10 +51,12 @@ test('picker row shows icon, name, status and meta', () => {
   const checking = m.renderToStaticMarkup(m.createElement(m.AgentPickRow, { id: 'x', label: 'X', description: 'd', summary: undefined, onOpen() {} }));
   assert.match(checking, /agent-pick-status checking">检测中/); assert.doesNotMatch(checking, /agent-pick-meta/);
 });
-test('workspace loads summaries with its own abortable request and lists Codex first', () => {
-  assert.match(source, /setAgents\(available\); setReachable\(true\);\s*void loadSummaries\(available\);/);
-  assert.match(source, /controller\.current\?\.abort\(\); summaryController\.current\?\.abort\(\); };\s*}, \[endpoint, token\]\);/);
+test('picker lists Codex and other Agents through the same navigation callback', () => {
+  assert.match(source, /const available = \[codexAgent, \.\.\.availableAgents\(data.agents\)\]/);
+  assert.match(source, /controller.current\?\.abort\(\)/);
   assert.match(source, /\?range=recent/);
-  const rows = source.slice(source.indexOf('{!agent && <>'));
-  assert.ok(rows.indexOf('<AgentPickRow id="codex"') < rows.indexOf('{agents.map(item => <AgentPickRow'));
+  assert.match(source, /agents.map\(agent => <AgentPickRow/);
+  assert.match(source, /onOpen={\(\) => onSelect\(agent.id\)}/);
+  assert.match(source, /leading="none"/);
+  assert.doesNotMatch(source, /onBack|返回 Codex/);
 });

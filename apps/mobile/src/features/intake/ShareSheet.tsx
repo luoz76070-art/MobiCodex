@@ -1,3 +1,4 @@
+import { useBackLayer } from "../../shared/BackLayers";
 import { useEffect, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { shareText, type SharePayload } from "./plugin";
@@ -12,17 +13,13 @@ export function ShareSheet({ payload, currentTitle, onChoose, onCancel }: {
   useEffect(() => {
     const previous = document.activeElement;
     sheet.current?.focus();
-    const cancel = (event: Event) => {
-      if (event.defaultPrevented) return;
-      event.preventDefault(); event.stopImmediatePropagation(); action.current?.abort(); onCancel();
-    };
-    window.addEventListener("product-back", cancel, { capture: true });
     return () => {
-      action.current?.abort(); window.removeEventListener("product-back", cancel, { capture: true });
+      action.current?.abort();
       if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
     };
   }, [onCancel]);
   function cancel() { action.current?.abort(); onCancel(); }
+  useBackLayer(true, cancel, 220);
   async function choose(value: ShareAction) {
     if (action.current) return;
     const controller = new AbortController(); action.current = controller; setBusy(true); setError("");

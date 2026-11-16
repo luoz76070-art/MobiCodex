@@ -7,7 +7,7 @@ type WorkspaceHeaderProps = {
   subtitle: string;
   project?: string;
   connection?: { label: string; state: "idle" | "testing" | "ok" | "error" };
-  leading: "menu" | "back";
+  leading: "menu" | "back" | "none";
   leadingLabel: string;
   onLeading: () => void;
   onSwitchAgent?: () => void;
@@ -25,9 +25,9 @@ export function WorkspaceHeader({ agentId, title, subtitle, project, connection,
     {onSwitchAgent && <ChevronDown className="workspace-switch-arrow" size={14} aria-hidden="true" />}
   </>;
   return <header className="topbar workspace-header glass-surface">
-    <button type="button" className="icon-button" onClick={onLeading} aria-label={leadingLabel} title={leadingLabel}>
+    {leading === "none" ? <span aria-hidden="true" /> : <button type="button" className="icon-button" onClick={onLeading} aria-label={leadingLabel} title={leadingLabel}>
       {leading === "menu" ? <Menu size={22} /> : <ChevronLeft size={21} />}
-    </button>
+    </button>}
     <div className="workspace-title">{onSwitchAgent
       ? <button type="button" className="workspace-switch" onClick={onSwitchAgent} title="切换 Agent"
         aria-label={`${title}${connection ? `，${connection.label}` : ""}${project ? `，项目 ${project}` : ""}，点按切换 Agent`}>{titleContent}</button>

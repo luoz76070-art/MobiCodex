@@ -1,3 +1,4 @@
+import { appNavigationFixture, findElement as find, navigationModel } from "./helpers/mobile-navigation-fixture.mjs";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -42,29 +43,7 @@ test('no developer jargon in visible settings text; 401 wording no longer claims
   assert.match(deviceRevokedMessage, /撤销/); assert.match(deviceRevokedMessage, /令牌不对/); assert.match(deviceRevokedMessage, /重新配对/);
 });
 
-// Execute the production App with isolated hooks/ports; retain the same element tree on rerender.
-const ast = ts.createSourceFile('App.tsx', app, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-const appFunction = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'App').getText(ast).replace('export function', 'function');
-const js = ts.transpileModule(appFunction, { compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
-function appFixture(agentMode) {
-  const states = [], effects = []; let cursor = 0;
-  const storage = new Map([['productRemoteMode', agentMode ? 'agent' : 'codex']]);
-  const profile = { id: 'test', cacheNamespace: 'fixed', endpoint: '', token: '', name: '测试连接' };
-  const h = (type, props, ...children) => ({ type, props: { ...props, children } });
-  const hooks = {
-    React: { createElement: h, Suspense: 'Suspense' },
-    useState(initial) { const index = cursor++; if (!(index in states)) states[index] = typeof initial === 'function' ? initial() : initial;
-      return [states[index], value => { states[index] = typeof value === 'function' ? value(states[index]) : value; }]; },
-    useCallback: callback => callback, useEffect: effect => effects.push(effect), loadConnectionProfiles: () => [profile], defaultProfileId: profile.id,
-    normalizeEndpoint: value => value, defaultSplitMode: () => 'auto', defaultApprovalPolicy: () => 'never', defaultSandboxMode: () => 'workspace-write',
-    useVoiceRecovery: () => ({ recovery: {}, notice: null }), useAttention() {}, useIntake() {}, takeProductSettingsLaunch() {},
-    localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) },
-    ProductRemoteShell: 'Shell', WorkItemsPage: 'Items', CapturePanel: 'Capture', AgentWorkspace: 'AgentWorkspace', Workspace: 'Workspace', GlobalSettings: 'Settings',
-  };
-  const renderApp = new Function(...Object.keys(hooks), js + '; return App;')(...Object.values(hooks));
-  return { render() { cursor = 0; effects.length = 0; return renderApp(); }, effects, storage };
-}
-const find = (tree, type) => tree?.type === type ? tree : tree?.props?.children?.flat(Infinity).map(child => find(child, type)).find(Boolean);
+const appFixture = agentMode => appNavigationFixture(navigationModel.agentSession(agentMode ? 'claude' : 'codex', 'synthetic-session'), [['productRemoteMode', agentMode ? 'agent' : 'codex']]);
 test('both workspaces open global settings without switching mode or replacing the active workspace', () => {
   for (const agentMode of [false, true]) {
     const f = appFixture(agentMode), initial = f.render(), type = agentMode ? 'AgentWorkspace' : 'Workspace';
@@ -79,19 +58,19 @@ test('both workspaces open global settings without switching mode or replacing t
     assert.equal(find(opened, agentMode ? 'Workspace' : 'AgentWorkspace'), undefined);
     find(opened, 'Settings').props.onClose(); assert.equal(find(f.render(), 'Settings').props.settingsOpen, false);
     // The host computer-settings entry uses the very same global sheet.
-    initial.props.onComputerSettings(); assert.equal(find(f.render(), 'Settings').props.settingsOpen, true);
+    find(initial, 'Shell').props.onComputerSettings(); assert.equal(find(f.render(), 'Settings').props.settingsOpen, true);
     assert.equal(f.storage.get('productRemoteMode'), agentMode ? 'agent' : 'codex');
+    f.stop();
   }
 });
 test('the settings back handler consumes back before Agent navigation and leaves the workspace mounted', () => {
-  const savedWindow = globalThis.window; globalThis.window = new EventTarget();
+  const f = appFixture(true);
   try {
-    const f = appFixture(true); find(f.render(), 'AgentWorkspace').props.onOpenSettings(); f.render();
-    const cleanups = f.effects.map(effect => effect()).filter(Boolean);
-    const event = new Event('product-back', { cancelable: true }); window.dispatchEvent(event);
+    find(f.render(), 'AgentWorkspace').props.onOpenSettings(); f.render();
+    const event = f.back();
     assert.equal(event.defaultPrevented, true); assert.equal(find(f.render(), 'Settings').props.settingsOpen, false);
-    assert.ok(find(f.render(), 'AgentWorkspace')); cleanups.forEach(cleanup => cleanup());
-  } finally { globalThis.window = savedWindow; }
+    assert.equal(find(f.render(), 'AgentWorkspace').props.navigation.sessionId, 'synthetic-session');
+  } finally { f.stop(); }
 });
 test('Agent settings callback reaches every header and Codex-only actions are explicit', () => {
   assert.match(agents, /<WorkspaceHeader[^]*?onOpenSettings={onOpenSettings}/);
@@ -107,7 +86,7 @@ const agentFunction = agentAst.statements.find(node => ts.isFunctionDeclaration(
 const agentJs = ts.transpileModule(agentFunction, { compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
 function renderAgentWorkspace(agent, session, onOpenSettings) {
   // Seed the production component at each navigation depth without network effects.
-  const states = [[agent].filter(Boolean), agent, session ? [session] : [], session]; let cursor = 0;
+  const states = [[agent].filter(Boolean), session ? [session] : [], session]; let cursor = 0;
   const hooks = {
     React: { createElement: (type, props, ...children) => ({ type, props: { ...props, children } }) },
     useState(initial) { const index = cursor++; if (!(index in states)) states[index] = typeof initial === 'function' ? initial() : initial;
@@ -119,11 +98,11 @@ function renderAgentWorkspace(agent, session, onOpenSettings) {
     ProjectGroups: 'Projects', SessionRangeControl: 'Range', ListSkeleton: 'Skeleton',
   };
   return new Function(...Object.keys(hooks), agentJs + '; return AgentWorkspace;')(...Object.values(hooks))({
-    handoffTarget: null, onTargetOpened() {}, onCapture() {}, endpoint: '', token: '', scope: 'synthetic', onBack() {}, voiceRecovery: {}, onOpenSettings,
+    navigation: session ? navigationModel.agentSession(agent.id, session.id) : navigationModel.agentList(agent.id), onNavigate() {}, onOpenAgents() {}, handoffTarget: null, onTargetOpened() {}, onCapture() {}, endpoint: '', token: '', scope: 'synthetic', onBack() {}, voiceRecovery: {}, onOpenSettings,
   });
 }
 test('settings opens from the actual Agent picker, session list and chat headers without losing the session identity', () => {
-  for (const id of [null, 'claude', 'deepseek', 'opencode', 'ccdesk']) {
+  for (const id of ['claude', 'deepseek', 'opencode', 'ccdesk']) {
     for (const chat of id ? [false, true] : [false]) {
       const f = appFixture(true), appTree = f.render(), onOpenSettings = find(appTree, 'AgentWorkspace').props.onOpenSettings;
       const agent = id ? { id, label: id } : null, session = chat ? { id: 'session', title: '合成会话', directory: '~/code/weather-app' } : null;
@@ -134,7 +113,13 @@ test('settings opens from the actual Agent picker, session list and chat headers
       assert.equal(find(after, 'Header').props.title, find(before, 'Header').props.title);
       assert.equal(find(after, 'Chat')?.props.key, find(before, 'Chat')?.props.key);
       if (chat) { assert.equal(find(after, 'Chat').props.session, session); assert.equal(find(after, 'Chat').props.agent, agent); }
-      assert.equal(f.storage.get('productRemoteMode'), 'agent');
+      assert.equal(f.storage.get('productRemoteMode'), 'agent'); f.stop();
     }
   }
+});
+
+test('settings is available on the root Agent picker too', () => {
+  const f = appNavigationFixture();
+  try { find(f.render(), 'Picker').props.onOpenSettings(); assert.equal(find(f.render(), 'Settings').props.settingsOpen, true); assert.ok(find(f.render(), 'Picker')); }
+  finally { f.stop(); }
 });
