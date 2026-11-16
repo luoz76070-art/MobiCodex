@@ -116,3 +116,10 @@ test('#18 finished-task notifications pop up and vibrate on a new channel that r
   assert.match(bridge, /result\.put\("banner", banner\)/);
   assert.match(bridge, /result\.put\("vibrate", vibrate\)/);
 });
+
+test('a CC Desk notification opens the CC Desk session instead of falling back to Codex', async () => {
+  const app = await readFile(path.join(root, 'apps/mobile/src/app/App.tsx'), 'utf8');
+  const list = app.match(/const agentId = \((\[[^\]]+\])\.includes\(target\.agentId\)/);
+  assert.ok(list, 'notification agent list not found');
+  assert.deepEqual(JSON.parse(list[1]).sort(), ['ccdesk', 'claude', 'codex', 'deepseek', 'opencode']);
+});

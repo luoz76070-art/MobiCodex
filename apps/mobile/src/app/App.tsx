@@ -124,7 +124,8 @@ export function App() {
     return () => window.removeEventListener("product-back", back, { capture: true });
   }, [captureOpen, itemsOpen, intakeShares.length]);
   const openFromNotification = useCallback((target: { agentId: string; sessionId: string; title: string }) => {
-    const agentId = (["codex", "claude", "deepseek", "opencode"].includes(target.agentId) ? target.agentId : "codex") as HandoffTarget["agentId"];
+    // CC Desk is no handoff agent, but its notifications still open its own session: AgentWorkspace looks the id up at runtime.
+    const agentId = (["codex", "claude", "deepseek", "opencode", "ccdesk"].includes(target.agentId) ? target.agentId : "codex") as HandoffTarget["agentId"];
     setCaptureOpen(false); setItemsOpen(false); setHandoffTarget({ agentId, sessionId: target.sessionId, title: target.title, cwd: "" });
     try { localStorage.setItem("productRemoteMode", agentId === "codex" ? "codex" : "agent"); } catch { /* In-memory selection remains. */ }
     setAgentMode(agentId !== "codex");
