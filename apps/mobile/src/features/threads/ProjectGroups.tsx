@@ -4,8 +4,9 @@ import { loadProjectGroups, saveProjectGroups } from "./projectPreferences";
 
 type Group<T> = { key: string; label: string; detail: string; items: T[] };
 
-export function ProjectGroups<T>({ scope, agentId, groups, search, children }: {
+export function ProjectGroups<T>({ scope, agentId, groups, search, children, onNewThread }: {
   scope: string; agentId: string; groups: Group<T>[]; search: string; children: (item: T) => ReactNode;
+  onNewThread?: (cwd: string) => void;
 }) {
   const [collapsed, setCollapsed] = useState(() => loadProjectGroups(scope, agentId));
   useEffect(() => { saveProjectGroups(scope, agentId, collapsed); }, [scope, agentId, collapsed]);
@@ -16,11 +17,12 @@ export function ProjectGroups<T>({ scope, agentId, groups, search, children }: {
       return Object.fromEntries(Object.entries(next).slice(-256));
     });
   }
-  return <>{groups.map(group => <ProjectGroup key={group.key} group={group} search={search.trim()} collapsed={Boolean(collapsed[group.key])} onToggle={() => toggle(group.key)}>{() => group.items.map(children)}</ProjectGroup>)}</>;
+  return <>{groups.map(group => <ProjectGroup key={group.key} group={group} search={search.trim()} collapsed={Boolean(collapsed[group.key])} onToggle={() => toggle(group.key)} onNewThread={onNewThread}>{() => group.items.map(children)}</ProjectGroup>)}</>;
 }
 
-function ProjectGroup({ group, search, collapsed, onToggle, children }: {
+function ProjectGroup({ group, search, collapsed, onToggle, children, onNewThread }: {
   group: Group<unknown>; search: string; collapsed: boolean; onToggle: () => void; children: () => ReactNode;
+  onNewThread?: (cwd: string) => void;
 }) {
   const id = useId();
   const [searchCollapsed, setSearchCollapsed] = useState(false);
@@ -35,6 +37,7 @@ function ProjectGroup({ group, search, collapsed, onToggle, children }: {
       <span className="project-name" title={group.key === "__uncategorized__" ? group.label : group.key}><span>{group.label}</span>{group.detail && <small>{group.detail}</small>}</span>
       <em title="已加载会话数">{group.items.length}</em>
     </button>
+    {onNewThread && group.key !== "__uncategorized__" && <button type="button" className="text-action project-new-thread" onClick={() => onNewThread(group.key)}>在这个项目里新建</button>}
     <div id={id} className="project-threads" hidden={!expanded}>{expanded && children()}</div>
   </section>;
 }

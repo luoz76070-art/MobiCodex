@@ -10,7 +10,7 @@ const threadInputCacheKey = "mobileCodexThreadInputCacheV1";
 const inputCacheByteBudget = 1024 * 1024;
 const messageCacheByteBudget = 2 * 1024 * 1024;
 
-type CachedInput = Pick<ThreadRuntime, "draft" | "pendingMessageId" | "pendingMessageText" | "pendingMessageSource"> & { localMessages?: CodexMessage[]; attachments?: PendingAttachment[] };
+type CachedInput = Pick<ThreadRuntime, "draft" | "newThreadCwd" | "pendingMessageId" | "pendingMessageText" | "pendingMessageSource"> & { localMessages?: CodexMessage[]; attachments?: PendingAttachment[] };
 type CachedThread = Partial<CachedInput> & {
   messageIdentityVersion?: number; messages?: CodexMessage[]; cursor?: number;
   generation?: string; historyBefore?: number; lastAccessedAt?: number;
@@ -213,6 +213,7 @@ function restoredAttachments(value: unknown): PendingAttachment[] {
 function inputFromRuntime(runtime: Partial<ThreadRuntime>): CachedInput {
   return {
     draft: typeof runtime.draft === "string" ? runtime.draft : "",
+    newThreadCwd: typeof runtime.newThreadCwd === "string" ? runtime.newThreadCwd : undefined,
     attachments: restoredAttachments(runtime.attachments),
     pendingMessageId: typeof runtime.pendingMessageId === "string" ? runtime.pendingMessageId : undefined,
     pendingMessageText: typeof runtime.pendingMessageText === "string" ? runtime.pendingMessageText : undefined,
@@ -222,7 +223,7 @@ function inputFromRuntime(runtime: Partial<ThreadRuntime>): CachedInput {
 }
 
 function hasInput(input: CachedInput): boolean {
-  return Boolean(input.draft || input.pendingMessageId || input.pendingMessageText || input.localMessages?.length || input.attachments?.length);
+  return Boolean(input.draft || input.newThreadCwd || input.pendingMessageId || input.pendingMessageText || input.localMessages?.length || input.attachments?.length);
 }
 
 export function loadThreadRuntimeCache(scope = "legacy-disabled"): Record<string, ThreadRuntime> {
@@ -248,6 +249,7 @@ export function loadThreadRuntimeCache(scope = "legacy-disabled"): Record<string
     result[threadId] = {
       ...defaultRuntime(), messages,
       draft: typeof input.draft === "string" ? input.draft : "",
+      newThreadCwd: typeof input.newThreadCwd === "string" ? input.newThreadCwd : undefined,
       attachments: restoredAttachments(input.attachments),
       pendingMessageId: input.pendingMessageId, pendingMessageText: input.pendingMessageText, pendingMessageSource: input.pendingMessageSource,
       generation: refresh ? undefined : item.generation,

@@ -15,6 +15,7 @@ import { z } from "zod";
 import type { PassThrough } from "node:stream";
 import { createEventStream } from "./eventStream.js";
 import { CodexStore } from "../store/codexStore.js";
+import { createProjectCatalog } from "../store/projects.js";
 import { resolveCodexExecutableDetails } from "../codex/codexExecutable.js";
 import { loadConfig, type RelayConfig } from "../config.js";
 import { DesktopControl, type DesktopStreamSnapshot } from "../desktop/desktopControl.js";
@@ -57,6 +58,7 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
   const config = options.config ?? loadConfig();
   if (config.claude && (!claudeConfigSchema.safeParse(config.claude).success || config.claude.bridgeToken === config.token)) throw new Error("CLAUDE_CONFIG_INVALID");
   const store = options.services?.store ?? new CodexStore(config.codexHome);
+  const projects = createProjectCatalog(store, config.codexHome, config.defaultCwd);
   const live = options.services?.live ?? new LiveCodex(config.defaultCwd);
   const liveTurns = options.services?.liveTurns ?? new LiveTurnController(config.defaultCwd);
   const desktopControl = options.services?.desktopControl ?? new DesktopControl(store, { codexHome: config.codexHome, transport: config.desktopTransport, loadThread: createDesktopThreadLoader(store) });
@@ -268,6 +270,7 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
   });
 
   app.get("/api/live/turns", async () => ({ turns: liveTurns.listActiveTurns() }));
+  app.get("/api/projects", async () => ({ projects: await projects.list() }));
 
   app.post("/api/live/turns", async (request) => {
     const body = z
@@ -285,6 +288,7 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
     if (body.model && !body.threadId) throw Object.assign(new Error("A model switch needs a thread"), { statusCode: 400, code: "codex_switch_needs_thread" });
     const owner = owners.get(request)!;
     return submissions.execute(body.clientMessageId, { route: "live-turn", ...body }, async () => {
+      if (!body.threadId && body.cwd !== undefined) body.cwd = await projects.requireKnown(body.cwd);
       const prepared = body.model && body.threadId ? await modelSwitchRoutes.prepare(body.threadId, body.model) : null;
       const turn = await liveTurns.startTurn(prepared ? { ...body, model: prepared.model, effort: prepared.effort,
         approvalPolicy: prepared.live.approvalPolicy ?? body.approvalPolicy, sandbox: prepared.live.sandbox ?? body.sandbox } : body);

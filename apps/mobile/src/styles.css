@@ -2543,6 +2543,10 @@ button.workspace-switch:active, button.workspace-switch:focus-visible { backgrou
 /* F3 shares use the voice bottom sheet and the host's light/dark palette. */
 .intake-scrim { z-index: 220; background: var(--scrim); }
 .intake-sheet { display: grid; gap: var(--space-12); }
+.project-picker { z-index: 230; }
+.project-picker label { display: grid; gap: var(--space-8); }
+.project-picker select { width: 100%; min-width: 0; min-height: 44px; padding: var(--space-8); color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-8); font: inherit; }
+.project-new-thread { min-height: 44px; margin-inline: var(--space-8); }
 /* The sheet takes focus only so screen readers land on it; its buttons keep their own focus ring. */
 .intake-sheet:focus { outline: none; }
 .intake-sheet p { margin: 0; color: var(--muted); }

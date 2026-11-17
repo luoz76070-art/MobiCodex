@@ -79,7 +79,7 @@ function shareDriver(seed = payload(), upload = async () => [], canNavigate = tr
   const startNewThread = () => { if (!canNavigate) return false; states.new = { draft: '', attachments: [] }; return true; };
   const onCaptureIntake = draft => captured.push(draft), onShareDone = id => { done.push(id); intakeShare = null; };
   const create = new Function('ports', `with (ports) { ${transpile(findFunction('uploadFiles'))} ${transpile(findFunction('chooseIntakeShare'))} return chooseIntakeShare; }`);
-  const choose = create({ get intakeShare() { return intakeShare; }, selected, activeThreadKey, newThreadId, scopeAbortRef, uploadInputRef, updateRuntime, uploadAttachments, endpoint, token, setStatus, setUploading, setSelected, setIsNewThread, onSelectSession: () => true, refreshRelayStatus, revokeAttachmentPreviews, toFriendlyFetchError, shareFiles, shareText, startNewThread, onCaptureIntake, onShareDone });
+  const choose = create({ get intakeShare() { return intakeShare; }, selected, activeThreadKey, newThreadId, newThreadProjectRef: { current: '/synthetic/project-a' }, scopeAbortRef, uploadInputRef, updateRuntime, uploadAttachments, endpoint, token, setStatus, setUploading, setSelected, setIsNewThread, onSelectSession: () => true, refreshRelayStatus, revokeAttachmentPreviews, toFriendlyFetchError, shareFiles, shareText, startNewThread, onCaptureIntake, onShareDone });
   return { states, done, captured, statuses, choose: (action, signal = new AbortController().signal) => choose(action, signal), dispose: () => scopeAbortRef.current.abort() };
 }
 
@@ -164,7 +164,7 @@ test('App wiring: outer listener, exact cache cleanup, shared notification route
   assert.match(app, /<CapturePanel initialDraft=\{initialDraft\}/);
   assert.match(app, /parseAttentionKey\(payload\.key \?\? ""\)/);
   assert.match(app, /enqueue\(\{ kind: "notification", target: \{ \.\.\.target, title: payload\.title/);
-  assert.match(app, /if \(!startNewThread\(\)\) return;[\s\S]*intakeShortcut.payload.target === "voice"/);
+  assert.match(app, /startNewThread\(newThreadProjectRef.current\).then\(started =>[\s\S]*started && shortcut.payload.target === "voice"/);
   assert.match(app, /<VoiceInput openRequest=\{voiceOpenRequest\}/);
   assert.match(app, /sort\(.*updatedAt.*\)\.slice\(0, 3\)/);
   assert.match(app, /key: codexAttentionKey\(thread.id, isDesktopSource\(thread\)\)/);
@@ -342,7 +342,7 @@ test('new-task and voice shortcuts target Codex, retain blocked commands, and us
   assert.equal(find(f.render(), 'Workspace').props.intakeShortcut.payload.target, 'new-task');
 });
 
-test('the actual Workspace shortcut effect executes once, leaves blocked commands pending, and supports a later tap', () => {
+test('the actual Workspace shortcut effect executes once, acknowledges cancellation, and supports a later tap', async () => {
   let callback;
   function visit(node) {
     if (ts.isCallExpression(node) && node.expression.getText(ast) === 'useEffect' && node.arguments[0]?.getText(ast).includes('consumedShortcut.current')) callback = node.arguments[0].getText(ast);
@@ -353,11 +353,13 @@ test('the actual Workspace shortcut effect executes once, leaves blocked command
   let allowed = false;
   const run = new Function('ports', `with (ports) { return (${transpile('const run = ' + callback).replace(/^const run = /, '').replace(/;\s*$/, '')})(); }`);
   const ports = { intakeShortcut: { id: 1, payload: { target: 'voice' } }, consumedShortcut, voiceRequestSequence,
-    startNewThread: () => { if (allowed) calls.push('new'); return allowed; }, setVoiceOpenRequest: n => calls.push(['voice', n]), onShortcutOpened: id => calls.push(['ack', id]) };
-  run(ports); assert.deepEqual(calls, []); assert.equal(consumedShortcut.current, null);
-  allowed = true; run(ports); run(ports); assert.deepEqual(calls, ['new', ['voice', 1], ['ack', 1]]);
-  ports.intakeShortcut = { id: 2, payload: { target: 'new-task' } }; run(ports); run(ports);
-  assert.deepEqual(calls.slice(3), ['new', ['ack', 2]]);
+    newThreadProjectRef: { current: undefined }, scopeAbortRef: { current: new AbortController() },
+    startNewThread: async () => { if (allowed) calls.push('new'); return allowed; }, setVoiceOpenRequest: n => calls.push(['voice', n]), onShortcutOpened: id => calls.push(['ack', id]) };
+  run(ports); run(ports); await tick(); assert.deepEqual(calls, [['ack', 1]]); assert.equal(consumedShortcut.current, 1);
+  allowed = true; ports.intakeShortcut = { id: 2, payload: { target: 'voice' } }; run(ports); run(ports); await tick();
+  assert.deepEqual(calls.slice(1), ['new', ['voice', 1], ['ack', 2]]);
+  ports.intakeShortcut = { id: 3, payload: { target: 'new-task' } }; run(ports); run(ports); await tick();
+  assert.deepEqual(calls.slice(4), ['new', ['ack', 3]]);
 });
 
 test('cold voice and Agent thread shortcuts reach their own destinations', async t => {
