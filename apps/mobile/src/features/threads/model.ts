@@ -102,7 +102,15 @@ export function sourceClass(source: string | null | undefined) {
   return "unknown";
 }
 
+/** #30: the gateway's own app-server also stamps new threads "vscode"; its client name tells them apart. */
+export const relayOriginator = "mobile-codex-relay";
+export function isRelayOriginated(thread: ThreadSummary | null | undefined) {
+  return thread?.originator === relayOriginator;
+}
+
+/** Desktop threads are sent through the desktop; threads the gateway started stay on the gateway. */
 export function isDesktopSource(thread: ThreadSummary | null | undefined) {
+  if (isRelayOriginated(thread)) return false;
   return thread?.source === "vscode" || thread?.originator?.toLowerCase().includes("desktop") === true;
 }
 
@@ -110,6 +118,6 @@ export function isDesktopSource(thread: ThreadSummary | null | undefined) {
 // CLI/Exec/unknown remain explicit because the legacy relay filter includes them too.
 export function threadSourceBadge(thread: ThreadSummary, filter: SourceFilter) {
   if (isDesktopSource(thread)) return filter === "relay" ? "电脑发起" : "";
-  if (thread.source === "appServer") return filter === "relay" ? "" : "手机发起";
+  if (thread.source === "appServer" || isRelayOriginated(thread)) return filter === "relay" ? "" : "手机发起";
   return sourceLabel(thread.source);
 }

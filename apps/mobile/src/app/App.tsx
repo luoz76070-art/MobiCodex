@@ -58,7 +58,7 @@ import { stageHotUpdate } from "../features/updates/hotUpdate";
 import { Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Columns3, Rows3, Copy, Activity, AlertCircle, ChevronDown } from "lucide-react";
 import { UserInputCard } from "../features/chat/UserInputCard";
 import { QuotaSwitchCard } from "../features/quota/QuotaSwitchCard";
-import { dismissQuota, loadSwitchRecords, needsQuotaSwitch, quotaDismissed, saveSwitchRecord, standInNotice, switchPrompt, type QuotaSwitchOptions } from "../features/quota/quotaSwitch";
+import { dismissQuota, loadSwitchRecords, needsQuotaSwitch, quotaDismissed, rejectedSwitchDetail, saveSwitchRecord, standInNotice, switchNotReadyDetail, switchPrompt, switchUncertainDetail, type QuotaSwitchOptions } from "../features/quota/quotaSwitch";
 import { MessageBubble, MessageTimeline, ApprovalCard, AttachmentTray } from "../features/chat/components";
 import { MessageMediaProvider } from "../features/chat/MessageImage";
 import { ComputerComposer } from "../features/chat/ComputerComposer";
@@ -806,8 +806,13 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
     try {
       const control = desktopSendControl(activeRuntimeRef.current, relayStatus?.desktopControl?.mode);
       if (isDesktopSource(source) && control.native) {
+        // #30: say why when the desktop cannot take the turn yet, instead of repeating the quota error.
+        if (!control.ready) { fail(switchNotReadyDetail); return; }
+        const before = activeRuntimeRef.current;
         const delivered = await sendDesktopMessage(threadKey, message, "", [], attempt.clientMessageId, "start", control.guard, true, model);
-        if (delivered === "rejected") { channelAttemptRef.current = null; fail(activeRuntimeRef.current.lastTurnError || activeRuntimeRef.current.desktopSendFeedback || "桌面暂时接不了这一轮，请稍后再试。"); return; }
+        if (delivered === "rejected") { channelAttemptRef.current = null; fail(rejectedSwitchDetail(before, activeRuntimeRef.current)); return; }
+        // Keep the attempt (same message ID) so a retry cannot send the turn twice.
+        if (delivered === "uncertain") { fail(switchUncertainDetail); return; }
       } else {
         const next = await apiPost<LiveTurnSnapshot>(buildUrl(endpoint, "/api/live/turns"), token,
           { threadId: threadKey, message, clientMessageId: attempt.clientMessageId, cwd: source.cwd, approvalPolicy, sandbox: sandboxMode, model });

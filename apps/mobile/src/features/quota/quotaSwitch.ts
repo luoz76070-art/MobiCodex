@@ -95,3 +95,15 @@ function readDismissed(): string[] {
     return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
   } catch { return []; }
 }
+
+/**
+ * #30: why a switch through the desktop was refused. The failed turn's own quota error is what the
+ * switch is meant to get past, so it is never repeated as the reason.
+ */
+export function rejectedSwitchDetail(before: { lastTurnError?: string }, after: { lastTurnError?: string; desktopSendFeedback?: string }) {
+  if (after.desktopSendFeedback) return after.desktopSendFeedback;
+  if (after.lastTurnError && after.lastTurnError !== before.lastTurnError) return after.lastTurnError;
+  return "电脑端暂时接不了这一轮，请稍后再试。";
+}
+export const switchNotReadyDetail = "电脑端还在同步这个会话的控制状态，过几秒再点一次“换到这个模型接着做”。";
+export const switchUncertainDetail = "没能确认这一轮是否已经发到电脑，先看一眼会话再决定要不要重试；重试不会重复发送。";

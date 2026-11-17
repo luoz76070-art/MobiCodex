@@ -10,7 +10,7 @@ import { build } from 'esbuild';
 const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-quota-'));
 test.after(() => fs.rm(dir, { recursive: true, force: true }));
 await build({
-  stdin: { contents: "export * from './apps/mobile/src/features/quota/quotaSwitch.ts'; export { QuotaSwitchCard } from './apps/mobile/src/features/quota/QuotaSwitchCard.tsx'; export { modelChoices, alternatives } from './apps/relay/src/codex/modelSwitch.ts'; export { createElement } from 'react'; export { renderToStaticMarkup } from 'react-dom/server';", resolveDir: process.cwd(), loader: 'ts' },
+  stdin: { contents: "export * from './apps/mobile/src/features/quota/quotaSwitch.ts'; export { isDesktopSource, threadSourceBadge } from './apps/mobile/src/features/threads/model.ts'; export { QuotaSwitchCard } from './apps/mobile/src/features/quota/QuotaSwitchCard.tsx'; export { modelChoices, alternatives } from './apps/relay/src/codex/modelSwitch.ts'; export { createElement } from 'react'; export { renderToStaticMarkup } from 'react-dom/server';", resolveDir: process.cwd(), loader: 'ts' },
   outfile: path.join(dir, 'quota.cjs'), bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', nodePaths: [path.resolve('apps/mobile/node_modules')], logLevel: 'error',
 });
 const storage = new Map();
@@ -112,4 +112,24 @@ test('wiring: a switch is a send on the same thread with the model named; notifi
   assert.match(app, /lastTurnError !== activeRuntime\.lastTurn\?\.reason\.message && !\(quotaKey && quotaSwitch\?\.key === quotaKey/, 'the raw upstream error is not repeated under the card');
   assert.match(service, /"rate_limited"\.equals\(reason\.optString\("code"\)\) && !key\.startsWith\("agent:"\)/);
   assert.match(service, /点开换个渠道接着做/);
+});
+
+test('#30: threads the gateway started stay on the gateway, even though its app-server stamps them "vscode"', () => {
+  const relay = { id: 'r1', source: 'vscode', originator: 'mobile-codex-relay' };
+  assert.equal(m.isDesktopSource(relay), false);
+  assert.equal(m.threadSourceBadge(relay, 'all'), '手机发起');
+  assert.equal(m.isDesktopSource({ id: 'd1', source: 'vscode', originator: 'Codex Desktop' }), true);
+  assert.equal(m.isDesktopSource({ id: 'd2', source: 'vscode', originator: null }), true);
+});
+
+test('#30: a refused switch says why, never the quota error it was meant to get past', () => {
+  const quota = '这个渠道的额度用完或请求受限。可以换个渠道接着做，或稍后重试。';
+  assert.equal(m.rejectedSwitchDetail({ lastTurnError: quota }, { lastTurnError: quota }), '电脑端暂时接不了这一轮，请稍后再试。');
+  assert.equal(m.rejectedSwitchDetail({ lastTurnError: quota }, { lastTurnError: quota, desktopSendFeedback: '桌面拒绝了这一轮' }), '桌面拒绝了这一轮');
+  assert.equal(m.rejectedSwitchDetail({ lastTurnError: quota }, { lastTurnError: '新的错误' }), '新的错误');
+  const body = app.slice(app.indexOf('async function switchChannel'), app.indexOf('async function resolveSendRoute'));
+  assert.match(body, /if \(!control\.ready\) \{ fail\(switchNotReadyDetail\); return; \}/, 'checks readiness before the desktop send');
+  assert.ok(body.indexOf('switchNotReadyDetail') < body.indexOf('sendDesktopMessage('), 'readiness is checked first');
+  assert.match(body, /delivered === "uncertain"\) \{ fail\(switchUncertainDetail\); return; \}/, 'an unconfirmed delivery is not reported as switched');
+  assert.doesNotMatch(body, /lastTurnError \|\|/, 'the failed turn\'s error is not reused');
 });
