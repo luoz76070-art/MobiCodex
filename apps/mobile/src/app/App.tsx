@@ -27,7 +27,7 @@ import { ComposerSessionStatus } from "../features/chat/SessionStatus";
 import { codexSessionStatus, readActivityEvidence, resultStatus } from "../features/chat/sessionStatusModel";
 import { createPortal } from "react-dom";
 import { ProductRemoteShell } from "../features/product/ProductRemoteShell";
-import { attentionAfterSend, codexAttentionKey, parseAttentionKey, setAttentionViewing, useAttention } from "../features/notify/attention";
+import { attentionAfterSend, codexAttentionKey, parseAttentionKey, setAttentionViewing, useAttention, type AttentionTarget } from "../features/notify/attention";
 import { isKelivoHost, productBeforeNavigate, takeProductSettingsLaunch, ProductHost } from "../features/product/host";
 import { productVersionCode } from "../features/product/identity";
 import { HandoffCard } from '../features/product/HandoffCard';
@@ -215,9 +215,10 @@ export function App() {
     window.addEventListener("product-back", back, { capture: true });
     return () => window.removeEventListener("product-back", back, { capture: true });
   }, [backLayers, navigate]);
-  const openFromNotification = useCallback((target: { agentId: string; sessionId: string; title: string }) => {
+  const openFromNotification = useCallback((target: AttentionTarget) => {
+    if ("kind" in target) { openComputerSettings(); return; }
     enqueue({ kind: "notification", target: { ...target, cwd: "" } });
-  }, [enqueue]);
+  }, [enqueue, openComputerSettings]);
   useAttention(normalizeEndpoint(connection.endpoint), connection.token, openFromNotification);
   useIntake({
     onShare: payload => {

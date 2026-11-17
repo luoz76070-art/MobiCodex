@@ -3,7 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { apiGet, buildUrl } from "../connection/http";
 
 /** F1: system notifications for work the phone sent to the computer (finished / needs approval). */
-export type NotifySettings = { finished: boolean; approvals: boolean };
+export type NotifySettings = { finished: boolean; approvals: boolean; offline: boolean };
+export type AttentionTarget = { agentId: string; sessionId: string; title: string } | { kind: "connection" };
 export type NotifyPermission = "granted" | "denied" | "prompt";
 /** `banner` / `vibrate`: whether finished-task notifications pop up and vibrate; absent on builds before that check. */
 type NativeState = { permission: NotifyPermission; running: boolean; banner?: boolean; vibrate?: boolean };
@@ -24,8 +25,9 @@ type AttentionItem = { key: string; running: boolean; requests: unknown[] };
 
 export const Attention = registerPlugin<AttentionNative>("Attention");
 export const notifySettingsKey = "mobicodexNotifyV1";
+export const gatewayAttentionKey = "gateway";
 const askedKey = "mobicodexNotifyAsked", changedEvent = "mobicodex-notify-settings";
-export const defaultNotifySettings: NotifySettings = { finished: true, approvals: true };
+export const defaultNotifySettings: NotifySettings = { finished: true, approvals: true, offline: true };
 
 export function attentionAvailable() {
   return Capacitor.isNativePlatform() && Capacitor.isPluginAvailable("Attention");
@@ -33,7 +35,7 @@ export function attentionAvailable() {
 export function loadNotifySettings(): NotifySettings {
   try {
     const value = JSON.parse(localStorage.getItem(notifySettingsKey) ?? "null") as Partial<NotifySettings> | null;
-    return { finished: value?.finished !== false, approvals: value?.approvals !== false };
+    return { finished: value?.finished !== false, approvals: value?.approvals !== false, offline: value?.offline !== false };
   } catch { return { ...defaultNotifySettings }; }
 }
 export function saveNotifySettings(value: NotifySettings) {
@@ -58,7 +60,7 @@ export function setAttentionViewing(key: string | null) {
 export async function attentionAfterSend() {
   if (!attentionAvailable()) return;
   const settings = loadNotifySettings();
-  if (!settings.finished && !settings.approvals) return;
+  if (!settings.finished && !settings.approvals && !settings.offline) return;
   try {
     let state = await Attention.permission();
     if (state.permission === "prompt" && !localStorage.getItem(askedKey)) {
@@ -73,7 +75,7 @@ export async function attentionAfterSend() {
  * Outer app: keep the native service configured for the current connection, restart it on resume
  * when the computer still has work for this phone, and open the thread a notification was tapped for.
  */
-export function useAttention(endpoint: string, token: string, open: (target: { agentId: string; sessionId: string; title: string }) => void) {
+export function useAttention(endpoint: string, token: string, open: (target: AttentionTarget) => void) {
   const latestOpen = useRef(open); latestOpen.current = open;
   useEffect(() => {
     if (!attentionAvailable()) return;
@@ -84,7 +86,7 @@ export function useAttention(endpoint: string, token: string, open: (target: { a
       try {
         const { items } = await apiGet<{ items: AttentionItem[] }>(buildUrl(endpoint, "/api/attention"), token);
         const settings = loadNotifySettings();
-        if (!cancelled && (settings.finished || settings.approvals) && items.some(item => item.running || item.requests.length)) {
+        if (!cancelled && (settings.finished || settings.approvals || settings.offline) && items.some(item => item.running || item.requests.length)) {
           if ((await Attention.permission()).permission === "granted") await Attention.start();
         }
       } catch { /* Older gateways have no /api/attention; nothing to resume. */ }
@@ -98,6 +100,8 @@ export function useAttention(endpoint: string, token: string, open: (target: { a
     if (!attentionAvailable()) return;
     let handle: PluginListenerHandle | undefined, active = true;
     Attention.addListener("open", value => {
+      if (!active) return;
+      if (value.key === gatewayAttentionKey) { latestOpen.current({ kind: "connection" }); return; }
       const target = parseAttentionKey(value.key);
       if (active && target) latestOpen.current({ ...target, title: value.title || "" });
     }).then(value => { if (active) handle = value; else void value.remove(); }).catch(() => undefined);
@@ -110,7 +114,7 @@ export function finishedAlertHint(state: Pick<NativeState, "permission" | "banne
   return state.banner === false || state.vibrate === false ? "off" : "check";
 }
 
-/** Settings page: the two switches and the system permission state. */
+/** Settings page: notification switches and the system permission state. */
 export function useNotifySettings() {
   const [settings, setSettings] = useState(loadNotifySettings);
   const [native, setNative] = useState<NativeState | null>(null);

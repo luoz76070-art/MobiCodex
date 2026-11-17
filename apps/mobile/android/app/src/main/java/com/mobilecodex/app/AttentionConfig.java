@@ -6,6 +6,7 @@ final class AttentionConfig {
     static volatile String token;
     static volatile boolean finished = true;
     static volatile boolean approvals = true;
+    static volatile boolean offline = true;
     static volatile String viewingKey;
     static volatile boolean appVisible;
 

@@ -7,6 +7,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ServiceInfo;
+import android.net.ConnectivityManager;
+import android.net.NetworkCapabilities;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -27,7 +29,9 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.text.DateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -47,6 +51,7 @@ public class AttentionService extends Service {
     private static final long IDLE_MS = 30_000;
     private static final int REMEMBERED_TURNS = 60;
     private static final long OFFLINE_GIVE_UP_MS = 10 * 60_000;
+    private static final long STATUS_CHECK_MS = 10_000;
     private static volatile AttentionService current;
 
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -60,6 +65,10 @@ public class AttentionService extends Service {
     private long idleSince;
     private long lastContact;
     private boolean connected;
+    private boolean connectionFailed;
+    private boolean phoneNetwork = true;
+    private volatile int generation;
+    private final GatewayOfflineState offline = new GatewayOfflineState();
 
     static void start(Context context) {
         ContextCompat.startForegroundService(context, new Intent(context, AttentionService.class).setAction(START));
@@ -73,7 +82,23 @@ public class AttentionService extends Service {
     /** New endpoint or token: drop the stream; the worker reconnects with the new values. */
     static void reconnect() {
         AttentionService service = current;
-        if (service != null) service.dropConnection();
+        if (service != null) {
+            service.generation++;
+            service.dropConnection();
+            service.main.post(() -> {
+                service.offline.reset();
+                AttentionNotifications.cancel(service, AttentionNotifications.OFFLINE_ID);
+                service.connected = false;
+                service.connectionFailed = false;
+                service.lastContact = SystemClock.elapsedRealtime();
+                service.sync();
+            });
+        }
+    }
+
+    static void settingsChanged() {
+        AttentionService service = current;
+        if (service != null) service.main.post(service::sync);
     }
 
     static boolean running() { return current != null; }
@@ -96,13 +121,16 @@ public class AttentionService extends Service {
             return START_NOT_STICKY;
         }
         current = this;
-        stopping = false;
-        startedAt = SystemClock.elapsedRealtime();
-        lastContact = startedAt;
-        idleSince = 0;
         if (worker == null || !worker.isAlive()) {
+            stopping = false;
+            startedAt = SystemClock.elapsedRealtime();
+            lastContact = startedAt;
+            idleSince = 0;
+            offline.reset();
+            AttentionNotifications.cancel(this, AttentionNotifications.OFFLINE_ID);
             worker = new Thread(this::loop, "mobicodex-attention");
             worker.start();
+            main.post(idleCheck);
         }
         return START_NOT_STICKY;
     }
@@ -112,6 +140,8 @@ public class AttentionService extends Service {
         stopping = true;
         dropConnection();
         main.removeCallbacksAndMessages(null);
+        offline.reset();
+        AttentionNotifications.cancel(this, AttentionNotifications.OFFLINE_ID);
         if (current == this) current = null;
         super.onDestroy();
     }
@@ -120,6 +150,8 @@ public class AttentionService extends Service {
         stopping = true;
         dropConnection();
         main.removeCallbacks(idleCheck);
+        offline.reset();
+        AttentionNotifications.cancel(this, AttentionNotifications.OFFLINE_ID);
         if (current == this) current = null;
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE);
         stopSelf();
@@ -133,23 +165,26 @@ public class AttentionService extends Service {
     private void loop() {
         long backoff = 1_000;
         while (!stopping) {
+            int streamGeneration = generation;
             try {
-                stream();
+                stream(streamGeneration);
                 backoff = 1_000;
             } catch (Unauthorized error) {
-                main.post(this::shutdown);
-                return;
+                if (streamGeneration == generation) {
+                    // Authentication has its own re-pairing path; never label it a gateway outage.
+                    main.post(() -> { if (streamGeneration == generation) shutdown(); });
+                }
             } catch (IOException | JSONException | RuntimeException error) {
                 // Network change, gateway restart or sleep: retry below.
             }
             if (stopping) return;
-            main.post(() -> { connected = false; sync(); });
+            main.post(() -> { if (streamGeneration == generation) { connected = false; connectionFailed = true; sync(); } });
             SystemClock.sleep(backoff);
             backoff = Math.min(backoff * 2, 30_000);
         }
     }
 
-    private void stream() throws IOException, JSONException {
+    private void stream(int streamGeneration) throws IOException, JSONException {
         HttpURLConnection http = (HttpURLConnection) new URL(AttentionConfig.url("/api/attention/events")).openConnection();
         connection = http;
         try {
@@ -160,12 +195,13 @@ public class AttentionService extends Service {
             int code = http.getResponseCode();
             if (code == 401 || code == 403) throw new Unauthorized();
             if (code != 200) throw new IOException("attention stream " + code);
+            main.post(() -> contact(streamGeneration));
             BufferedReader reader = new BufferedReader(new InputStreamReader(http.getInputStream(), StandardCharsets.UTF_8));
             String event = null, line;
             StringBuilder data = new StringBuilder();
             while (!stopping && (line = reader.readLine()) != null) {
                 if (line.isEmpty()) {
-                    if (event != null && data.length() > 0) dispatch(event, data.toString());
+                    if (event != null && data.length() > 0) dispatch(event, data.toString(), streamGeneration);
                     event = null;
                     data.setLength(0);
                 } else if (line.startsWith("event:")) {
@@ -181,12 +217,24 @@ public class AttentionService extends Service {
         }
     }
 
-    private void dispatch(String event, String data) throws JSONException {
-        if ("ping".equals(event)) { main.post(() -> { lastContact = SystemClock.elapsedRealtime(); sync(); }); return; }
+    private void contact(int streamGeneration) {
+        if (stopping || streamGeneration != generation) return;
+        connected = true;
+        connectionFailed = false;
+        lastContact = SystemClock.elapsedRealtime();
+        offline.contact(System.currentTimeMillis());
+        sync();
+    }
+
+    private void dispatch(String event, String data, int streamGeneration) throws JSONException {
+        if ("ping".equals(event)) { main.post(() -> contact(streamGeneration)); return; }
         JSONObject value = new JSONObject(data);
         main.post(() -> {
+            if (stopping || streamGeneration != generation) return;
             connected = true;
+            connectionFailed = false;
             lastContact = SystemClock.elapsedRealtime();
+            offline.contact(System.currentTimeMillis());
             if ("snapshot".equals(event)) {
                 items.clear();
                 JSONArray list = value.optJSONArray("items");
@@ -206,6 +254,11 @@ public class AttentionService extends Service {
     /** Main thread: notifications follow the latest items; then decide whether to keep running. */
     private void sync() {
         if (stopping) return;
+        phoneNetwork = hasPhoneNetwork();
+        if (!phoneNetwork) connected = false;
+        GatewayOfflineState.Change change = offline.update(SystemClock.elapsedRealtime(), true, phoneNetwork, connected || !connectionFailed, false, AttentionConfig.offline);
+        if (change == GatewayOfflineState.Change.SHOW) notifyOffline();
+        else if (change == GatewayOfflineState.Change.CLEAR) AttentionNotifications.cancel(this, AttentionNotifications.OFFLINE_ID);
         boolean active = false;
         for (JSONObject item : items.values()) {
             notifyTurn(item);
@@ -219,10 +272,32 @@ public class AttentionService extends Service {
         long now = SystemClock.elapsedRealtime();
         main.removeCallbacks(idleCheck);
         if (!connected && now - lastContact >= OFFLINE_GIVE_UP_MS) { shutdown(); return; }
-        if (active || !connected) { idleSince = 0; return; }
+        if (active || !connected) { idleSince = 0; main.postDelayed(idleCheck, STATUS_CHECK_MS); return; }
         if (idleSince == 0) idleSince = now;
         if (now - startedAt >= GRACE_MS && now - idleSince >= IDLE_MS) { shutdown(); return; }
         main.postDelayed(idleCheck, Math.max(GRACE_MS - (now - startedAt), IDLE_MS - (now - idleSince)) + 500);
+    }
+
+    private boolean hasPhoneNetwork() {
+        ConnectivityManager manager = getSystemService(ConnectivityManager.class);
+        NetworkCapabilities capabilities = manager == null ? null : manager.getNetworkCapabilities(manager.getActiveNetwork());
+        // A validated system network rules out captive portals/no Internet. A working F1 stream
+        // also proves a route, allowing local-only Wi-Fi without probing any public server.
+        return capabilities != null && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            && (capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) || connected);
+    }
+
+    private void notifyOffline() {
+        long last = offline.lastConnectedAt();
+        String text = last > 0 ? "最后一次连上：" + DateFormat.getDateTimeInstance().format(new Date(last)) : "最后一次连上：本次通知服务启动后尚未连上";
+        AttentionNotifications.post(this, AttentionNotifications.OFFLINE_ID,
+            AttentionNotifications.builder(this, AttentionNotifications.GATEWAY)
+                .setContentTitle("电脑网关离线").setContentText(text)
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(text))
+                .setContentIntent(AttentionNotifications.open(this, AttentionNotifications.GATEWAY_KEY, "电脑网关离线"))
+                .setAutoCancel(true).setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setDefaults(NotificationCompat.DEFAULT_SOUND | NotificationCompat.DEFAULT_VIBRATE)
+                .setCategory(NotificationCompat.CATEGORY_STATUS));
     }
 
     private void notifyTurn(JSONObject item) {
@@ -321,7 +396,7 @@ public class AttentionService extends Service {
             JSONArray requests = item.optJSONArray("requests");
             if (requests != null) waiting += requests.length();
         }
-        String text = !connected ? "正在连接电脑…" : waiting > 0 ? waiting + " 项等你处理" : runningCount > 0 ? runningCount + " 个任务进行中" : "任务已结束";
+        String text = !phoneNetwork ? "手机没有网络" : !connected ? "正在连接电脑…" : waiting > 0 ? waiting + " 项等你处理" : runningCount > 0 ? runningCount + " 个任务进行中" : "任务已结束";
         AttentionNotifications.post(this, AttentionNotifications.ONGOING_ID, ongoingBuilder(text));
     }
 

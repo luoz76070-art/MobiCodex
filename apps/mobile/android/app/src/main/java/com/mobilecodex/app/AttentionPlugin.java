@@ -48,15 +48,17 @@ public class AttentionPlugin extends Plugin {
         AttentionConfig.token = token;
         AttentionConfig.finished = Boolean.TRUE.equals(call.getBoolean("finished", true));
         AttentionConfig.approvals = Boolean.TRUE.equals(call.getBoolean("approvals", true));
-        if (!AttentionConfig.ready() || (!AttentionConfig.finished && !AttentionConfig.approvals)) AttentionService.stop();
+        AttentionConfig.offline = Boolean.TRUE.equals(call.getBoolean("offline", true));
+        if (!AttentionConfig.ready() || (!AttentionConfig.finished && !AttentionConfig.approvals && !AttentionConfig.offline)) AttentionService.stop();
         else if (changed) AttentionService.reconnect();
+        else AttentionService.settingsChanged();
         call.resolve(state());
     }
 
     @PluginMethod
     public void start(PluginCall call) {
         JSObject result = state();
-        if (!AttentionConfig.ready() || (!AttentionConfig.finished && !AttentionConfig.approvals)) {
+        if (!AttentionConfig.ready() || (!AttentionConfig.finished && !AttentionConfig.approvals && !AttentionConfig.offline)) {
             result.put("started", false);
             call.resolve(result);
             return;

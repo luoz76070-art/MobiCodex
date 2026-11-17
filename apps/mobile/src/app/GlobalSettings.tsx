@@ -414,6 +414,10 @@ export function GlobalSettings({ connection, settingsOpen, onClose, onApply, pre
           <label className="haptics-setting">需要审批时通知
             <button type="button" className="action-button" role="switch" aria-label="需要审批时通知" aria-checked={notify.settings.approvals} onClick={() => notify.change({ approvals: !notify.settings.approvals })}>{notify.settings.approvals ? "已开启" : "已关闭"}</button>
           </label>
+          <label className="haptics-setting">电脑离线时提醒
+            <button type="button" className="action-button" role="switch" aria-label="电脑离线时提醒" aria-checked={notify.settings.offline} onClick={() => notify.change({ offline: !notify.settings.offline })}>{notify.settings.offline ? "已开启" : "已关闭"}</button>
+          </label>
+          <p className="update-note">仅在等待任务结果的通知服务运行时检查。手机有网络、电脑网关连续两分钟不可达才提醒；重新连上会自动撤掉提醒。手机没网时只显示静默状态。</p>
         </section>}
 
         <section className="settings-section">

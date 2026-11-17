@@ -52,17 +52,21 @@ test('keys are the gateway attentionKey() for every channel and parse back to a 
   for (const bad of ['', 'desktop:', 'agent:deepseek', 'agent::s', 'other:t1']) assert.equal(m.parseAttentionKey(bad), null, bad);
 });
 
-test('settings default to both on, survive corrupt storage and announce changes', () => {
+test('settings default to all on, survive corrupt storage and announce changes', () => {
   storage.clear();
-  assert.deepEqual(m.loadNotifySettings(), { finished: true, approvals: true });
+  assert.deepEqual(m.loadNotifySettings(), { finished: true, approvals: true, offline: true });
+  storage.set(m.notifySettingsKey, JSON.stringify({ finished: false, approvals: true }));
+  assert.deepEqual(m.loadNotifySettings(), { finished: false, approvals: true, offline: true }, 'old settings enable the new option');
+  m.saveNotifySettings({ finished: true, approvals: true, offline: false });
+  assert.equal(m.loadNotifySettings().offline, false, 'explicit off survives reload');
   let changed = 0; const listener = () => changed++;
   window.addEventListener('mobicodex-notify-settings', listener);
-  m.saveNotifySettings({ finished: false, approvals: true });
+  m.saveNotifySettings({ finished: false, approvals: true, offline: true });
   window.removeEventListener('mobicodex-notify-settings', listener);
   assert.equal(changed, 1);
-  assert.deepEqual(m.loadNotifySettings(), { finished: false, approvals: true });
+  assert.deepEqual(m.loadNotifySettings(), { finished: false, approvals: true, offline: true });
   storage.set(m.notifySettingsKey, '{broken');
-  assert.deepEqual(m.loadNotifySettings(), { finished: true, approvals: true });
+  assert.deepEqual(m.loadNotifySettings(), { finished: true, approvals: true, offline: true });
 });
 
 test('after a send: asks for permission once, starts only when allowed, and does nothing in a browser or when switched off', async () => {
@@ -80,12 +84,17 @@ test('after a send: asks for permission once, starts only when allowed, and does
   assert.deepEqual(p.calls, ['permission', 'request', 'permission'], 'a refusal is not asked again on every send');
 
   storage.clear(); p = plugin('granted');
-  m.saveNotifySettings({ finished: false, approvals: false });
+  m.saveNotifySettings({ finished: false, approvals: false, offline: false });
   await m.attentionAfterSend();
   assert.deepEqual(p.calls, []);
-  m.saveNotifySettings({ finished: false, approvals: true });
+  m.saveNotifySettings({ finished: false, approvals: true, offline: true });
   await m.attentionAfterSend();
   assert.deepEqual(p.calls, ['permission', 'start']);
+
+  p = plugin('granted');
+  m.saveNotifySettings({ finished: false, approvals: false, offline: true });
+  await m.attentionAfterSend();
+  assert.deepEqual(p.calls, ['permission', 'start'], 'offline-only still uses the existing task service');
 
   m.setAttentionViewing('desktop:t1');
   await new Promise(resolve => setImmediate(resolve));
@@ -121,6 +130,15 @@ test('#18 finished-task notifications pop up and vibrate on a new channel that r
 });
 
 for (const cold of [true, false]) {
+  test(`${cold ? 'cold' : 'warm'} offline notification opens connection settings without switching Agent or requiring a reachable gateway`, async t => {
+    const initial = navigationModel.agentSession('claude', 'existing');
+    const f = appNavigationFixture(initial, [], cold ? { coldNotification: { kind: 'connection' } } : {});
+    t.after(() => f.stop()); if (!cold) f.notify({ kind: 'connection' });
+    await f.settle();
+    assert.equal(find(f.render(), 'Settings').props.settingsOpen, true);
+    assert.deepEqual(find(f.render(), 'AgentWorkspace').props.navigation, initial);
+    assert.equal(f.requests.length, 0, 'opening settings does not resolve a session through an offline gateway');
+  });
   test(`${cold ? 'cold' : 'warm'} notification opens CC Desk without a Codex fallback`, async t => {
     const target = { agentId: 'ccdesk', sessionId: 'desk-session', title: '合成会话' };
     const f = appNavigationFixture(cold ? navigationModel.agentPicker() : navigationModel.agentSession('claude', 'existing'), [], cold ? { coldNotification: target } : {});
@@ -155,13 +173,14 @@ test('native open listener delivers retained cold events once, uses the latest c
   const ast = ts.createSourceFile('attention.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const body = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'useAttention').getText(ast).replace(/^export /, '');
   const js = ts.transpileModule(body, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  const slots = [], setups = [], calls = [], events = new EventTarget(); let cursor = 0, listener, release, removed = 0, registrations = 0;
+  const slots = [], setups = [], calls = [], configurations = [], events = new EventTarget(); let cursor = 0, listener, release, removed = 0, registrations = 0;
+  let settings = { ...m.defaultNotifySettings };
   const ports = {
     useRef(value) { return slots[cursor++] ??= { current: value }; },
     useEffect(setup, deps) { const index = cursor++, old = slots[index]; if (!old || deps.some((v, i) => v !== old.deps[i])) setups.push(() => { old?.cleanup?.(); slots[index] = { deps, cleanup: setup() }; }); },
-    attentionAvailable: () => true, parseAttentionKey: m.parseAttentionKey, loadNotifySettings: () => m.defaultNotifySettings,
+    attentionAvailable: () => true, parseAttentionKey: m.parseAttentionKey, gatewayAttentionKey: m.gatewayAttentionKey, loadNotifySettings: () => settings,
     changedEvent: 'settings', window: events, document: Object.assign(new EventTarget(), { visibilityState: 'hidden' }),
-    Attention: { configure: async () => {},
+    Attention: { configure: async value => { configurations.push(value); },
       addListener(name, callback) {
         assert.equal(name, 'open'); registrations++; listener = callback;
         callback({ key: 'agent:ccdesk:cold', title: '冷启动提醒' });
@@ -170,12 +189,18 @@ test('native open listener delivers retained cold events once, uses the latest c
     },
   };
   const hook = new Function(...Object.keys(ports), js + '; return useAttention;')(...Object.values(ports));
-  hook('first', '', target => calls.push(['first', target.sessionId])); for (const setup of setups.splice(0)) setup();
-  cursor = 0; hook('second', '', target => calls.push(['second', target.sessionId])); for (const setup of setups.splice(0)) setup();
+  const receive = name => target => calls.push([name, target.sessionId ?? target.kind]);
+  hook('first', '', receive('first')); for (const setup of setups.splice(0)) setup();
+  cursor = 0; hook('second', '', receive('second')); for (const setup of setups.splice(0)) setup();
   listener({ key: 'agent:ccdesk:warm' });
   assert.equal(registrations, 1); assert.deepEqual(calls, [['first', 'cold'], ['second', 'warm']]);
+  listener({ key: m.gatewayAttentionKey }); assert.deepEqual(calls.at(-1), ['second', 'connection']);
+  assert.equal(configurations.at(-1).offline, true);
+  settings = { ...settings, offline: false }; events.dispatchEvent(new Event('settings'));
+  assert.equal(configurations.at(-1).offline, false, 'switch changes reach the running native service');
+  assert.equal(configurations.at(-1).endpoint, 'second');
   for (const slot of slots) slot?.cleanup?.();
   listener({ key: 'agent:ccdesk:late' }); release({ remove: async () => { removed++; } });
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(removed, 1); assert.equal(calls.length, 2);
+  assert.equal(removed, 1); assert.equal(calls.length, 3);
 });

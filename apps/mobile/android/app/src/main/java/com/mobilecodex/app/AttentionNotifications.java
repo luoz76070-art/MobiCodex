@@ -19,7 +19,10 @@ final class AttentionNotifications {
     /** Earlier builds' finished channel (default importance: status bar only); removed on start. */
     static final String LEGACY_DONE = "attention_done";
     static final String ACTION = "attention_action";
+    static final String GATEWAY = "attention_gateway";
     static final int ONGOING_ID = 7100;
+    static final int OFFLINE_ID = 7102;
+    static final String GATEWAY_KEY = "gateway";
     static final String OPEN_ACTION = "com.mobilecodex.app.OPEN_ATTENTION";
     static final String EXTRA_KEY = "mobicodexAttentionKey";
     static final String EXTRA_TITLE = "mobicodexAttentionTitle";
@@ -44,9 +47,13 @@ final class AttentionNotifications {
         }
         NotificationChannel action = new NotificationChannel(ACTION, "需要审批", NotificationManager.IMPORTANCE_HIGH);
         action.setDescription("Agent 等你批准或回答");
+        NotificationChannel gateway = new NotificationChannel(GATEWAY, "电脑离线", NotificationManager.IMPORTANCE_HIGH);
+        gateway.setDescription("等待任务结果期间，电脑网关连续两分钟不可达时提醒");
+        gateway.enableVibration(true);
         manager.createNotificationChannel(running);
         manager.createNotificationChannel(done);
         manager.createNotificationChannel(action);
+        manager.createNotificationChannel(gateway);
         if (legacy != null) manager.deleteNotificationChannel(LEGACY_DONE);
     }
 
