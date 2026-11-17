@@ -56,7 +56,9 @@ export class CcDeskConnection extends EventEmitter {
       const timer = setTimeout(() => fail("CCDESK_CONNECTION_FAILED"), timeoutMs);
       let socket: WebSocket;
       try {
-        socket = new WebSocket(url, { handshakeTimeout: timeoutMs, perMessageDeflate: false, maxPayload: 16 * 1024 * 1024, rejectUnauthorized: !fingerprint });
+        // The service compresses history pages when offered; JSON shrinks 4-5x, which matters on a slow relayed link.
+        // maxPayload still bounds the inflated size.
+        socket = new WebSocket(url, { handshakeTimeout: timeoutMs, perMessageDeflate: { clientNoContextTakeover: true, serverNoContextTakeover: true }, maxPayload: 16 * 1024 * 1024, rejectUnauthorized: !fingerprint });
       } catch { return fail("CCDESK_CONNECTION_FAILED"); }
       this.socket = socket;
       socket.once("upgrade", response => {
