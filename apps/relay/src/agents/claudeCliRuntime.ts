@@ -50,22 +50,28 @@ export class ClaudeCliRuntime {
   private stopped = false;
   private executable?: ClaudeCliExecutable;
   private initialization?: Promise<void>;
+  private checking = false;
+  private checkedAt = 0;
   errorCode: string | null = null;
   errorMessage: string | null = null;
   constructor(private readonly factory: ClaudeCliQueryFactory, private readonly configured: string | undefined,
     private readonly publish: (id: string) => void, private readonly ports: ClaudeCliRuntimePorts = {}) {}
   ready() {
+    // A failed check (claude too old or missing) is retried after 30 s, so upgrading needs no gateway restart.
+    if (this.initialization && this.errorCode && !this.checking && this.now() - this.checkedAt >= 30_000) this.initialization = undefined;
     return this.initialization ??= (async () => {
+      this.checking = true;
       try {
         this.executable = await (this.ports.resolveExecutable ?? resolveClaudeCliExecutable)(this.configured);
         if (!compatibleClaudeVersion(this.executable.version)) {
           this.errorCode = "CLAUDE_CLI_VERSION_TOO_OLD";
           this.errorMessage = `请升级 Claude Code（当前 ${this.executable.version}，需要 ≥ ${claudeCliMinimumVersion}）`;
-        }
+        } else { this.errorCode = null; this.errorMessage = null; }
       } catch (error) {
+        this.executable = undefined;
         this.errorCode = (error as { code?: string }).code ?? "CLAUDE_CLI_VERSION_FAILED";
         this.errorMessage = this.errorCode === "CLAUDE_CLI_EXECUTABLE_NOT_FOUND" ? "未找到 Claude Code，请在电脑安装 claude 或配置 claudeCli.executable。" : "无法检查 Claude Code 版本，请在电脑检查 claude 安装。";
-      }
+      } finally { this.checkedAt = this.now(); this.checking = false; }
     })();
   }
   get version() { return this.executable?.version; }

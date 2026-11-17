@@ -239,6 +239,18 @@ test('live history cursor advances with persisted records instead of skipping me
   assert.ok(f.current().messages.some(message => message.id === 'history-140'));
 });
 
+test('a failed version check is retried after 30 seconds, so upgrading claude needs no gateway restart', async t => {
+  let version = '2.1.1', clock = 1_000_000, reads = 0;
+  const f = await fixture(t, { now: () => clock, resolveExecutable: async () => { reads++; return { executable: process.execPath, version }; } });
+  await assert.rejects(f.adapter.sendMessage(f.id, f.operation()), { code: 'CLAUDE_CLI_VERSION_TOO_OLD' });
+  version = claudeCliMinimumVersion; clock += 10_000; const before = reads;
+  await assert.rejects(f.adapter.sendMessage(f.id, f.operation()), { code: 'CLAUDE_CLI_VERSION_TOO_OLD' }); assert.equal(reads, before);
+  clock += 30_000; await f.adapter.ready();
+  assert.equal(reads, before + 1); assert.equal(f.adapter.snapshot().state, 'connected'); assert.equal(f.adapter.snapshot().errorMessage ?? null, null);
+  await f.adapter.sendMessage(f.id, f.operation()); assert.equal(f.runs.length, 1);
+  clock += 60_000; await f.adapter.ready(); assert.equal(reads, before + 1, 'a passing check stays cached');
+});
+
 test('old/missing executable disables sending and exposes a safe specific Agent error', async t => {
   const f = await fixture(t, { resolveExecutable: async () => ({ executable: process.execPath, version: '2.1.1' }) });
   assert.equal(f.adapter.snapshot().state, 'failed'); assert.equal(f.current().control.canSend, false);
