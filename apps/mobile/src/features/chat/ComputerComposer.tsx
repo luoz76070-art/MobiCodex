@@ -1,6 +1,8 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { ArrowUp, CircleStop, Loader2, Plus } from "lucide-react";
 import { haptic } from "../../shared/haptics";
+import { QuickCommands } from "../quickCommands/QuickCommands";
+import { appendQuickCommand } from "../quickCommands/model";
 
 /** Grow the textarea with its content, and shrink it back when the draft is cleared after sending. */
 function fitHeight(element: HTMLTextAreaElement | null) {
@@ -27,13 +29,27 @@ export function ComputerComposer({ draft, onDraft, onSend, onStop, onUpload, voi
   label?: string; maxLength?: number;
 }) {
   const input = useRef<HTMLTextAreaElement>(null);
-  useLayoutEffect(() => fitHeight(input.current), [draft]);
+  const focusDraft = useRef(false);
+  useLayoutEffect(() => {
+    fitHeight(input.current);
+    if (focusDraft.current && input.current) {
+      focusDraft.current = false;
+      input.current.focus(); input.current.setSelectionRange(draft.length, draft.length);
+    }
+  }, [draft]);
   const showSend = hasContent || running;
   return <>
     <div className="composer-status-bar" role="group" aria-label="会话状态与控制">
       <div className="composer-status-copy" role="status" aria-live="polite" title={statusTitle ?? (typeof status === "string" ? status : undefined)}>{status}</div>
       {running && <button type="button" className="composer-stop" onClick={onStop} disabled={!canStop || busy} aria-label="停止生成"><CircleStop size={18} aria-hidden="true" /><span>停止</span></button>}
     </div>
+    <QuickCommands disabled={disabled} onChoose={text => {
+      if (disabled) return;
+      const next = appendQuickCommand(draft, text, maxLength);
+      focusDraft.current = next !== draft;
+      onDraft(next);
+      input.current?.focus(); input.current?.setSelectionRange(draft.length, draft.length);
+    }} />
     <div className="composer" data-empty={!hasContent || undefined}>
       <button type="button" className="composer-tool-button" onClick={onUpload} disabled={uploading || uploadDisabled} aria-label="上传文件">
         {uploading ? <Loader2 size={18} className="spin" /> : <Plus size={21} />}

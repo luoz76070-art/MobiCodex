@@ -7,6 +7,7 @@ import { appVersionLabel as standaloneVersionLabel } from "./config";
 import { ConnectionCard } from "../features/connection/ConnectionCard";
 import { PairingPanel } from "../features/connection/PairingPanel";
 import { VoiceSettings } from "../features/voice/VoiceSettings";
+import { QuickCommandSettings } from "../features/quickCommands/QuickCommandSettings";
 import { DisclosureSummary } from "../shared/DisclosureSummary";
 import { hapticsEnabled, setHapticsEnabled } from "../shared/haptics";
 import { useNotifySettings } from "../features/notify/attention";
@@ -268,6 +269,7 @@ export function GlobalSettings({ connection, settingsOpen, onClose, onApply, pre
         <ConnectionCard endpoint={endpoint} token={token} connectionState={connectionState} open={settingsOpen} />
         <PairingPanel endpoint={endpoint} token={token} onPaired={applyPairedConnection} />
         {settingsOpen && <section className="settings-section"><VoiceSettings endpoint={endpoint} token={token} /></section>}
+        {settingsOpen && <QuickCommandSettings />}
         <section className="settings-section"><details className="settings-disclosure advanced-settings"><DisclosureSummary>高级</DisclosureSummary>
           <p className="setting-description">手动填写电脑地址和访问令牌、检查连接、导出诊断。配对成功后一般不需要改。实时会话、桌面控制和会话显示诊断仅 Codex 可用。</p>
           <div className="settings-subsection">
