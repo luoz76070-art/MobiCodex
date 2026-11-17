@@ -49,7 +49,7 @@ export function GatewayPanel({ endpoint, token }: { endpoint: string; token: str
     <DisclosureSummary>连接能力</DisclosureSummary>
     <p className="setting-description">查看电脑端模式与服务接入状态。仅查看现有状态，不发起探测或运行任务。</p>
     <button className="action-button" disabled={busy || !endpoint || !token} onClick={() => void inspect()}>{busy ? "正在读取…" : "查看连接能力"}</button>
-    {error && <p className="setting-description" role="status">{error}</p>}
+    {error && <p className="setting-description" role="status" data-feedback-error="true">{error}</p>}
     {result && <div role="status"><p className="setting-description">{result.gateway}</p>{result.agents.map((line, index) => <p className="setting-description" key={index}>{line}</p>)}<p className="setting-description">服务接入状态不代表已获得当前会话的控制权限。</p></div>}
   </details>;
 }

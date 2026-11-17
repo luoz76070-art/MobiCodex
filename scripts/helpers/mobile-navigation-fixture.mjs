@@ -71,7 +71,7 @@ export function appNavigationFixture(initial = navigationModel.agentPicker(), en
     buildUrl: (_endpoint, route) => route, newThreadId: '__new_thread__', SystemNotice: 'Notice', AbortController,
     productBeforeNavigate: "product-before-navigate", localStorage: storage, window: events, Event,
     BackLayersContext: { Provider: 'Provider' }, BackLayer: 'BackLayer', AgentPicker: 'Picker',
-    ProductRemoteShell: 'Shell', WorkItemsPage: 'Items', CapturePanel: 'Capture', AgentWorkspace: 'AgentWorkspace', Workspace: 'Workspace', GlobalSettings: 'Settings',
+    ProductRemoteShell: 'Shell', WorkItemsPage: 'Items', CapturePanel: 'Capture', AgentWorkspace: 'AgentWorkspace', Workspace: 'Workspace', GlobalSettings: 'Settings', FeedbackHost: 'FeedbackHost',
   };
   const Component = new Function(...Object.keys(hooks), js + '; return App;')(...Object.values(hooks));
   function render() {

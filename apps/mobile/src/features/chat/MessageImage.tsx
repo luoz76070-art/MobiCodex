@@ -59,7 +59,7 @@ export function MessageImage({ source, alt }: { source: string; alt: string }) {
   }, [source, loader, visible, attempt]);
   return <span ref={container} className="message-image">
     {url && !error ? <button type="button" className="message-image-open" onClick={() => setPreview(true)} aria-label={`查看大图：${alt || "图片"}`}><img src={url} alt={alt || "电脑图片"} referrerPolicy="no-referrer" onError={() => setError("图片无法加载，请检查文件或网络后重试。")} /></button>
-      : <span className="image-placeholder" role="status"><ImageIcon size={20} /><span>{error || (visible ? "正在加载图片…" : "图片")}</span>{error && <button type="button" onClick={() => { setVisible(true); setAttempt(value => value + 1); }}><RotateCw size={14} />重试</button>}</span>}
+      : <span className="image-placeholder" role="status"><ImageIcon size={20} /><span data-feedback-error={error ? true : undefined}>{error || (visible ? "正在加载图片…" : "图片")}</span>{error && <button type="button" onClick={() => { setVisible(true); setAttempt(value => value + 1); }}><RotateCw size={14} />重试</button>}</span>}
     {alt && <span className="message-image-caption">{alt}</span>}
     {preview && !error && <ImagePreview url={url} alt={alt} close={() => setPreview(false)} />}
   </span>;

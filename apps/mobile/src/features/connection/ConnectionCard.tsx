@@ -21,7 +21,7 @@ export function ConnectionCard({ endpoint, token, connectionState, open }: { end
   const detail = parts.join(" · ");
   return <section className={`settings-section connection-card ${state}`} aria-label="连接状态">
     <span className="connection-card-dot" aria-hidden="true" />
-    <div className="connection-card-text"><strong>{connectionCardTitles[state]}</strong>
+    <div className="connection-card-text"><strong data-feedback-error={state === "error" ? true : undefined}>{connectionCardTitles[state]}</strong>
       <p className="setting-description">{state === "none" ? "在下面粘贴电脑上的配对码" : state === "error" ? `${detail || "电脑"} 暂时连不上，检查电脑是否开着、网关是否在运行。` : parts.flatMap((part, index) => [...(index ? [" · "] : []), <span key={part}>{part}</span>])}</p></div>
     {state !== "none" && <button type="button" className="action-button" disabled={checking} onClick={() => void measure()}>{checking ? "检测中…" : "重新检测"}</button>}
   </section>;

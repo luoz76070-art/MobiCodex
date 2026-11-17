@@ -1,3 +1,4 @@
+import { openFeedback } from '../features/feedback/model';
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Activity, AlertCircle, Bell, CheckCircle2, Clipboard, Columns3, Copy, Download, ExternalLink, Eye, EyeOff, KeyRound, Loader2, Menu, Monitor, Moon, RefreshCcw, Rows3, Server, Settings, Sparkles, Sun, Terminal, Wifi, X } from "lucide-react";
@@ -257,7 +258,7 @@ export function GlobalSettings({ connection, settingsOpen, onClose, onApply, pre
         <div className="settings-heading">
           <div>
             <h2>设置</h2>
-            <p>{status}</p>
+            <p data-feedback-error={connectionState === "error" || /失败|无法|拒绝|超时|请等待/.test(status) ? true : undefined}>{status}</p>
           </div>
           <button className="icon-button" onClick={() => onClose()} aria-label="关闭设置">
             <X size={18} />
@@ -362,6 +363,7 @@ export function GlobalSettings({ connection, settingsOpen, onClose, onApply, pre
           {codex?.message && <p className="update-note" role="status">{codex.message}</p>}
         </details></div>
         </details></section>
+        <section className="settings-section"><button type="button" className="action-button" onClick={() => openFeedback()}>反馈问题</button></section>
         <section className="settings-section"><h3>应用版本</h3><p>{appVersionLabel}</p><button className="action-button" onClick={() => window.dispatchEvent(new Event(productOpenUpdates))}><Download size={18} /><span>应用更新</span></button></section>
 
         <section className="settings-section">
