@@ -5,7 +5,7 @@ import { agentError, type AgentSessionSnapshot } from "./sessions.js";
 
 type Options = Parameters<CanUseTool>[2];
 type Pending = {
-  kind: "permission" | "question"; input: Record<string, unknown>; suggestions: PermissionUpdate[];
+  kind: "permission" | "question"; input: Record<string, unknown>; suggestions: PermissionUpdate[]; rejectOnly: boolean;
   finish: (result: PermissionResult) => void;
 };
 const questionsSchema = z.array(z.object({
@@ -14,6 +14,10 @@ const questionsSchema = z.array(z.object({
 })).min(1).max(20);
 const deny = (message: string): PermissionResult => ({ behavior: "deny", message });
 const defaultReason = "用户在手机上拒绝了这个操作";
+const visibleLimit = 20_000;
+// File tools put the path first, so a cut-off body still shows where it writes. Any other input past the
+// limit (e.g. a long Bash command) could hide its tail, so the phone may only reject it.
+const fileTools = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 
 /** Pending SDK callbacks belong to one owned Query. Nothing is allowed without a phone response. */
 export class ClaudeCliInteractions {
@@ -28,6 +32,7 @@ export class ClaudeCliInteractions {
     const suggestions = options.suppressAlwaysAllowRule ? [] : structuredClone(options.suggestions ?? []).filter(item =>
       item.destination === "localSettings" && !(item.type === "setMode" && !["default", "plan", "acceptEdits"].includes(item.mode)));
     const kind = name === "AskUserQuestion" ? "question" : "permission";
+    let rejectOnly = false;
     if (kind === "question") {
       const parsed = questionsSchema.safeParse(input.questions);
       if (!parsed.success || new Set(parsed.data.map(q => q.question)).size !== parsed.data.length) return Promise.resolve(deny("无法在手机上显示这个提问，请重新提问。"));
@@ -38,10 +43,13 @@ export class ClaudeCliInteractions {
     } else {
       const fields = name === "Bash" ? ["command"] : name === "Write" ? ["file_path", "content"] : name === "Edit" ? ["file_path", "old_string", "new_string"] : [];
       const full = JSON.stringify({ ...Object.fromEntries(fields.filter(key => key in input).map(key => [key, input[key]])), ...input }, null, 2);
-      const rules = JSON.stringify(suggestions, null, 2);
-      this.snapshot.permissions.push({ id, status: "pending", action: name.slice(0, 200), resources: [], save: suggestions.length ? [rules.slice(0, 20_000) + (rules.length > 20_000 ? "\n已截断" : "")] : [],
-        detail: full.slice(0, 20_000), inputTruncated: full.length > 20_000, workingDirectory: this.directory,
-        allowReason: true, localSettings: suggestions.length > 0, unavailableReason: null, decisions: suggestions.length ? ["once", "always", "reject"] : ["once", "reject"] });
+      const rules = JSON.stringify(suggestions, null, 2), truncated = full.length > visibleLimit;
+      rejectOnly = truncated && !fileTools.has(name);
+      const saving = suggestions.length > 0 && !rejectOnly;
+      this.snapshot.permissions.push({ id, status: "pending", action: name.slice(0, 200), resources: [], save: saving ? [rules.slice(0, visibleLimit) + (rules.length > visibleLimit ? "\n已截断" : "")] : [],
+        detail: full.slice(0, visibleLimit), inputTruncated: truncated, workingDirectory: this.directory,
+        allowReason: true, localSettings: saving, decisions: rejectOnly ? ["reject"] : saving ? ["once", "always", "reject"] : ["once", "reject"],
+        unavailableReason: rejectOnly ? "输入超过手机能显示的长度，看不到全部内容，不能在手机上允许。请拒绝，或在电脑上处理。" : null });
     }
     // Keep interaction payloads below the shared SSE budget, including UTF-8 previews.
     if (Buffer.byteLength(JSON.stringify([this.snapshot.questions, this.snapshot.permissions])) > 512_000) {
@@ -63,14 +71,15 @@ export class ClaudeCliInteractions {
         this.snapshot.permissions = this.snapshot.permissions.filter(item => item.id !== id);
         this.changed(); resolve(result);
       };
-      this.pending.set(id, { kind, input, suggestions, finish });
+      this.pending.set(id, { kind, input, suggestions, rejectOnly, finish });
       options.signal.addEventListener("abort", cancel, { once: true });
       if (options.signal.aborted) cancel(); else this.changed();
     });
   }
   permission(id: string, decision: "once" | "always" | "reject", reason?: string) {
     const pending = this.get(id, "permission");
-    if (!["once", "always", "reject"].includes(decision) || decision === "always" && !pending.suggestions.length) throw agentError("CLAUDE_CLI_PERMISSION_INVALID", 400);
+    if (!["once", "always", "reject"].includes(decision) || decision === "always" && !pending.suggestions.length
+      || pending.rejectOnly && decision !== "reject") throw agentError("CLAUDE_CLI_PERMISSION_INVALID", 400);
     pending.finish(decision === "reject" ? deny(reason?.trim() || defaultReason) : {
       behavior: "allow", updatedInput: pending.input, ...(decision === "always" ? { updatedPermissions: pending.suggestions } : {}),
     });

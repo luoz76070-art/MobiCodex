@@ -320,6 +320,19 @@ test('reject supplies the optional reason or default reason; Write/Edit input is
   }
 });
 
+test('a non-file input the phone cannot show in full is reject-only, and allow is refused server-side', async t => {
+  const f = await fixture(t); await f.adapter.sendMessage(f.id, f.operation());
+  const input = { command: `echo ${'x'.repeat(25_000)}; synthetic-hidden-tail` };
+  const request = ask(f, 'Bash', input), card = f.current().permissions[0];
+  assert.equal(card.inputTruncated, true); assert.deepEqual(card.decisions, ['reject']); assert.match(card.unavailableReason, /不能在手机上允许/);
+  assert.deepEqual(card.save, []); assert.equal(card.localSettings, false); assert.doesNotMatch(card.detail, /synthetic-hidden-tail/);
+  for (const decision of ['once', 'always']) {
+    await assert.rejects(f.adapter.respondPermission(f.id, request.id, { ...f.operation(), decision }), { code: 'CLAUDE_CLI_PERMISSION_INVALID' });
+  }
+  await f.adapter.respondPermission(f.id, request.id, { ...f.operation(), decision: 'reject' });
+  assert.equal((await request.answer).behavior, 'deny');
+});
+
 test('questions retain original questions and use original text keys for single, multiple and free answers', async t => {
   const f = await fixture(t); await f.adapter.sendMessage(f.id, f.operation());
   const request = ask(f, 'AskUserQuestion', { questions, metadata: 'retained' });
