@@ -1,7 +1,7 @@
 packages:
   - "apps/*"
 
-# C4a reads local records only; no bundled Claude executable is needed.
+# Claude CLI uses the computer's installed executable, never SDK native bundles.
 ignoredOptionalDependencies:
   - '@anthropic-ai/claude-agent-sdk-linux-x64'
   - '@anthropic-ai/claude-agent-sdk-linux-arm64'

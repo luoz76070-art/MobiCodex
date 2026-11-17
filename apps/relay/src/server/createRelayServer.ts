@@ -205,7 +205,7 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
     });
   }
 
-  app.get("/api/agents", async () => ({ agents: agentGateway.snapshot() }));
+  app.get("/api/agents", async () => { await agentGateway.ready(); return { agents: agentGateway.snapshot() }; });
   app.post("/api/agents/:id/probe", { bodyLimit: 4096 }, async (request, reply) => {
     if (owners.get(request) !== "admin") return reply.code(403).send({ error: "admin_required" });
     const { id } = z.object({ id: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/) }).parse(request.params);

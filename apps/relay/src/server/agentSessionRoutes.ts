@@ -47,6 +47,20 @@ export function createAgentSessionRoutes(context: {
     owner(rawUrl: string) { return valid(rawUrl)?.owner ?? null; },
     revoke(owner: string) { for (const [id, token] of tokens) if (token.owner === owner) tokens.delete(id); },
     register(app: FastifyInstance) {
+      app.get("/api/agents/:agentId/directories", async request => {
+        const { agentId: id } = z.object({ agentId }).parse(request.params);
+        const adapter = gateway.sessions(id);
+        if (!adapter.listDirectories) throw agentError("AGENT_CREATE_UNSUPPORTED", 409);
+        return adapter.listDirectories();
+      });
+      app.post("/api/agents/:agentId/sessions", { bodyLimit: 90_000 }, async request => {
+        const { agentId: id } = z.object({ agentId }).parse(request.params);
+        const body = z.object({ directory: z.string().min(1).max(256), text: z.string().trim().min(1).max(20_000) }).strict().parse(request.body);
+        const adapter = gateway.sessions(id);
+        if (!adapter.createSession) throw agentError("AGENT_CREATE_UNSUPPORTED", 409);
+        const key = z.string().uuid().optional().parse(request.headers["idempotency-key"]);
+        return submissions.execute(key, { owner: owners.get(request), agentId: id, action: "create", ...body }, () => adapter.createSession!(body));
+      });
       app.get("/api/agents/:agentId/sessions", async request => {
         const { agentId: id } = z.object({ agentId }).parse(request.params);
         const query = z.object({ search: z.string().max(200).optional(), cursor: z.string().max(8192).optional(), range: z.enum(["recent", "all"]).optional() }).parse(request.query);

@@ -32,8 +32,10 @@ export type AgentSessionSnapshot = {
 export type AgentOperation = { controlToken: string; clientMessageId: string };
 export type AgentDelivery = { ok: true; delivery: "submitted" | "confirmed" | "uncertain" };
 
-/** Existing server sessions only. Explicit DeepSeek history sends may restore the original Agent inside its Host. */
+/** Shared session API. Creation is explicit and limited to adapters that advertise it. */
 export interface SessionAdapter {
+  listDirectories?(): Promise<{ directories: { id: string; label: string }[]; errorCode?: string | null; errorMessage?: string | null }>;
+  createSession?(input: { directory: string; text: string }): Promise<{ session: AgentSession }>;
   validSessionId(id: string): boolean;
   listSessions(search?: string, cursor?: string, range?: "recent" | "all"): Promise<{ sessions: AgentSession[]; cursor: string | null }>;
   readHistory(sessionId: string, cursor: string): Promise<{ messages: AgentMessage[]; cursor: string | null }>;
