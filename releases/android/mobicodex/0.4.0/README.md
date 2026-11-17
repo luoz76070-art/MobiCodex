@@ -21,3 +21,20 @@
 1. 用下载页的安装包覆盖安装 0.3.1（同一签名，数据保留）。
 2. 按[网关管理](../../../../plugins/mobile-codex/README.md)用本版源码构建网关（`corepack pnpm build:plugin`），沿用原配置和工作目录切换到新程序。
 3. 要用 Claude CLI：在网关配置里加 `"claudeCli": { "directories": ["<允许的目录>"] }`，重启网关。
+
+## 发布结果
+
+2026-11-17 发布。
+
+- **GitHub Release** `mobicodex-v0.4.0`（Actions run 44097910781，成功；同一提交的 CI run 44097906268 也通过）：APK、界面包、两份清单和 `SHA256SUMS`。
+- **安装包** `mobile-codex-0.4.0-a20d2d658593.apk`，3,452,126 字节，SHA-256 `a20d2d658593ad87b4b34f94c80a25572546cc1da777f722887ba09ff7f73ec8`，versionCode 43。
+  - 签名证书 SHA-256 `3ffb81f3524a590f469b80476951a22fbc6e441a470b9270079a8c1d452c4a38`，与 0.3.1 相同，可以直接覆盖安装。
+- **下载页** https://zyzlz.xin/mobile-codex/releases/android/preview/index.html 已换成 0.4.0（旧页面在服务器上备份）。
+  - 更新清单 `preview/latest.json` 指向 0.4.0（code 43），0.3.1 的清单移到 `previous.json`。
+  - 界面更新通道（`hot/latest.json`）没有改。
+- **发布后核对**：从公网下载的 APK 与 CI 产物逐字节相同；分段下载返回 206；线上清单为 0.4.0 / 43，`previous.json` 为 0.3.1 / 42。
+- **验证**
+  - 合并前：类型检查、lint、手机端 601 项和 Claude CLI 42 项测试通过；新界面在模拟数据浏览器里核对过（选项目、常用指令、长按菜单、Claude CLI 设置和重试提示）。
+  - 调试包在 Android 模拟器上与新网关配对后验收：系统返回键（关设置、会话 → 会话列表 → Agent 列表 → 退到后台）、冷启动回到上次打开的会话；验收后已撤销模拟器的配对。
+  - 电脑离线提醒需要手机上有任务在跑，没有在模拟器上端到端测，逻辑由单元测试覆盖，等真机确认。
+  - 「Claude CLI」的审批和提问还没在真实模型上验收。
