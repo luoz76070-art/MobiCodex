@@ -8,6 +8,9 @@ import { formatFileSize, isImageAttachment, parseMessageAttachments } from "./at
 import { X, ImageIcon, Paperclip, Copy, AlertCircle, Terminal, CheckCircle2, CircleStop, ChevronRight, UserRound, Bot, Info, Loader2 } from "lucide-react";
 import { haptic } from "../../shared/haptics";
 import { useMessageInteraction } from "./useMessageInteraction";
+import { MessageActionsMenu } from "./MessageActionsMenu";
+import { openFeedback } from "../feedback/model";
+import { redactFeedbackError } from "../feedback/lastError";
 import { commandRisks, diffLines, fileKindLabels } from "./approvalModel";
 import { MessageContent } from "./MessageContent";
 import { formatMessageTime, formatTime } from "../../shared/format";
@@ -95,12 +98,16 @@ export function MessageBubble({
   expandToolDetails?: boolean;
 }) {
   const interaction = useMessageInteraction(message.id, onCopy);
-  if (isToolMessage(message)) return <ToolMessageBubble message={message} onCopy={() => void interaction.copy()} copyFeedback={interaction.feedback} expanded={expandToolDetails} />;
+  const menu = interaction.menuOpen && <MessageActionsMenu onClose={interaction.closeMenu} onCopy={() => void interaction.copy()}
+    onFeedback={() => openFeedback({ text: `关于这条消息：${redactFeedbackError(message.text).slice(0, 200)}` })} />;
+  if (isToolMessage(message)) return <div tabIndex={0} aria-label="工具消息，按回车打开消息操作" aria-haspopup="menu" aria-expanded={interaction.menuOpen} {...interaction.handlers}>
+    <ToolMessageBubble message={message} onCopy={() => void interaction.copy()} copyFeedback={interaction.feedback} expanded={expandToolDetails} />{menu}
+  </div>;
   const parsed = parseMessageAttachments(message);
 
   return (
     <article className={`message-bubble ${roleClass(message.role)}${assistantContinuation ? " assistant-continuation" : ""}`} data-message-id={message.id} data-message-role={message.role}
-      tabIndex={0} aria-label={`${message.role === "assistant" ? assistantLabel : roleLabel(message.role)}消息，聚焦查看时间和复制`} {...interaction.handlers}>
+      tabIndex={0} aria-haspopup="menu" aria-expanded={interaction.menuOpen} aria-label={`${message.role === "assistant" ? assistantLabel : roleLabel(message.role)}消息，按回车打开消息操作`} {...interaction.handlers}>
       {!assistantContinuation && <header className="message-identity">
         <span className="message-avatar" aria-hidden="true">{message.role === "user" ? <UserRound size={16} /> : message.role === "assistant" ? <Bot size={16} /> : <Info size={16} />}</span>
         <span className="message-author"><strong>{message.role === "assistant" ? assistantLabel : roleLabel(message.role)}</strong></span>
@@ -114,6 +121,7 @@ export function MessageBubble({
         <button type="button" className="copy-icon" onClick={() => void interaction.copy()} aria-label={`复制${message.role === "assistant" ? assistantLabel : roleLabel(message.role)}消息`}><Copy size={16} /></button>
       </div>}
       <span className="message-copy-feedback" role="status" aria-live="polite">{interaction.feedback}</span>
+      {menu}
     </article>
   );
 }

@@ -10,7 +10,8 @@ const js = ts.transpileModule(body, { compilerOptions: { target: ts.ScriptTarget
 const factory = new Function('useEffect', 'useRef', 'useState', 'setTimeout', 'clearTimeout', 'Element', 'window', `${js}\nreturn useMessageInteraction;`);
 
 export function messageInteractionDriver(onCopy) {
-  let cursor = 0, state, serial = 0, selection = '';
+  let cursor = 0, state, serial = 0, selection = '', focused = 0;
+  const origin = { contains: target => target === 'inside', focus: () => focused++ };
   const slots = [], timers = new Map();
   const useRef = value => slots[cursor++] ??= { current: value };
   const useState = value => {
@@ -30,12 +31,13 @@ export function messageInteractionDriver(onCopy) {
   render();
   return {
     render,
-    event(name, patch = {}) { const event = { target: new Element(), currentTarget: { contains: target => target === 'inside' }, pointerType: 'touch', isPrimary: true, clientX: 0, clientY: 0, preventDefault() { this.prevented = true; }, ...patch }; state.handlers[name](event); render(); return event; },
+    event(name, patch = {}) { const event = { target: new Element(), currentTarget: origin, pointerType: 'touch', isPrimary: true, clientX: 0, clientY: 0, preventDefault() { this.prevented = true; }, ...patch }; if (name === 'onKeyDown' && !('target' in patch)) event.target = origin; state.handlers[name](event); render(); return event; },
     interactive: () => new Element('button'),
     element: (selector, parent) => new Element(selector, parent),
     select: text => { selection = text; },
     hold() { for (const [id, fn] of [...timers]) { timers.delete(id); fn(); } render(); },
     pending: () => timers.size,
+    focused: () => focused,
     unmount() { for (const slot of slots) slot?.cleanup?.(); },
   };
 }

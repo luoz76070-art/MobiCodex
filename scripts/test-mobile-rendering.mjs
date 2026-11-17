@@ -404,20 +404,21 @@ test('U1 tap/focus reveals metadata, focus inside keeps the copy button accessib
   assert.equal(driver.render().revealed, false);
   driver.unmount();
 });
-test('U1 stationary long press copies once with feedback; failures are never reported as success', async () => {
+test('U1 stationary long press opens actions; explicit copy preserves success and failure feedback', async () => {
   for (const fail of [false, true]) {
     let calls = 0, finish;
     const driver = messageInteractionDriver(() => { calls++; return new Promise((resolve, reject) => { finish = fail ? () => reject(new Error('denied')) : resolve; }); });
     driver.event('onPointerDown'); assert.equal(driver.pending(), 1); driver.hold();
     driver.event('onPointerUp'); driver.event('onClick');
     assert.equal(driver.render().revealed, true);
+    assert.equal(driver.render().menuOpen, true); assert.equal(calls, 0);
     void driver.render().copy(); assert.equal(calls, 1);
     finish(); await Promise.resolve(); await Promise.resolve();
     assert.equal(driver.render().feedback, fail ? '复制失败，请重试' : '已复制');
     driver.unmount();
   }
 });
-test('U1 code and table presses preserve native selection and context menus, while prose still copies', async () => {
+test('U1 code and table presses preserve native selection and context menus, while prose opens actions', async () => {
   for (const selector of ['pre', 'code', '.code-block', 'table']) for (const nested of [false, true]) for (const pointerType of ['touch', 'pen']) {
     let calls = 0;
     const driver = messageInteractionDriver(() => { calls++; });
@@ -434,7 +435,8 @@ test('U1 code and table presses preserve native selection and context menus, whi
     // Even with an active prose press, a menu originating inside code stays native.
     assert.equal(driver.event('onContextMenu', { target }).prevented, undefined);
     assert.equal(driver.event('onContextMenu').prevented, true);
-    driver.hold(); await Promise.resolve();
+    driver.hold(); assert.equal(driver.render().menuOpen, true); assert.equal(calls, 0);
+    await driver.render().copy();
     assert.equal(calls, 1); assert.equal(driver.render().feedback, '已复制');
     driver.unmount();
   }
@@ -449,12 +451,12 @@ test('U1 scroll, cancellation, release, mouse, interactive children, selection a
     if (action === 'leave') driver.event('onPointerLeave');
     if (action === 'selection') driver.select('selected text');
     if (action === 'unmount') driver.unmount();
-    driver.hold(); assert.equal(calls, 0, action); driver.unmount();
+    driver.hold(); assert.equal(calls, 0, action); assert.equal(driver.render().menuOpen, false, action); driver.unmount();
   }
 });
 test('U1 late clipboard completion after unmount does not publish feedback', async () => {
   let finish; const driver = messageInteractionDriver(() => new Promise(resolve => { finish = resolve; }));
-  driver.event('onPointerDown'); driver.hold(); driver.unmount(); finish();
+  driver.event('onPointerDown'); driver.hold(); void driver.render().copy(); driver.unmount(); finish();
   await Promise.resolve(); await Promise.resolve();
   assert.equal(driver.render().feedback, '');
 });

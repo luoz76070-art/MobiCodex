@@ -1,6 +1,6 @@
-# F7 反馈入口和待发（part 1）
+# F7 反馈入口和待发
 
-`features/feedback/model.ts` 的 `openFeedback({text?, screenshot?: File, context?})` 只打开 App 级面板，不导航、不自动发送。设置提供入口；消息长按与分享入口留给 part 2。App 按连接 scope 挂载 FeedbackHost，保留当前 Agent/会话；反馈 BackLayer=215，复用 capture 模式语音层=220，系统返回先关语音再关反馈。
+`features/feedback/model.ts` 的 `openFeedback({text?, screenshot?: File, context?})` 只打开 App 级面板，不导航、不自动发送。设置、共享消息长按菜单和分享面板均提供入口。App 按连接 scope 挂载 FeedbackHost，保留当前 Agent/会话；反馈 BackLayer=215，复用 capture 模式语音层=220，系统返回先关语音再关反馈。
 
 上下文在打开时冻结，白名单为版本、versionCode、页面、Agent、会话、最近一次可见错误、机型/系统。页面显示全部字段。版本按独立/宿主身份读取，机型/系统仅解析 UA，未知明确标记，不新增原生插件。
 
@@ -13,3 +13,9 @@
 面板区分待发送和我的反馈，状态为已收到、已提交 #N、已修复/版本、未采纳/原因；打开、在线恢复和前台30秒读取更新，有手动刷新入口。不可读取时明确提示，不伪造成功。
 
 `corepack pnpm test:mobile` 包含 `scripts/test-mobile-feedback.mjs`：上下文、UA、脱敏、队列去重/补发/隔离/配额、状态、生产面板 handlers、设置接线与生命周期。浏览器 IndexedDB 容量、Android 录音/系统选图与离线切换仍须真机验收。
+
+## Part 2：消息和分享入口
+
+共享MessageBubble及useMessageInteraction提供复制、反馈这条、取消；静止长按打开菜单，代码/表格选择及滑动保持原生。菜单初始焦点为复制，方向键/Home/End/Tab可导航，Esc、外部点击及系统返回关闭并将焦点还给消息。反馈正文先经redactFeedbackError，再取200字，加“关于这条消息：”；Host在打开时冻结当前Agent、session及页面，入口不发送。
+
+ShareSheet在手机内准备反馈，最多读取第一张图片；类型仅PNG/JPEG/WebP，元数据和实际文件均限制5MiB，并复用feedbackScreenshot签名检查。多图省略数量占用预填文字2000字预算；首图无效时不改选后续图，明确说明拒绝原因及未附数量。OpenFeedbackOptions.notice仅供面板展示，不增加context或网关载荷字段。取消/卸载后不打开迟到反馈。

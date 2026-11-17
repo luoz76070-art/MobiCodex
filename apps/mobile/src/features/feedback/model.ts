@@ -4,9 +4,9 @@ export type FeedbackContext = { version: string; versionCode: number; page: stri
 export type FeedbackInput = { clientId: string; text: string; context: FeedbackContext; screenshot?: { mimeType: 'image/png' | 'image/jpeg' | 'image/webp'; dataBase64: string } };
 export type FeedbackStatus = { state: 'received' } | { state: 'filed'; issue: number } | { state: 'fixed'; version: string } | { state: 'dismissed'; reason: string };
 export type FeedbackItem = Omit<FeedbackInput, 'screenshot'> & { id: string; createdAt: string; status: FeedbackStatus; screenshot?: { mimeType: string; size: number } };
-export type OpenFeedbackOptions = { text?: string; screenshot?: File; context?: Partial<FeedbackContext> };
+export type OpenFeedbackOptions = { text?: string; screenshot?: File; context?: Partial<FeedbackContext>; notice?: string };
 export const feedbackOpenEvent = 'mobicodex-open-feedback';
-/** Reused by settings now, and by message/share actions in the next PR. Never sends automatically. */
+/** Reused by settings, message and share actions. Never sends automatically. */
 export function openFeedback(options: OpenFeedbackOptions = {}) { window.dispatchEvent(new CustomEvent(feedbackOpenEvent, { detail: options })); }
 const clip = (value: unknown, max: number) => typeof value === 'string' ? value.slice(0, max) : '';
 export function parseFeedbackUserAgent(ua: string): { model: string; os: string } {

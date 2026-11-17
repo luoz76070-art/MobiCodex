@@ -1,0 +1,7 @@
+# Design
+
+长按行为位于useMessageInteraction，共享MessageBubble接菜单。独立portal菜单复用BackLayers与主题变量；触发消息保存为焦点恢复目标。保留代码/表格原生选择和滑动取消保护，工具消息同样接入。
+
+分享预填适配位于intake/feedback，复用shareText、shareFiles及feedbackScreenshot。仅读取第一张，检查声明类型、元数据大小和实际文件签名/大小。OpenFeedbackOptions增加仅供UI显示的notice，不进入FeedbackContext或提交载荷。先完成读取，再关闭分享并打开反馈；取消/卸载废止迟到结果。
+
+FeedbackHost已在App级提供当前页面、Agent和会话，不重复传递或扩大context。新入口只派发打开事件。

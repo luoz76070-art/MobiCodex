@@ -2,6 +2,8 @@ import { useBackLayer } from "../../shared/BackLayers";
 import { useEffect, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { shareText, type SharePayload } from "./plugin";
+import { shareFeedbackOptions } from "./feedback";
+import { openFeedback } from "../feedback/model";
 
 export type ShareAction = "current" | "new-task" | "capture";
 export function ShareSheet({ payload, currentTitle, onChoose, onCancel }: {
@@ -20,10 +22,15 @@ export function ShareSheet({ payload, currentTitle, onChoose, onCancel }: {
   }, [onCancel]);
   function cancel() { action.current?.abort(); onCancel(); }
   useBackLayer(true, cancel, 220);
-  async function choose(value: ShareAction) {
+  async function choose(value: ShareAction | "feedback") {
     if (action.current) return;
     const controller = new AbortController(); action.current = controller; setBusy(true); setError("");
-    try { await onChoose(value, controller.signal); }
+    try {
+      if (value === "feedback") {
+        const options = await shareFeedbackOptions(payload, controller.signal);
+        if (!controller.signal.aborted) { onCancel(); openFeedback(options); }
+      } else await onChoose(value, controller.signal);
+    }
     catch (caught) { if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "分享内容未能读取，请重试。"); }
     finally { if (!controller.signal.aborted) { action.current = null; setBusy(false); } }
   }
@@ -46,6 +53,7 @@ export function ShareSheet({ payload, currentTitle, onChoose, onCancel }: {
         {currentTitle === null && <p>请先打开一个线程</p>}
         <button type="button" className="action-button" disabled={busy} onClick={() => void choose("new-task")}>开新任务</button>
         <button type="button" className="action-button" disabled={busy} onClick={() => void choose("capture")}>存成事项卡</button>
+        <button type="button" className="action-button" disabled={busy} onClick={() => void choose("feedback")}>反馈问题</button>
         <button type="button" className="action-button" onClick={cancel}>取消</button>
       </div>
       {busy && <p role="status">正在准备草稿和附件…</p>}{error && <p role="alert">{error}</p>}

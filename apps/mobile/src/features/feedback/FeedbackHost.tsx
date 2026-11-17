@@ -65,7 +65,7 @@ export function FeedbackSheet({ scope, endpoint, token, options, context, queued
   const [text, setText] = useState(options.text ?? ''), [screenshot, setScreenshot] = useState<File | undefined>(options.screenshot);
   const [clientId, setClientId] = useState(() => crypto.randomUUID());
   const [busy, setBusy] = useState(false), lock = useRef(false), mounted = useRef(true);
-  const [notice, setNotice] = useState(''), [error, setError] = useState(''), [listError, setListError] = useState(''), [items, setItems] = useState<FeedbackItem[]>([]);
+  const [notice, setNotice] = useState(options.notice ?? ''), [error, setError] = useState(''), [listError, setListError] = useState(''), [items, setItems] = useState<FeedbackItem[]>([]);
   const sheet = useRef<HTMLElement>(null), fileInput = useRef<HTMLInputElement>(null);
   const recovery = useCaptureVoice(scope, endpoint, token, value => setText(current => current ? `${current}\n${value}` : value));
   useBackLayer(true, () => { if (!lock.current) close(); }, 215);
