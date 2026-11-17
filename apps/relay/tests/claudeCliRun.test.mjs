@@ -6,7 +6,9 @@ import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { ClaudeCliAdapter, claudeCliConfigSchema } from '../dist/agents/claudeCliAdapter.js';
 import { compatibleClaudeVersion, claudeCliMinimumVersion, resolveClaudeCliExecutable } from '../dist/agents/claudeCliExecutable.js';
-import { ClaudeCliRuntime, claudeCliDenial } from '../dist/agents/claudeCliRuntime.js';
+import { AgentGateway } from '../dist/agents/agentGateway.js';
+import { ClaudeCliInteractions } from '../dist/agents/claudeCliInteractions.js';
+import { ClaudeCliRuntime } from '../dist/agents/claudeCliRuntime.js';
 import { createRelayServer } from '../dist/server/createRelayServer.js';
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -37,10 +39,11 @@ async function fixture(t, ports = {}) {
     async getSessionMessages(id) { return structuredClone(rows.get(id) ?? []); },
     query(input) {
       const frames = new Frames();
-      const run = { input, frames, inputs: [], interrupts: 0, closes: 0 };
+      const run = { input, frames, inputs: [], interrupts: 0, closes: 0, modes: [], models: [] };
       runs.push(run);
       void (async () => { for await (const message of input.prompt) run.inputs.push(message); })();
-      return { [Symbol.asyncIterator]: () => frames[Symbol.asyncIterator](), async interrupt() { run.interrupts++; }, close() { run.closes++; frames.close(); } };
+      const query = { [Symbol.asyncIterator]: () => frames[Symbol.asyncIterator](), async interrupt() { run.interrupts++; }, async supportedModels() { return [{ value: "synthetic-model", displayName: "Synthetic model", description: "Test model" }]; }, async setModel(model) { run.models.push(model); }, async setPermissionMode(mode) { run.modes.push(mode); }, close() { run.closes++; frames.close(); } };
+      run.query = query; return query;
     },
   };
   let versionReads = 0;
@@ -245,20 +248,6 @@ test('old/missing executable disables sending and exposes a safe specific Agent 
   t.after(() => other.stop()); await other.ready(); assert.equal(other.snapshot().errorCode, 'CLAUDE_CLI_EXECUTABLE_NOT_FOUND'); assert.doesNotMatch(JSON.stringify(other.snapshot()), /private details/);
 });
 
-test('approval callbacks and AskUserQuestion always deny and emit visible system notices', async t => {
-  const f = await fixture(t); await f.adapter.sendMessage(f.id, f.operation()); const options = f.runs[0].input.options;
-  for (const tool of ['Bash', 'AskUserQuestion']) {
-    const answer = await options.canUseTool(tool, { private: true }, { toolUseID: randomUUID(), signal: new AbortController().signal });
-    assert.deepEqual(answer, { behavior: 'deny', message: claudeCliDenial });
-    assert.ok(f.current().messages.some(message => message.role === 'system' && message.text === `已自动拒绝：${tool}（手机审批下一版提供）`));
-  }
-  const hook = options.hooks.PreToolUse[0]; assert.equal(hook.matcher, 'AskUserQuestion');
-  const answer = await hook.hooks[0]({ hook_event_name: 'PreToolUse', tool_name: 'AskUserQuestion' }, randomUUID());
-  assert.equal(answer.hookSpecificOutput.permissionDecision, 'deny');
-  await assert.rejects(f.adapter.respondPermission(), { code: 'CLAUDE_CLI_READ_ONLY' });
-  await assert.rejects(f.adapter.respondQuestion(), { code: 'CLAUDE_CLI_READ_ONLY' });
-});
-
 test('default HTTP factory authenticates directory/create endpoints and rejects arbitrary roots and extra fields', async t => {
   const f = await fixture(t), executable = path.join(f.root, 'fake-claude');
   await fs.writeFile(executable, '#!/usr/bin/env node\nif (process.argv[2] !== "--version") process.exit(99);\nconsole.log("2.1.326 (Claude Code)");\n', { mode: 0o700 });
@@ -277,4 +266,188 @@ test('default HTTP factory authenticates directory/create endpoints and rejects 
   assert.equal(created.statusCode, 200); assert.ok(created.json().session.id); assert.equal(f.runs.length, 1);
   assert.equal((await app.inject({ url: '/api/agents', headers })).json().agents.find(agent => agent.id === 'claude-cli').capabilities.sendMessage, true);
   await app.close(); assert.equal(f.runs[0].closes, 1);
+});
+
+function ask(f, name = 'Bash', input = { command: 'synthetic-command --check' }, options = {}) {
+  const controller = new AbortController();
+  const answer = f.runs.at(-1).input.options.canUseTool(name, input, { signal: controller.signal, toolUseID: randomUUID(), requestId: randomUUID(), ...options });
+  return { answer, controller, id: (name === 'AskUserQuestion' ? f.current().questions : f.current().permissions).at(-1)?.id };
+}
+const localRule = { type: 'addRules', behavior: 'allow', destination: 'localSettings', rules: [{ toolName: 'Bash', ruleContent: 'synthetic-command:*' }] };
+const questions = [
+  { question: 'Which format?', header: 'Format', options: [{ label: 'Summary', description: 'Brief', preview: '<b>Plain preview</b>' }, { label: 'Details', description: 'Full' }], multiSelect: false },
+  { question: 'Which sections?', header: 'Sections', options: [{ label: 'Intro' }, { label: 'Conclusion' }], multiSelect: true },
+];
+
+test('tool approval waits for a phone, allows once with original input, and rejects repeat submissions', async t => {
+  const f = await fixture(t); await f.adapter.sendMessage(f.id, f.operation());
+  const input = { command: 'synthetic-command --check', metadata: { original: true } }, request = ask(f, 'Bash', input);
+  let answered = false; void request.answer.then(() => { answered = true; }); await sleep(10); assert.equal(answered, false);
+  assert.equal(f.current().permissions[0].workingDirectory, f.directory); assert.deepEqual(JSON.parse(f.current().permissions[0].detail), input);
+  assert.equal(f.adapter.snapshot().capabilities.approve, true);
+  await f.adapter.respondPermission(f.id, request.id, { ...f.operation(), decision: 'once' });
+  assert.deepEqual(await request.answer, { behavior: 'allow', updatedInput: input }); assert.deepEqual(f.current().permissions, []);
+  await assert.rejects(f.adapter.respondPermission(f.id, request.id, { ...f.operation(), decision: 'once' }), { code: 'CLAUDE_CLI_REQUEST_HANDLED', statusCode: 409 });
+  assert.ok(!f.current().messages.some(message => message.text.includes('已自动拒绝'))); assert.equal(f.runs[0].input.options.hooks, undefined);
+});
+
+test('always allow echoes only local suggestions; missing or suppressed suggestions cannot be approved persistently', async t => {
+  const f = await fixture(t); await f.adapter.sendMessage(f.id, f.operation());
+  const other = { ...localRule, destination: 'userSettings' };
+  const request = ask(f, 'Bash', {}, { suggestions: [other, localRule] });
+  assert.deepEqual(f.current().permissions[0].decisions, ['once', 'always', 'reject']); assert.equal(f.current().permissions[0].localSettings, true);
+  await f.adapter.respondPermission(f.id, request.id, { ...f.operation(), decision: 'always' });
+  assert.deepEqual(await request.answer, { behavior: 'allow', updatedInput: {}, updatedPermissions: [localRule] });
+  for (const options of [{}, { suggestions: [other] }, { suggestions: [localRule], suppressAlwaysAllowRule: true }, { suggestions: [{ type: 'setMode', mode: 'bypassPermissions', destination: 'localSettings' }] }]) {
+    const denied = ask(f, 'Bash', {}, options); assert.deepEqual(f.current().permissions[0].decisions, ['once', 'reject']);
+    await assert.rejects(f.adapter.respondPermission(f.id, denied.id, { ...f.operation(), decision: 'always' }), { code: 'CLAUDE_CLI_PERMISSION_INVALID' });
+    await f.adapter.respondPermission(f.id, denied.id, { ...f.operation(), decision: 'reject' }); assert.equal((await denied.answer).behavior, 'deny');
+  }
+});
+
+test('reject supplies the optional reason or default reason; Write/Edit input is complete with explicit truncation', async t => {
+  const f = await fixture(t); await f.adapter.sendMessage(f.id, f.operation());
+  for (const reason of ['Please use a safer command', '', '  ', undefined]) {
+    const request = ask(f);
+    await f.adapter.respondPermission(f.id, request.id, { ...f.operation(), decision: 'reject', reason });
+    assert.deepEqual(await request.answer, { behavior: 'deny', message: reason?.trim() || '用户在手机上拒绝了这个操作' });
+  }
+  for (const name of ['Write', 'Edit']) {
+    const input = { file_path: 'synthetic.txt', old_string: 'old', new_string: 'new', content: 'x'.repeat(25_000) };
+    const request = ask(f, name, input), card = f.current().permissions[0];
+    assert.equal(card.action, name); assert.equal(card.inputTruncated, true); assert.equal(card.detail.length, 20_000); assert.match(card.detail, /synthetic.txt/);
+    await f.adapter.respondPermission(f.id, request.id, { ...f.operation(), decision: 'once' }); assert.deepEqual((await request.answer).updatedInput, input);
+  }
+});
+
+test('questions retain original questions and use original text keys for single, multiple and free answers', async t => {
+  const f = await fixture(t); await f.adapter.sendMessage(f.id, f.operation());
+  const request = ask(f, 'AskUserQuestion', { questions, metadata: 'retained' });
+  assert.equal(f.current().questions[0].questions[0].options[0].preview, '<b>Plain preview</b>'); assert.equal(f.current().questions[0].questions[1].multiple, true);
+  assert.ok(f.current().questions[0].questions.every(question => question.custom));
+  await assert.rejects(f.adapter.respondQuestion(f.id, request.id, { ...f.operation(), answers: [['Summary', 'Details'], ['Intro']] }), { code: 'CLAUDE_CLI_ANSWER_INVALID' });
+  await f.adapter.respondQuestion(f.id, request.id, { ...f.operation(), answers: [['Summary'], ['Intro', 'Conclusion']] });
+  assert.deepEqual(await request.answer, { behavior: 'allow', updatedInput: { questions, metadata: 'retained', answers: { 'Which format?': 'Summary', 'Which sections?': 'Intro, Conclusion' } } });
+  await assert.rejects(f.adapter.respondQuestion(f.id, request.id, { ...f.operation(), answers: [['Details'], ['Intro']] }), { code: 'CLAUDE_CLI_REQUEST_HANDLED' });
+  const free = ask(f, 'AskUserQuestion', { questions: [questions[0]] });
+  await f.adapter.respondQuestion(f.id, free.id, { ...f.operation(), answers: [['My own response']] });
+  assert.deepEqual((await free.answer).updatedInput.answers, { 'Which format?': 'My own response' }); assert.equal(f.current().questions.length, 0);
+});
+
+test('signal cancellation, result, interrupt, process failure and stop withdraw pending callbacks for both card kinds', async t => {
+  for (const cause of ['signal', 'result', 'interrupt', 'crash', 'stop']) {
+    const f = await fixture(t); await f.adapter.sendMessage(f.id, f.operation());
+    const permission = ask(f), question = ask(f, 'AskUserQuestion', { questions });
+    if (cause === 'signal') { permission.controller.abort(); question.controller.abort(); }
+    if (cause === 'result') f.result();
+    if (cause === 'interrupt') await f.adapter.interruptSession(f.id, f.operation());
+    if (cause === 'crash') f.runs[0].frames.crash();
+    if (cause === 'stop') await f.adapter.stop();
+    const replies = await Promise.all([permission.answer, question.answer]); assert.ok(replies.every(answer => answer.behavior === 'deny'));
+    if (cause !== 'stop') { assert.deepEqual(f.current().questions, []); assert.deepEqual(f.current().permissions, []); }
+    else assert.equal(f.runs[0].closes, 1);
+    if (cause !== 'stop') await assert.rejects(f.adapter.respondPermission(f.id, permission.id, { ...f.operation(), decision: 'once' }), { code: 'CLAUDE_CLI_REQUEST_HANDLED' });
+  }
+});
+
+test('thirty minute deadline denies and interrupts; a resolved request never fires its old timer', async t => {
+  const f = await fixture(t, { interactionMs: 40 }); await f.adapter.sendMessage(f.id, f.operation());
+  for (const kind of ['Bash', 'AskUserQuestion']) {
+    const request = ask(f, kind, kind === 'Bash' ? {} : { questions });
+    await until(() => f.runs[0].interrupts > (kind === 'Bash' ? 0 : 1));
+    const reply = await request.answer; assert.equal(reply.behavior, 'deny'); assert.match(reply.message, /30 分钟/); assert.equal(reply.interrupt, true);
+    await until(() => f.runs[0].interrupts > (kind === 'Bash' ? 0 : 1));
+    assert.deepEqual(f.current().questions, []); assert.deepEqual(f.current().permissions, []);
+    f.result(); await until(() => f.current().status === 'idle'); assert.equal(f.current().lastTurn.status, 'interrupted');
+    await f.adapter.sendMessage(f.id, f.operation());
+  }
+  const request = ask(f); await f.adapter.respondPermission(f.id, request.id, { ...f.operation(), decision: 'once' }); await request.answer;
+  await sleep(60); assert.equal(f.runs[0].interrupts, 2);
+});
+
+test('query controls require an existing process and accept only safe modes and supported models', async t => {
+  const f = await fixture(t);
+  await assert.rejects(f.adapter.sessionSettings(f.id), { code: 'CLAUDE_CLI_NOT_RUNNING' }); assert.equal(f.runs.length, 0);
+  await f.adapter.sendMessage(f.id, f.operation());
+  assert.deepEqual(await f.adapter.sessionSettings(f.id), { permissionMode: 'default', model: null, models: [{ value: 'synthetic-model', displayName: 'Synthetic model', description: 'Test model' }] });
+  for (const mode of ['default', 'plan', 'acceptEdits']) await f.adapter.setPermissionMode(f.id, { ...f.operation(), mode });
+  for (const mode of ['bypassPermissions', 'dontAsk', 'auto']) await assert.rejects(f.adapter.setPermissionMode(f.id, { ...f.operation(), mode }), { code: 'CLAUDE_CLI_PERMISSION_MODE_INVALID' });
+  await assert.rejects(f.adapter.setModel(f.id, { ...f.operation(), model: 'unknown' }), { code: 'CLAUDE_CLI_MODEL_INVALID' });
+  await f.adapter.setModel(f.id, { ...f.operation(), model: 'synthetic-model' });
+  assert.deepEqual(f.runs[0].modes, ['default', 'plan', 'acceptEdits']); assert.deepEqual(f.runs[0].models, ['synthetic-model']);
+  assert.deepEqual(f.current().runtimeSettings, { permissionMode: 'acceptEdits', model: 'synthetic-model' });
+  f.result(); await until(() => f.current().status === 'idle');
+  await f.adapter.setPermissionMode(f.id, { ...f.operation(), mode: 'default' }); assert.equal(f.runs.length, 1);
+  f.runs[0].frames.close(); await until(() => f.runs[0].closes === 1); assert.equal(f.current().runtimeSettings, undefined);
+  await assert.rejects(f.adapter.setModel(f.id, { ...f.operation(), model: 'synthetic-model' }), { code: 'CLAUDE_CLI_NOT_RUNNING' });
+});
+
+test('production interaction timeout is exactly thirty minutes and cancellation clears it', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const snapshot = { questions: [], permissions: [] }; let interruptions = 0;
+  const interactions = new ClaudeCliInteractions(snapshot, 'synthetic-project', () => {}, () => { interruptions++; });
+  const controller = new AbortController();
+  const answer = interactions.request('Bash', {}, { signal: controller.signal, toolUseID: 'synthetic-tool', requestId: 'synthetic-request' });
+  t.mock.timers.tick(30 * 60_000 - 1); assert.equal(snapshot.permissions.length, 1); assert.equal(interruptions, 0);
+  t.mock.timers.tick(1); assert.equal((await answer).behavior, 'deny'); assert.equal(interruptions, 1); assert.equal(snapshot.permissions.length, 0);
+  const canceled = interactions.request('Bash', {}, { signal: controller.signal, toolUseID: 'synthetic-tool-2', requestId: 'synthetic-request-2' });
+  controller.abort(); await canceled; t.mock.timers.tick(30 * 60_000); assert.equal(interruptions, 1);
+});
+
+test('HTTP approvals and controls preserve authentication, control token validation and idempotency', async t => {
+  const f = await fixture(t);
+  const config = { host: '', port: 0, token: 'synthetic-admin', codexHome: path.join(f.root, 'empty-codex'), defaultCwd: f.root };
+  const app = await createRelayServer({ logger: false, config, services: { agentGateway: new AgentGateway([f.adapter]), desktopControl: { stop: async () => {} } } }); t.after(() => app.close());
+  const headers = { authorization: `Bearer ${config.token}` }, base = `/api/agents/claude-cli/sessions/${f.id}`;
+  assert.equal((await app.inject({ url: `${base}/controls` })).statusCode, 401);
+  assert.equal((await app.inject({ url: `${base}/controls`, headers })).statusCode, 409);
+  await f.adapter.sendMessage(f.id, f.operation());
+  const permission = ask(f), question = ask(f, 'AskUserQuestion', { questions: [questions[0]] });
+  const permissionRoute = `${base}/permissions/${permission.id}/respond`, permissionBody = { controlToken: f.current().control.token, clientMessageId: randomUUID(), decision: 'reject', reason: 'Synthetic reason' };
+  assert.equal((await app.inject({ method: 'POST', url: permissionRoute, payload: permissionBody })).statusCode, 401);
+  assert.equal((await app.inject({ method: 'POST', url: permissionRoute, headers, payload: { ...permissionBody, clientMessageId: randomUUID(), controlToken: randomUUID() } })).statusCode, 409);
+  assert.equal((await app.inject({ method: 'POST', url: permissionRoute, headers, payload: { ...permissionBody, clientMessageId: randomUUID(), reason: 'x'.repeat(2001) } })).statusCode, 400);
+  const replies = await Promise.all([0, 1].map(() => app.inject({ method: 'POST', url: permissionRoute, headers, payload: permissionBody })));
+  assert.deepEqual(replies.map(reply => reply.statusCode), [200, 200]); assert.deepEqual(await permission.answer, { behavior: 'deny', message: 'Synthetic reason' });
+  const duplicate = await app.inject({ method: 'POST', url: permissionRoute, headers, payload: { ...permissionBody, clientMessageId: randomUUID() } });
+  assert.equal(duplicate.statusCode, 409); assert.equal(duplicate.json().error, 'CLAUDE_CLI_REQUEST_HANDLED');
+  const op = () => ({ controlToken: f.current().control.token, clientMessageId: randomUUID() });
+  const questionReply = await app.inject({ method: 'POST', url: `${base}/questions/${question.id}/respond`, headers, payload: { ...op(), answers: [['My format']] } });
+  assert.equal(questionReply.statusCode, 200); assert.deepEqual((await question.answer).updatedInput.answers, { 'Which format?': 'My format' });
+  for (const suffix of ['permission-mode', 'model']) assert.equal((await app.inject({ method: 'POST', url: `${base}/${suffix}`, payload: { ...op(), ...(suffix === 'model' ? { model: 'synthetic-model' } : { mode: 'plan' }) } })).statusCode, 401);
+  assert.equal((await app.inject({ method: 'POST', url: `${base}/permission-mode`, headers, payload: { ...op(), mode: 'bypassPermissions' } })).statusCode, 400);
+  const modeBody = { ...op(), mode: 'plan' };
+  for (let i = 0; i < 2; i++) assert.equal((await app.inject({ method: 'POST', url: `${base}/permission-mode`, headers, payload: modeBody })).statusCode, 200);
+  assert.deepEqual(f.runs[0].modes, ['plan']);
+  assert.equal((await app.inject({ method: 'POST', url: `${base}/model`, headers, payload: { ...op(), model: 'unknown' } })).statusCode, 400);
+  assert.equal((await app.inject({ method: 'POST', url: `${base}/model`, headers, payload: { ...op(), model: 'synthetic-model' } })).statusCode, 200);
+  const state = (await app.inject({ url: `${base}/controls`, headers })).json(); assert.equal(state.permissionMode, 'plan'); assert.equal(state.model, 'synthetic-model');
+  assert.equal(state.models[0].displayName, 'Synthetic model'); assert.equal(f.runs.length, 1);
+});
+
+test('late model catalogs cannot alter a replacement Query; SDK control failures are safe errors', async t => {
+  const f = await fixture(t); await f.adapter.sendMessage(f.id, f.operation());
+  let release; f.runs[0].query.supportedModels = () => new Promise(resolve => { release = resolve; });
+  const waiting = f.adapter.sessionSettings(f.id); await until(() => Boolean(release));
+  f.runs[0].frames.crash(); await until(() => f.current().lastTurn?.status === 'failed');
+  await f.adapter.sendMessage(f.id, f.operation());
+  release([{ value: 'stale-model', displayName: 'Stale', description: '' }]);
+  await assert.rejects(waiting, { code: 'CLAUDE_CLI_NOT_RUNNING' }); assert.equal(f.current().runtimeSettings.model, null);
+  f.runs[1].query.setPermissionMode = async () => { throw new Error('PRIVATE SDK ERROR'); };
+  await assert.rejects(f.adapter.setPermissionMode(f.id, { ...f.operation(), mode: 'plan' }), { code: 'CLAUDE_CLI_SETTINGS_FAILED', message: 'CLAUDE_CLI_SETTINGS_FAILED' });
+  assert.equal(f.current().runtimeSettings.permissionMode, 'default'); assert.doesNotMatch(JSON.stringify(f.snapshots), /PRIVATE/);
+});
+
+test('canceled signals and malformed questions fail closed; pending payload and count stay bounded', async t => {
+  const f = await fixture(t); await f.adapter.sendMessage(f.id, f.operation());
+  const controller = new AbortController(); controller.abort();
+  assert.equal((await ask(f, 'Bash', {}, { signal: controller.signal }).answer).behavior, 'deny'); assert.equal(f.current().permissions.length, 0);
+  assert.equal((await ask(f, 'AskUserQuestion', { questions: [{ question: 'Invalid', options: 'invalid' }] }).answer).behavior, 'deny'); assert.equal(f.current().questions.length, 0);
+  const huge = { question: 'Large preview?', options: Array.from({ length: 100 }, (_, i) => ({ label: `Option ${i}`, preview: '界'.repeat(20_000) })) };
+  assert.equal((await ask(f, 'AskUserQuestion', { questions: [huge] }).answer).behavior, 'deny'); assert.equal(f.current().questions.length, 0);
+  const requests = Array.from({ length: 32 }, () => ask(f));
+  assert.equal(f.current().permissions.length, 32);
+  assert.equal((await ask(f).answer).behavior, 'deny'); assert.equal(f.current().permissions.length, 32);
+  await f.adapter.interruptSession(f.id, f.operation());
+  assert.ok((await Promise.all(requests.map(request => request.answer))).every(reply => reply.behavior === 'deny')); assert.deepEqual(f.current().permissions, []);
 });

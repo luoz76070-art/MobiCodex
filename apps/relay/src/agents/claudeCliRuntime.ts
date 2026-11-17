@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto";
 import type { query, Query, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import { agentError, type AgentMessage, type AgentOperation, type AgentSessionSnapshot } from "./sessions.js";
+import { agentError, type AgentMessage, type AgentOperation, type AgentPermissionMode, type AgentSessionSnapshot } from "./sessions.js";
+import { ClaudeCliInteractions } from "./claudeCliInteractions.js";
 import { compatibleClaudeVersion, resolveClaudeCliExecutable, claudeCliMinimumVersion, type ClaudeCliExecutable } from "./claudeCliExecutable.js";
 
-export type ClaudeCliQuery = Pick<Query, typeof Symbol.asyncIterator | "interrupt" | "close">;
+export type ClaudeCliQuery = Pick<Query, typeof Symbol.asyncIterator | "interrupt" | "close" | "supportedModels" | "setModel" | "setPermissionMode">;
 export type ClaudeCliQueryFactory = (input: Parameters<typeof query>[0]) => ClaudeCliQuery;
 export type ClaudeCliRuntimePorts = {
   resolveExecutable?: (configured?: string) => Promise<ClaudeCliExecutable>;
   idleMs?: number;
+  interactionMs?: number;
   now?: () => number;
 };
 type Input = { text: string; clientMessageId: string };
@@ -26,11 +28,10 @@ class InputStream implements AsyncIterable<SDKUserMessage> {
   }
 }
 type Run = {
-  query?: ClaudeCliQuery; input: InputStream; snapshot: AgentSessionSnapshot; pending: Input[];
+  interactions?: ClaudeCliInteractions; query?: ClaudeCliQuery; input: InputStream; snapshot: AgentSessionSnapshot; pending: Input[];
   streamId?: string; blocks: Map<number, string>; timer?: ReturnType<typeof setTimeout>;
   interrupted: boolean; closed: boolean; turnId: string;
 };
-export const claudeCliDenial = "用户在手机上，当前版本不能审批这个操作；请换不需要审批的做法，或停下来说明需要做什么";
 
 /** Owns only processes created by this gateway. Reading a record never starts query(). */
 export class ClaudeCliRuntime {
@@ -85,26 +86,21 @@ export class ClaudeCliRuntime {
     run.snapshot.lastTurn = previous?.lastTurn ?? snapshot.lastTurn;
     this.runs.set(id, run);
     for (const [key, previous] of this.runs) { if (this.runs.size <= 128) break; if (previous.closed && !this.viewers.has(key)) this.runs.delete(key); }
-    const deny = (name: string, toolUseId?: string) => {
-      if (!run.closed && !this.stopped) {
-        this.upsert(run, { id: `denied:${toolUseId ?? randomUUID()}`, timestamp: "", role: "system", kind: "system",
-          text: `已自动拒绝：${name.slice(0, 80)}（手机审批下一版提供）` });
-        this.changed(id, run);
-      }
-      return { behavior: "deny" as const, message: claudeCliDenial };
-    };
+    run.snapshot.questions = []; run.snapshot.permissions = [];
+    run.snapshot.runtimeSettings = { permissionMode: "default", model: null };
+    run.interactions = new ClaudeCliInteractions(run.snapshot, directory, () => this.changed(id, run), () => {
+      run.interrupted = true; run.interactions?.revoke("等待手机答复超时，本轮已中断。");
+      void run.query?.interrupt().catch(() => { if (!run.closed) this.fail(id, run); });
+    }, this.ports.interactionMs);
     try {
       run.query = this.factory({ prompt: run.input, options: {
         pathToClaudeCodeExecutable: this.executable!.executable,
         cwd: directory, ...(resume ? { resume: id } : { sessionId: id }),
         includePartialMessages: true, permissionMode: "default", settingSources: ["user", "project", "local"], env: { ...process.env },
-        canUseTool: async (name, _input, options) => deny(name, options.toolUseID),
-        // A question must also be denied if a local permission rule would otherwise skip canUseTool.
-        hooks: { PreToolUse: [{ matcher: "AskUserQuestion", hooks: [async (hook, toolUseId) => {
-          if (hook.hook_event_name !== "PreToolUse" || hook.tool_name !== "AskUserQuestion") return {};
-          deny("AskUserQuestion", toolUseId);
-          return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: claudeCliDenial } };
-        }] }] },
+        canUseTool: async (name, input, options) => {
+          if (run.closed || this.stopped || run.interrupted || run.snapshot.status !== "running") return { behavior: "deny", message: "本轮已结束，请求已撤回" };
+          return run.interactions!.request(name, input, options);
+        },
       } });
       this.deliver(id, run, input, false);
       void this.consume(id, run);
@@ -123,7 +119,7 @@ export class ClaudeCliRuntime {
   async interrupt(id: string, input: AgentOperation) {
     const run = this.runs.get(id);
     if (!run?.query || run.closed || run.snapshot.status !== "running") throw agentError("CLAUDE_CLI_NOT_RUNNING", 409);
-    run.interrupted = true;
+    run.interrupted = true; run.interactions?.revoke("本轮已中断，请求已撤回");
     try { await run.query.interrupt(); } catch { this.fail(id, run); throw agentError("CLAUDE_CLI_PROCESS_FAILED", 409); }
     this.receipt(run, input.clientMessageId, "interrupt"); this.changed(id, run);
   }
@@ -132,6 +128,41 @@ export class ClaudeCliRuntime {
     if (!run || run.closed) throw agentError("CLAUDE_CLI_PROCESS_EXITED", 409);
     if (!run.pending.some(item => item.clientMessageId === clientMessageId)) throw agentError("CLAUDE_CLI_QUEUE_ITEM_UNAVAILABLE", 409);
     run.pending = run.pending.filter(item => item.clientMessageId !== clientMessageId); this.changed(id, run);
+  }
+  permission(id: string, requestId: string, decision: "once" | "always" | "reject", reason?: string) {
+    const run = this.runs.get(id);
+    if (!run || run.closed) throw agentError("CLAUDE_CLI_REQUEST_HANDLED", 409);
+    run.interactions!.permission(requestId, decision, reason);
+  }
+  question(id: string, requestId: string, answers: string[][]) {
+    const run = this.runs.get(id);
+    if (!run || run.closed) throw agentError("CLAUDE_CLI_REQUEST_HANDLED", 409);
+    run.interactions!.question(requestId, answers);
+  }
+  private controlled(id: string) {
+    const run = this.runs.get(id);
+    if (!run?.query || run.closed || this.stopped) throw agentError("CLAUDE_CLI_NOT_RUNNING", 409);
+    return run as Run & { query: ClaudeCliQuery };
+  }
+  private stillCurrent(id: string, run: Run) {
+    if (this.controlled(id) !== run) throw agentError("CLAUDE_CLI_NOT_RUNNING", 409);
+  }
+  async settings(id: string) {
+    const run = this.controlled(id);
+    const models = await run.query.supportedModels().catch(() => { throw agentError("CLAUDE_CLI_SETTINGS_FAILED", 409); }); this.stillCurrent(id, run);
+    return { ...run.snapshot.runtimeSettings!, models: models.map(({ value, displayName, description }) => ({ value, displayName, description })) };
+  }
+  async setPermissionMode(id: string, mode: AgentPermissionMode) {
+    if (!["default", "plan", "acceptEdits"].includes(mode)) throw agentError("CLAUDE_CLI_PERMISSION_MODE_INVALID", 400);
+    const run = this.controlled(id);
+    await run.query.setPermissionMode(mode).catch(() => { throw agentError("CLAUDE_CLI_SETTINGS_FAILED", 409); }); this.stillCurrent(id, run);
+    run.snapshot.runtimeSettings!.permissionMode = mode; this.changed(id, run);
+  }
+  async setModel(id: string, model: string) {
+    const run = this.controlled(id), { models } = await this.settings(id); this.stillCurrent(id, run);
+    if (!models.some(item => item.value === model)) throw agentError("CLAUDE_CLI_MODEL_INVALID", 400);
+    await run.query.setModel(model).catch(() => { throw agentError("CLAUDE_CLI_SETTINGS_FAILED", 409); }); this.stillCurrent(id, run);
+    run.snapshot.runtimeSettings!.model = model; this.changed(id, run);
   }
   stop() { this.stopped = true; for (const run of this.runs.values()) this.close(run); this.viewers.clear(); }
   private receipt(run: Run, clientMessageId: string, action: "message" | "interrupt") { run.snapshot.submission = { clientMessageId, action, delivery: "confirmed" }; }
@@ -168,7 +199,9 @@ export class ClaudeCliRuntime {
   }
   private event(id: string, run: Run, message: SDKMessage) {
     if (message.session_id !== id || ("parent_tool_use_id" in message && message.parent_tool_use_id) || ("agent_id" in message && message.agent_id)) return;
-    if (message.type === "stream_event") {
+    if (message.type === "system" && message.subtype === "init") {
+      run.snapshot.runtimeSettings!.model = message.model;
+    } else if (message.type === "stream_event") {
       const event = message.event;
       if (event.type === "message_start") { run.streamId = `stream:${event.message.id}`; run.blocks.clear(); }
       else if (event.type === "content_block_start") {
@@ -187,6 +220,7 @@ export class ClaudeCliRuntime {
       if (text) this.upsert(run, { id: message.uuid, timestamp: "", role: "assistant", kind: "agent_message", text, turnId: run.turnId });
       run.snapshot.activity = message.message.content.some(part => part.type === "tool_use") ? "working" : "outputting";
     } else if (message.type === "result") {
+      run.interactions?.revoke();
       const status = run.interrupted ? "interrupted" : message.is_error || message.subtype !== "success" ? "failed" : "completed";
       run.snapshot.lastTurn = { turnId: run.turnId, status, reason: { code: `CLAUDE_CLI_${status.toUpperCase()}`, message: status === "completed" ? "已完成" : status === "interrupted" ? "已中断" : "运行失败，请在电脑检查 Claude Code。" }, endedAt: new Date(this.now()).toISOString(), timeSource: "observed" };
       run.snapshot.status = "idle"; run.snapshot.activity = "outputting"; run.snapshot.activeTurnId = null;
@@ -208,7 +242,7 @@ export class ClaudeCliRuntime {
   }
   private close(run: Run) {
     if (run.closed) return;
-    run.closed = true; clearTimeout(run.timer); run.input.close();
+    run.closed = true; delete run.snapshot.runtimeSettings; run.interactions?.revoke("会话进程已退出，请求已撤回"); clearTimeout(run.timer); run.input.close();
     try { run.query?.close(); } catch { /* Closing one process must not prevent the others from closing. */ }
   }
   private reapLater(id: string, run: Run) {

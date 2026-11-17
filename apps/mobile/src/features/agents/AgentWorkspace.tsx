@@ -30,6 +30,7 @@ import { apiGet, apiPost, authHeaders, requestJson, buildUrl } from "../connecti
 import { subscribeEvents, type SubscriptionState } from "../connection/subscription";
 import { createSnapshotReducer } from "../connection/snapshotPatch";
 import { writeClipboard } from "../../shared/clipboard";
+import { AgentSessionControls } from "./AgentSessionControls";
 import { AgentQuestions } from "./AgentQuestions";
 import { AgentQueue } from "./AgentQueue";
 import { agentDelivery, agentHistoryWindow, loadAgentDrafts, loadPendingAgentDraft, savePendingAgentDraft, reconcileAgentDraft, saveAgentDrafts, verifyAgentSnapshot, type PendingAgentDraft } from "./runtime";
@@ -53,6 +54,13 @@ const agentErrors: Record<string, string> = {
   CLAUDE_CLI_SESSION_NOT_SAVED: "会话记录尚未保存，请在电脑检查 Claude Code 的运行状态。",
   CLAUDE_CLI_QUEUE_FULL: "待发消息已满，请等待当前任务处理后重试。",
   CLAUDE_CLI_QUEUE_ITEM_UNAVAILABLE: "这条待发消息已送出或已取消，请等待会话同步。",
+  CLAUDE_CLI_REQUEST_HANDLED: "这个请求已处理或已撤回，请等待会话同步。",
+  CLAUDE_CLI_NOT_RUNNING: "会话进程已关闭；发送消息继续后才可切换权限模式和模型。",
+  CLAUDE_CLI_MODEL_INVALID: "这个模型目前不可用，请重新打开设置选择。",
+  CLAUDE_CLI_PERMISSION_MODE_INVALID: "这个权限模式不受支持，请重新选择。",
+  CLAUDE_CLI_PERMISSION_INVALID: "这个审批选项已失效，请等待会话同步。",
+  CLAUDE_CLI_ANSWER_INVALID: "回答格式不完整，请检查选择和填写内容。",
+  CLAUDE_CLI_SETTINGS_FAILED: "切换结果未能确认，请重新查看会话设置。",
   CLAUDE_CLI_READ_ONLY: "只读预览，发送功能下一版提供",
   CCDESK_OTHER_DEVICE: "这个会话在另一台电脑上，只能在那台电脑上操作。",
   CCDESK_CONTROL_UNAVAILABLE: "CC Desk 没有开启手机控制：请在电脑上打开“CC Desk Tunnel（手机控制）”后重试。",
@@ -344,7 +352,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
     pendingDraft.current = next.pending;
     if (next.draft !== draftRef.current) { draftRef.current = next.draft; onDraft(next.draft); }
   }
-  async function operate(action: "message" | "interrupt" | "question" | "permission" | "queue-cancel", suffix: string, extra: Record<string, unknown>, requestId?: string) {
+  async function operate(action: "message" | "interrupt" | "question" | "permission" | "queue-cancel" | "permission-mode" | "model", suffix: string, extra: Record<string, unknown>, requestId?: string) {
     const current = snapshotRef.current, currentScope = scope.current;
     if (readOnly || streamRef.current !== "online" || !currentScope || currentScope.signal.aborted || busyRef.current || !current?.connected || !current.control) return false;
     busyRef.current = true; setBusy(true); setError("");
@@ -362,7 +370,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
       if (action === "message" || action === "interrupt") {
         setSnapshot(value => agentDelivery(value, clientMessageId, action, result));
         if (action === "message") { acceptMessageReceipt({ clientMessageId, action, delivery: result.delivery }); void attentionAfterSend(); }
-      } else if (action !== "queue-cancel") setSnapshot(value => value?.connected && value.control?.token === controlToken ? { ...value,
+      } else if (action === "question" || action === "permission") setSnapshot(value => value?.connected && value.control?.token === controlToken ? { ...value,
         ...(action === "question" ? { questions: value.questions.map(q => q.id === requestId ? { ...q, status: result.delivery === "uncertain" ? "uncertain" : "submitted" } : q) }
           : { permissions: value.permissions.map(p => p.id === requestId ? { ...p, status: result.delivery === "uncertain" ? "uncertain" : "submitted" } : p) }),
       } : value);
@@ -409,7 +417,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
     <div className="messages-viewport" ref={viewport} onScroll={() => { const element = viewport.current; if (element) { nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 100; reading.current[draftSession] = element.scrollTop; } }}>
       {(snapshot?.partialText || agent.id === "claude" || agent.id === "deepseek" || agent.id === "ccdesk") && <details className="agent-capabilities"><summary>会话能力与同步范围</summary>
         {snapshot?.partialText && <p>当前显示已同步的消息与工具记录，长内容可能截断；更早历史以本通道提供的加载入口为准。</p>}
-        {agent.id === "claude-cli" && <p>按本地消息链顺序显示正文和简短工具摘要；需要审批或提问的操作将自动拒绝，手机审批下一版提供。</p>}
+        {agent.id === "claude-cli" && <p>按本地消息链顺序显示正文和简短工具摘要；审批和提问可在手机处理，超过 30 分钟未回答将拒绝并中断本轮。会话进程运行时可切换权限模式和模型。</p>}
         {agent.id === "claude" && <p>消息在当前任务结束后处理；提问和单次审批可在手机处理。</p>}
         {agent.id === "ccdesk" && <p>只能操作这台电脑上的会话，其他电脑上的会话只能查看。发消息、审批和中断需要电脑上开着“CC Desk Tunnel（手机控制）”；权限请求可允许一次或拒绝。</p>}
         {agent.id === "deepseek" && <p>查看历史不会启动任务；发送后继续原会话，运行中可引导或排队。权限请求须核对完整参数后允许一次或拒绝。</p>}
@@ -422,12 +430,15 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
         <MessageTimeline messages={messages} running={snapshot?.status === "running"} renderMessage={(message, expandToolDetails, assistantContinuation) => <MessageBubble message={message} assistantContinuation={assistantContinuation} expandToolDetails={expandToolDetails} assistantLabel={agent.label} smooth={false} smoothPending={false} onSmoothDone={() => {}} onCopy={() => writeClipboard(message.text)} />} />
       </MessageMediaProvider>
       {snapshot?.questions.map(question => <AgentQuestions key={question.id} request={question} agentLabel={agent.label} disabled={readOnly || !online || busy} onRespond={answers => operate("question", `/questions/${question.id}/respond`, { answers }, question.id)} />)}
-      {snapshot?.permissions.map(permission => <PermissionCard key={permission.id} permission={permission} agentLabel={agent.label} disabled={readOnly || !online || busy} onRespond={decision => operate("permission", `/permissions/${permission.id}/respond`, { decision }, permission.id)} />)}
+      {snapshot?.permissions.map(permission => <PermissionCard key={permission.id} permission={permission} agentLabel={agent.label} disabled={readOnly || !online || busy} onRespond={(decision, reason) => operate("permission", `/permissions/${permission.id}/respond`, { decision, ...(reason ? { reason } : {}) }, permission.id)} />)}
       {!snapshot && stream !== "unauthorized" && <MessageSkeleton label="正在读取原会话" />}
     </div>
     <footer className="composer-panel agent-composer">
       {error && <SystemNotice error>{error}</SystemNotice>}
       {unresolved && !queuedSubmission && <SystemNotice>{snapshot?.submission?.delivery === "uncertain" ? "提交结果未知，正在核对；请勿重复发送。" : "已提交，等待服务确认。"}</SystemNotice>}
+      {agent.id === "claude-cli" && snapshot?.runtimeSettings && <AgentSessionControls key={draftSession} settings={snapshot.runtimeSettings} disabled={readOnly || !online || busy}
+        load={signal => apiGet(buildUrl(endpoint, `${base}/controls`), token, signal)}
+        onMode={mode => operate("permission-mode", "/permission-mode", { mode })} onModel={model => operate("model", "/model", { model })} />}
       {snapshot?.queue && <AgentQueue queue={snapshot.queue} disabled={readOnly || !online || busy} onCancel={id => operate("queue-cancel", `/queue/${encodeURIComponent(id)}/cancel`, {}, id)} />}
       {attachments.length > 0 && <AttachmentTray attachments={attachments} onRemove={id => onDraft(composeAgentDraft(input.text, attachments.filter(item => item.id !== id)))} />}
       <input ref={uploadInput} type="file" multiple className="hidden-file-input" onChange={event => void uploadFiles(event.target.files)} />
@@ -441,19 +452,25 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
   </section>;
 }
 
-function PermissionCard({ permission, disabled, onRespond, agentLabel }: { permission: AgentPermission; disabled: boolean; onRespond: (decision: "once" | "always" | "reject") => Promise<boolean>; agentLabel: string }) {
+function PermissionCard({ permission, disabled, onRespond, agentLabel }: { permission: AgentPermission; disabled: boolean; onRespond: (decision: "once" | "always" | "reject", reason?: string) => Promise<boolean>; agentLabel: string }) {
   const [sent, setSent] = useState(false), submitted = useRef(false);
+  const [reason, setReason] = useState("");
   const locked = disabled || sent || permission.status !== "pending";
   return <section className="user-input-card agent-permission" aria-label={`${agentLabel} 权限请求`}>
     <header>需要处理权限请求：{permission.action}</header>
-    <p>本次请求的操作范围</p><pre>{permission.resources.join("\n") || "未提供操作范围"}</pre>
+    {permission.workingDirectory && <><p>工作目录</p><pre>{permission.workingDirectory}</pre></>}
+    {(!permission.workingDirectory || permission.resources.length > 0) && <><p>本次请求的操作范围</p><pre>{permission.resources.join("\n") || "未提供操作范围"}</pre></>}
+    {permission.workingDirectory && <p>完整输入（命令、文件及改动）</p>}
     {permission.detail !== "{}" && <pre>{permission.detail}</pre>}
+    {permission.inputTruncated && <p role="status">输入已截断，请核对可见内容后决定。</p>}
+    {permission.localSettings && <p>“总是允许”会将以下规则写进这个项目的本地设置。</p>}
     {permission.save.length > 0 && <><p>选择保存规则后，将匹配以下范围</p><pre>{permission.save.join("\n")}</pre></>}
     {permission.unavailableReason && <p role="status">{permission.unavailableReason}</p>}
+    {permission.allowReason && <label>拒绝理由（可选）<textarea className="question-freeform" aria-label="拒绝理由（可选）" maxLength={2000} rows={2} value={reason} disabled={locked} onChange={event => setReason(event.target.value)} /></label>}
     <div className="agent-permission-actions">{permission.decisions.map(decision => <button key={decision} className="action-button" disabled={locked} onClick={() => {
       if (locked || submitted.current) return; submitted.current = true; setSent(true); haptic(decision === "reject" ? "warn" : "confirm");
-      void onRespond(decision).then(accepted => { if (!accepted) { submitted.current = false; setSent(false); } });
-    }}>{decision === "once" ? "允许一次" : decision === "always" ? "允许并保存规则" : "拒绝"}</button>)}</div>
+      void onRespond(decision, decision === "reject" && permission.allowReason ? reason.trim() : undefined).then(accepted => { if (!accepted) { submitted.current = false; setSent(false); } });
+    }}>{decision === "once" ? "允许一次" : decision === "always" ? permission.localSettings ? "总是允许" : "允许并保存规则" : "拒绝"}</button>)}</div>
     {locked && <p role="status">{permission.status === "uncertain" ? "结果待确认，请勿重复操作" : sent || permission.status !== "pending" ? "已提交，等待会话确认" : "连接恢复后重新核验请求"}</p>}
   </section>;
 }

@@ -5,15 +5,20 @@ export type AgentMessage = { id: string; timestamp: string; role: string; text: 
 export type AgentQuestion = {
   id: string; status: "pending" | "submitted" | "uncertain";
   unavailableReason?: string | null;
-  questions: { question: string; header: string; options: { label: string; description: string }[]; multiple: boolean; custom: boolean }[];
+  questions: { question: string; header: string; options: { label: string; description: string; preview?: string }[]; multiple: boolean; custom: boolean }[];
 };
+export type AgentPermissionMode = "default" | "plan" | "acceptEdits";
+export type AgentSessionSettings = { permissionMode: AgentPermissionMode; model: string | null };
+export type AgentModel = { value: string; displayName: string; description: string };
 export type AgentPermission = {
+  workingDirectory?: string; inputTruncated?: boolean; allowReason?: boolean; localSettings?: boolean;
   id: string; status: "pending" | "submitted" | "uncertain";
   action: string; resources: string[]; save: string[]; detail: string; unavailableReason: string | null;
   decisions: ("once" | "always" | "reject")[];
 };
 export type AgentSessionSnapshot = {
   readOnly?: string;
+  runtimeSettings?: AgentSessionSettings;
   activeTurnId?: string | null;
   activityEvidence?: ActivityEvidence | null;
   lastTurn?: LastTurn | null;
@@ -34,6 +39,9 @@ export type AgentDelivery = { ok: true; delivery: "submitted" | "confirmed" | "u
 
 /** Shared session API. Creation is explicit and limited to adapters that advertise it. */
 export interface SessionAdapter {
+  sessionSettings?(sessionId: string): Promise<AgentSessionSettings & { models: AgentModel[] }>;
+  setPermissionMode?(sessionId: string, input: AgentOperation & { mode: AgentPermissionMode }): Promise<AgentDelivery>;
+  setModel?(sessionId: string, input: AgentOperation & { model: string }): Promise<AgentDelivery>;
   listDirectories?(): Promise<{ directories: { id: string; label: string }[]; errorCode?: string | null; errorMessage?: string | null }>;
   createSession?(input: { directory: string; text: string }): Promise<{ session: AgentSession }>;
   validSessionId(id: string): boolean;
@@ -44,7 +52,7 @@ export interface SessionAdapter {
   interruptSession(sessionId: string, input: AgentOperation): Promise<AgentDelivery>;
   cancelQueuedMessage?(sessionId: string, id: string, input: AgentOperation): Promise<AgentDelivery>;
   respondQuestion(sessionId: string, id: string, input: AgentOperation & { answers: string[][] }): Promise<AgentDelivery>;
-  respondPermission(sessionId: string, id: string, input: AgentOperation & { decision: "once" | "always" | "reject" }): Promise<AgentDelivery>;
+  respondPermission(sessionId: string, id: string, input: AgentOperation & { decision: "once" | "always" | "reject"; reason?: string }): Promise<AgentDelivery>;
 }
 
 export function agentError(code: string, statusCode = 502) {

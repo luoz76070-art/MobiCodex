@@ -6,14 +6,19 @@ export type AgentSession = { id: string; title: string; directory: string; updat
 export type AgentQuestion = {
   id: string; status: "pending" | "submitted" | "uncertain";
   unavailableReason?: string | null;
-  questions: { question: string; header: string; options: { label: string; description: string }[]; multiple: boolean; custom: boolean }[];
+  questions: { question: string; header: string; options: { label: string; description: string; preview?: string }[]; multiple: boolean; custom: boolean }[];
 };
+export type AgentPermissionMode = "default" | "plan" | "acceptEdits";
+export type AgentSessionSettings = { permissionMode: AgentPermissionMode; model: string | null };
+export type AgentModel = { value: string; displayName: string; description: string };
 export type AgentPermission = {
+  workingDirectory?: string; inputTruncated?: boolean; allowReason?: boolean; localSettings?: boolean;
   id: string; status: "pending" | "submitted" | "uncertain"; action: string; resources: string[]; save: string[];
   detail: string; unavailableReason: string | null; decisions: ("once" | "always" | "reject")[];
 };
 export type AgentSessionSnapshot = {
   readOnly?: string;
+  runtimeSettings?: AgentSessionSettings;
   activeTurnId?: string | null;
   activityEvidence?: ActivityEvidence | null;
   lastTurn?: LastTurn | null;

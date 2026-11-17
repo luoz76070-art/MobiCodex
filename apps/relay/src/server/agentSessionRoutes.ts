@@ -145,6 +145,23 @@ export function createAgentSessionRoutes(context: {
           return adapter.sendMessage(params.sessionId, body);
         });
       });
+      app.get("/api/agents/:agentId/sessions/:sessionId/controls", async request => {
+        const params = paramsSchema.parse(request.params), adapter = sessionAdapter(params);
+        if (!adapter.sessionSettings) throw agentError("AGENT_SETTINGS_UNSUPPORTED", 409);
+        return adapter.sessionSettings(params.sessionId);
+      });
+      app.post("/api/agents/:agentId/sessions/:sessionId/permission-mode", { bodyLimit: 4096 }, async request => {
+        const params = paramsSchema.parse(request.params), adapter = sessionAdapter(params);
+        const body = operationSchema.extend({ mode: z.enum(["default", "plan", "acceptEdits"]) }).strict().parse(request.body);
+        if (!adapter.setPermissionMode) throw agentError("AGENT_SETTINGS_UNSUPPORTED", 409);
+        return execute(request, params, "permission-mode", body, () => adapter.setPermissionMode!(params.sessionId, body));
+      });
+      app.post("/api/agents/:agentId/sessions/:sessionId/model", { bodyLimit: 4096 }, async request => {
+        const params = paramsSchema.parse(request.params), adapter = sessionAdapter(params);
+        const body = operationSchema.extend({ model: z.string().min(1).max(256) }).strict().parse(request.body);
+        if (!adapter.setModel) throw agentError("AGENT_SETTINGS_UNSUPPORTED", 409);
+        return execute(request, params, "model", body, () => adapter.setModel!(params.sessionId, body));
+      });
       app.post("/api/agents/:agentId/sessions/:sessionId/interrupt", { bodyLimit: 4096 }, async request => {
         const params = paramsSchema.parse(request.params), body = operationSchema.strict().parse(request.body);
         return execute(request, params, "interrupt", body, () => sessionAdapter(params).interruptSession(params.sessionId, body));
@@ -160,9 +177,9 @@ export function createAgentSessionRoutes(context: {
         const body = operationSchema.extend({ answers: z.array(z.array(z.string().min(1).max(10_000)).min(1).max(100)).min(1).max(20) }).strict().parse(request.body);
         return execute(request, params, `question:${params.id}`, body, () => sessionAdapter(params).respondQuestion(params.sessionId, params.id, body));
       });
-      app.post("/api/agents/:agentId/sessions/:sessionId/permissions/:id/respond", { bodyLimit: 4096 }, async request => {
+      app.post("/api/agents/:agentId/sessions/:sessionId/permissions/:id/respond", { bodyLimit: 12_288 }, async request => {
         const params = paramsSchema.extend({ id: z.string().uuid() }).parse(request.params);
-        const body = operationSchema.extend({ decision: z.enum(["once", "always", "reject"]) }).strict().parse(request.body);
+        const body = operationSchema.extend({ decision: z.enum(["once", "always", "reject"]), reason: z.string().max(2000).optional() }).strict().parse(request.body);
         return execute(request, params, `permission:${params.id}`, body, () => sessionAdapter(params).respondPermission(params.sessionId, params.id, body));
       });
     },

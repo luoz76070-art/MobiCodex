@@ -74,3 +74,7 @@
 ### C4b 实施决定（覆盖上面的暂定分叉方案）
 
 插件已登记，或最近两分钟有非本网关写入，均拒绝继续并返回 CLAUDE_CLI_SESSION_BUSY；本期不提供分叉。审批和 AskUserQuestion 自动拒绝并显示系统提示，手机交互留待 C4c。执行文件、兼容版本依据、接口、进程回收与验收边界见 [C4b 实施记录](2026-11-17-c4b-claude-cli-run.md)。
+
+### C4c 实施决定
+
+覆盖 C4b 的临时自动拒绝：工具审批与 AskUserQuestion 交给手机，30 分钟超时拒绝并中断；取消与终态撤回。存活 Query 开放安全权限模式和 supportedModels 模型切换。接口与生命周期见 Claude CLI 契约，验证见 C4c task。

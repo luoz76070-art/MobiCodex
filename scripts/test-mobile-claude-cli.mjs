@@ -39,7 +39,7 @@ const snapshot = { agentId: agent.id, session, connected: true, updatedAt: sessi
 
 function driver(name, props, overrides = {}, code = workspaceSource) {
   const slots = [], effects = [], windowPort = new EventTarget(); let cursor = 0, dirty = true, tree, subscription;
-  const components = ['WorkspaceHeader', 'SystemNotice', 'PullToRefresh', 'ProjectGroups', 'EmptyState', 'AgentPickRow', 'ListSkeleton', 'MessageSkeleton', 'Loader2', 'SessionRangeControl', 'MessageMediaProvider', 'MessageTimeline', 'ComputerComposer', 'ComposerSessionStatus', 'AttachmentTray', 'VoiceInput', 'AgentQueue', 'ClaudeCliCreate'];
+  const components = ['WorkspaceHeader', 'SystemNotice', 'PullToRefresh', 'ProjectGroups', 'EmptyState', 'AgentPickRow', 'ListSkeleton', 'MessageSkeleton', 'Loader2', 'SessionRangeControl', 'MessageMediaProvider', 'MessageTimeline', 'ComputerComposer', 'ComposerSessionStatus', 'AttachmentTray', 'VoiceInput', 'AgentQueue', 'ClaudeCliCreate', 'AgentQuestions', 'AgentSessionControls', 'ArrowUp', 'MessageSquare'];
   const deps = { ...model, Fragment: "Fragment", revokeAttachmentPreviews() {}, ...Object.fromEntries(components.map(name => [name, name])),
     h: (type, props, ...children) => ({ type, props: { ...props, children } }),
     useState(value) { const i = cursor++; slots[i] ??= { value: typeof value === 'function' ? value() : value }; return [slots[i].value, next => { const value = typeof next === 'function' ? next(slots[i].value) : next; dirty ||= value !== slots[i].value; slots[i].value = value; }]; },
@@ -53,6 +53,7 @@ function driver(name, props, overrides = {}, code = workspaceSource) {
     authHeaders: () => ({ Authorization: 'synthetic' }), requestJson: (url, options) => overrides.apiPost(url, 'synthetic', options.body, options),
     requestAnimationFrame() {}, apiGet: async route => route === '/api/agents' ? { agents: [agent] } : { sessions: [session], cursor: null },
     apiPost: () => assert.fail('read-only UI must not write'),
+    haptic() {},
     ...overrides,
   };
   const Component = new Function(...Object.keys(deps), code + `; return ${name};`)(...Object.values(deps));
@@ -194,4 +195,82 @@ test('Claude CLI latest view uses the newest history cursor as the live window a
   f.receive(snapshot); f.receive({ ...snapshot, historyCursor: 'advanced-cursor' });
   nodes(f.render()).find(node => node.type === 'button' && text(node) === '加载更早的消息').props.onClick();
   await f.settle(); assert.match(route, /cursor=advanced-cursor/);
+});
+
+const questionSource = await source('apps/mobile/src/features/agents/AgentQuestions.tsx');
+const controlsSource = await source('apps/mobile/src/features/agents/AgentSessionControls.tsx');
+const permission = { id, status: 'pending', action: 'Bash', resources: [], detail: '{"command":"synthetic-command"}', save: ['synthetic-rule'],
+  workingDirectory: 'synthetic-project', inputTruncated: true, allowReason: true, localSettings: true, decisions: ['once', 'always', 'reject'], unavailableReason: null };
+const button = (f, label) => nodes(f.render()).find(node => node.type === 'button' && text(node) === label);
+
+test('shared approval card shows input, working directory, truncation and local settings; reason and double-click lock work', async t => {
+  const replies = [];
+  const f = driver('PermissionCard', { permission, agentLabel: 'Claude CLI', disabled: false, onRespond: async (...args) => { replies.push(args); return true; } }); t.after(() => f.stop());
+  assert.match(f.text(), /Bash/); assert.match(f.text(), /synthetic-project/); assert.match(f.text(), /synthetic-command/); assert.match(f.text(), /已截断/); assert.match(f.text(), /写进这个项目的本地设置/);
+  assert.deepEqual(nodes(f.render()).filter(node => node.type === 'button').map(text), ['允许一次', '总是允许', '拒绝']);
+  f.find('textarea').props.onChange({ target: { value: 'Please stop here' } });
+  const reject = button(f, '拒绝'); reject.props.onClick(); reject.props.onClick(); await f.settle();
+  assert.deepEqual(replies, [['reject', 'Please stop here']]); assert.ok(button(f, '允许一次').props.disabled);
+  const noRule = driver('PermissionCard', { permission: { ...permission, decisions: ['once', 'reject'], save: [], localSettings: false }, agentLabel: 'Claude CLI', disabled: false, onRespond: async () => true }); t.after(() => noRule.stop());
+  assert.equal(button(noRule, '总是允许'), undefined); assert.doesNotMatch(noRule.text(), /写进这个项目/);
+  for (const decision of ['允许一次', '总是允许']) {
+    const allowed = driver('PermissionCard', { permission, agentLabel: 'Claude CLI', disabled: false, onRespond: async (...args) => { replies.push(args); return true; } }); t.after(() => allowed.stop());
+    button(allowed, decision).props.onClick(); await allowed.settle();
+  }
+  assert.deepEqual(replies.slice(1), [['once', undefined], ['always', undefined]]);
+});
+
+test('question card supports single, multiple, Other and literal text previews', async t => {
+  const request = { id, status: 'pending', questions: [
+    { question: 'Format?', header: 'Format', options: [{ label: 'Brief', description: 'Short', preview: '<script>synthetic-preview</script>' }, { label: 'Full', description: 'Long' }], multiple: false, custom: true },
+    { question: 'Sections?', header: 'Sections', options: [{ label: 'Intro', description: '' }, { label: 'End', description: '' }], multiple: true, custom: true },
+    { question: 'Anything else?', header: '', options: [], multiple: false, custom: true },
+  ] };
+  const replies = [], f = driver('AgentQuestions', { request, agentLabel: 'Claude CLI', disabled: false, onRespond: async values => { replies.push(values); return true; } }, {}, questionSource); t.after(() => f.stop());
+  assert.equal(f.find('pre').props.children[0], '<script>synthetic-preview</script>'); assert.equal(f.find('script'), undefined);
+  const inputs = () => nodes(f.render()).filter(node => node.type === 'input');
+  inputs()[0].props.onChange({ target: { checked: true } });
+  inputs()[3].props.onChange({ target: { checked: true } }); inputs()[4].props.onChange({ target: { checked: true } });
+  const free = nodes(f.render()).find(node => node.type === 'textarea'); free.props.onChange({ target: { value: 'My own detail' } });
+  const submit = f.find('form').props.onSubmit; submit({ preventDefault() {} }); submit({ preventDefault() {} }); await f.settle();
+  assert.deepEqual(replies, [[['Brief'], ['Intro', 'End'], ['My own detail']]]);
+  const other = driver('AgentQuestions', { request: { ...request, questions: [request.questions[0]] }, agentLabel: 'Claude CLI', disabled: false, onRespond: async values => { replies.push(values); return true; } }, {}, questionSource); t.after(() => other.stop());
+  nodes(other.render()).filter(node => node.type === 'input')[2].props.onChange({ target: { checked: true } });
+  other.find('textarea').props.onChange({ target: { value: 'Different format' } }); other.find('form').props.onSubmit({ preventDefault() {} }); await other.settle();
+  assert.deepEqual(replies.at(-1), [['Different format']]);
+});
+
+test('runtime controls load Query model choices, offer only safe modes and send explicit changes', async t => {
+  const calls = [], settings = { permissionMode: 'default', model: null, models: [{ value: 'synthetic-model', displayName: 'Synthetic model', description: 'Test choice' }] };
+  const f = driver('AgentSessionControls', { settings, disabled: false, load: async () => settings,
+    onMode: async mode => { calls.push(['mode', mode]); settings.permissionMode = mode; return true; },
+    onModel: async model => { calls.push(['model', model]); settings.model = model; return true; },
+  }, {}, controlsSource); t.after(() => f.stop());
+  f.find('details').props.onToggle({ currentTarget: { open: true } }); await f.settle();
+  const selects = () => nodes(f.render()).filter(node => node.type === 'select');
+  assert.deepEqual(nodes(selects()[0]).filter(node => node.type === 'option').map(node => node.props.value), ['default', 'plan', 'acceptEdits']);
+  assert.match(text(selects()[1]), /Synthetic model/);
+  selects()[0].props.onChange({ target: { value: 'plan' } }); button(f, '切换权限模式').props.onClick(); await f.settle();
+  selects()[1].props.onChange({ target: { value: 'synthetic-model' } }); button(f, '切换模型').props.onClick(); await f.settle();
+  assert.deepEqual(calls, [['mode', 'plan'], ['model', 'synthetic-model']]);
+});
+
+test('chat routes shared approval, question and switching actions; retraction and process closure remove their entries', async t => {
+  const calls = [], f = driver('AgentChat', { endpoint: '', token: 'synthetic', agent, session, draft: '', onDraft() {}, scopeKey: 'synthetic', voiceRecovery: {} }, {
+    apiPost: async (route, _token, payload) => { calls.push({ route, payload }); return { ok: true, delivery: 'confirmed' }; },
+  }); t.after(() => f.stop());
+  const active = { ...snapshot, readOnly: undefined, runtimeSettings: { permissionMode: 'default', model: 'synthetic-model' },
+    permissions: [permission], questions: [{ id, status: 'pending', questions: [] }], control: { token: id, canSend: true, canSteer: false, canInterrupt: false } };
+  f.receive(active);
+  const card = nodes(f.render()).find(node => node.type?.name === 'PermissionCard');
+  await card.props.onRespond('reject', 'Synthetic reason'); await f.settle();
+  await f.find('AgentQuestions').props.onRespond([['Synthetic answer']]); await f.settle();
+  await f.find('AgentSessionControls').props.onMode('plan'); await f.settle();
+  await f.find('AgentSessionControls').props.onModel('synthetic-model'); await f.settle();
+  assert.deepEqual(calls.map(call => call.route.split('/').slice(-2).join('/')), [`${id}/respond`, `${id}/respond`, `${id}/permission-mode`, `${id}/model`]);
+  assert.equal(calls[0].payload.reason, 'Synthetic reason'); assert.deepEqual(calls[1].payload.answers, [['Synthetic answer']]);
+  assert.equal(calls[2].payload.mode, 'plan'); assert.equal(calls[3].payload.model, 'synthetic-model');
+  assert.ok(calls.every(call => call.payload.controlToken === id && call.payload.clientMessageId));
+  f.receive({ ...active, permissions: [], questions: [], runtimeSettings: undefined });
+  assert.equal(nodes(f.render()).find(node => node.type?.name === 'PermissionCard'), undefined); assert.equal(f.find('AgentQuestions'), undefined); assert.equal(f.find('AgentSessionControls'), undefined);
 });

@@ -44,7 +44,7 @@ export class ClaudeCliAdapter implements AgentAdapter, SessionAdapter {
     const enabled = this.config.directories.length > 0;
     return { id: "claude-cli", label: "Claude CLI", transport: "claude-cli-local-records", sessionApi: 1, enabled,
       state: enabled ? this.runtime?.errorCode ? "failed" : "connected" : "unprobed", usesAccessibility: false, sameDesktopThreadVerified: false,
-      capabilities: { ...capabilities, sendMessage: Boolean(this.runtime?.available), steer: Boolean(this.runtime?.available), interrupt: Boolean(this.runtime?.available) }, loadedSessions: null, checkedAt: null, errorCode: enabled ? this.runtime?.errorCode ?? null : "CLAUDE_CLI_DISABLED", errorMessage: this.runtime?.errorMessage ?? null, cliVersion: this.runtime?.version };
+      capabilities: { ...capabilities, sendMessage: Boolean(this.runtime?.available), steer: Boolean(this.runtime?.available), interrupt: Boolean(this.runtime?.available), approve: Boolean(this.runtime?.available) }, loadedSessions: null, checkedAt: null, errorCode: enabled ? this.runtime?.errorCode ?? null : "CLAUDE_CLI_DISABLED", errorMessage: this.runtime?.errorMessage ?? null, cliVersion: this.runtime?.version };
   }
   async ready() { await this.runtime?.ready(); }
   async probe() { await this.roots(); await this.ready(); return this.snapshot(); }
@@ -165,8 +165,34 @@ export class ClaudeCliAdapter implements AgentAdapter, SessionAdapter {
     void pending.finally(() => { if (this.writes.get(id) === pending) this.writes.delete(id); }).catch(() => {});
     return pending;
   }
-  async respondQuestion(): Promise<AgentDelivery> { throw agentError("CLAUDE_CLI_READ_ONLY", 409); }
-  async respondPermission(): Promise<AgentDelivery> { throw agentError("CLAUDE_CLI_READ_ONLY", 409); }
+  async respondQuestion(id: string, requestId: string, input: AgentOperation & { answers: string[][] }): Promise<AgentDelivery> {
+    if (!this.runtime) throw agentError("CLAUDE_CLI_READ_ONLY", 409);
+    this.checkControl(input); await this.locate(id);
+    this.runtime.question(id, requestId, input.answers); return { ok: true, delivery: "confirmed" };
+  }
+  async respondPermission(id: string, requestId: string, input: AgentOperation & { decision: "once" | "always" | "reject"; reason?: string }): Promise<AgentDelivery> {
+    if (!this.runtime) throw agentError("CLAUDE_CLI_READ_ONLY", 409);
+    this.checkControl(input); await this.locate(id);
+    this.runtime.permission(id, requestId, input.decision, input.reason); return { ok: true, delivery: "confirmed" };
+  }
+  async sessionSettings(id: string) {
+    if (!this.runtime) throw agentError("CLAUDE_CLI_READ_ONLY", 409);
+    await this.locate(id); return this.runtime.settings(id);
+  }
+  async setPermissionMode(id: string, input: AgentOperation & { mode: "default" | "plan" | "acceptEdits" }): Promise<AgentDelivery> {
+    return this.serialize(id, async () => {
+      if (!this.runtime) throw agentError("CLAUDE_CLI_READ_ONLY", 409);
+      this.checkControl(input); await this.locate(id);
+      await this.runtime.setPermissionMode(id, input.mode); return { ok: true, delivery: "confirmed" };
+    });
+  }
+  async setModel(id: string, input: AgentOperation & { model: string }): Promise<AgentDelivery> {
+    return this.serialize(id, async () => {
+      if (!this.runtime) throw agentError("CLAUDE_CLI_READ_ONLY", 409);
+      this.checkControl(input); await this.locate(id);
+      await this.runtime.setModel(id, input.model); return { ok: true, delivery: "confirmed" };
+    });
+  }
   async stop() { this.stopped = true; this.runtime?.stop(); for (const entry of this.entries.values()) this.drop(entry); }
   private running() { if (this.stopped) throw agentError("CLAUDE_CLI_STOPPED", 503); }
   private async roots() {

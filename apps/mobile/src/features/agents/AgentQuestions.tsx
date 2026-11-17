@@ -29,7 +29,7 @@ export function AgentQuestions({ request, disabled, onRespond, agentLabel }: { r
           const checked = event.target.checked;
           setAnswers(current => ({ ...current, [index]: question.multiple ? checked ? [...(current[index] ?? []), option.label] : (current[index] ?? []).filter(value => value !== option.label) : [option.label] }));
           if (!question.multiple) setCustomOn(current => ({ ...current, [index]: false }));
-        }} /><span>{option.label}{option.description && <small>{option.description}</small>}</span>
+        }} /><span>{option.label}{option.description && <small>{option.description}</small>}{option.preview !== undefined && <pre className="question-preview">{option.preview}</pre>}</span>
       </label>)}
       {question.custom && <>
         {question.options.length > 0 && <label className="question-option"><input type={question.multiple ? "checkbox" : "radio"} name={`${request.id}:${index}`} checked={customOn[index] ?? false} onChange={event => {
