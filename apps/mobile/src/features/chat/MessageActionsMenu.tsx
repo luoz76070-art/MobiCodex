@@ -7,11 +7,14 @@ export function MessageActionsMenu({ onClose, onCopy, onFeedback }: {
   onClose: () => void; onCopy: () => void; onFeedback: () => void;
 }) {
   const menu = useRef<HTMLDivElement>(null);
+  // The menu opens under a held finger; with a long "touch & hold delay" the lift arrives as a click
+  // on the scrim. Only a press that also started on the scrim dismisses it.
+  const scrimPress = useRef(false);
   useEffect(() => { menu.current?.querySelector<HTMLButtonElement>("button")?.focus(); }, []);
   useBackLayer(true, onClose, 212);
   return createPortal(<div className="message-menu-scrim" onClick={event => {
-    event.stopPropagation(); if (event.target === event.currentTarget) onClose();
-  }} onPointerDown={event => event.stopPropagation()}>
+    event.stopPropagation(); if (event.target === event.currentTarget && scrimPress.current) onClose(); scrimPress.current = false;
+  }} onPointerDown={event => { event.stopPropagation(); scrimPress.current = event.target === event.currentTarget; }}>
     <div ref={menu} className="message-menu" role="menu" aria-label="消息操作" onKeyDown={event => {
       event.stopPropagation();
       if (event.key === "Escape") { event.preventDefault(); onClose(); return; }

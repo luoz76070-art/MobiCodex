@@ -194,14 +194,14 @@ test('message keyboard entry opens actions without copying and closing restores 
   f.render().closeMenu(); assert.equal(f.focused(), 1); f.unmount();
 });
 
-test('message menu announces three items, focuses copy, navigates keys, dismisses outside/Escape and dispatches one action', async t => {
+test('message menu announces three items, focuses copy, navigates keys, dismisses on a fresh outside press/Escape and dispatches one action', async t => {
   const source = await componentSource('apps/mobile/src/features/chat/MessageActionsMenu.tsx');
   const buttons = [0,1,2].map(index => ({ focus() { documentPort.activeElement = buttons[index]; } }));
   const menu = { querySelector: () => buttons[0], querySelectorAll: () => buttons };
   const documentPort = { body: {}, activeElement: null };
-  let closed = 0, copies = 0, feedbacks = 0;
+  let closed = 0, copies = 0, feedbacks = 0, scrimPress;
   const f = uiDriver('MessageActionsMenu', { onClose: () => closed++, onCopy: () => copies++, onFeedback: () => feedbacks++ },
-    { document: documentPort, useRef: () => ({ current: menu }) }, source); t.after(() => f.stop());
+    { document: documentPort, useRef: value => value === null ? { current: menu } : (scrimPress ??= { current: value }) }, source); t.after(() => f.stop());
   assert.equal(documentPort.activeElement, buttons[0]);
   const element = f.find(node => node.props.role === 'menu'); assert.equal(element.props['aria-label'], '消息操作');
   for (const label of ['复制', '反馈这条', '取消']) assert.equal(f.button(label).props.role, 'menuitem');
@@ -211,7 +211,10 @@ test('message menu announces three items, focuses copy, navigates keys, dismisse
   }
   key('Tab', true); assert.equal(documentPort.activeElement, buttons[0]);
   key('Escape'); assert.equal(closed, 1); assert.equal(copies + feedbacks, 0);
-  f.render().props.onClick({ target: menu, currentTarget: menu, stopPropagation() {} }); assert.equal(closed, 2);
+  const scrim = { target: menu, currentTarget: menu, stopPropagation() {} };
+  f.render().props.onClick(scrim); assert.equal(closed, 1, 'lifting the opening long-press must not dismiss');
+  f.render().props.onPointerDown({ ...scrim, target: {} }); f.render().props.onClick(scrim); assert.equal(closed, 1);
+  f.render().props.onPointerDown(scrim); f.render().props.onClick(scrim); assert.equal(closed, 2);
   f.render().props.onClick({ target: {}, currentTarget: menu, stopPropagation() {} }); assert.equal(closed, 2);
   f.button('取消').props.onClick(); assert.equal(closed, 3);
   f.button('复制').props.onClick(); assert.equal(copies, 1); assert.equal(feedbacks, 0);

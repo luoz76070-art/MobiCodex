@@ -278,5 +278,6 @@ test('chat routes shared approval, question and switching actions; retraction an
 test('a stuck turn shows the host notice (model API retrying) only while running', async () => {
   const workspace = await (await import('node:fs/promises')).readFile('apps/mobile/src/features/agents/AgentWorkspace.tsx', 'utf8');
   assert.match(workspace, /snapshot\?\.status === "running" && snapshot\.notice && <SystemNotice>\{snapshot\.notice\}<\/SystemNotice>/);
+  assert.ok(workspace.indexOf('snapshot.notice && <SystemNotice>') > workspace.indexOf('</MessageMediaProvider>'), 'notice sits below the messages');
 });
 
