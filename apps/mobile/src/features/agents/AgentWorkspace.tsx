@@ -39,7 +39,12 @@ import { ProjectGroups } from "../threads/ProjectGroups";
 import { SessionRangeControl } from "../threads/SessionRangeControl";
 import { agentAttentionKey, attentionAfterSend, setAttentionViewing } from "../notify/attention";
 
-const ccDeskErrors: Record<string, string> = {
+const agentErrors: Record<string, string> = {
+  CLAUDE_CLI_DISABLED: "Claude CLI 未启用，请在电脑网关配置允许读取的目录。",
+  CLAUDE_CLI_DIRECTORY_UNAVAILABLE: "允许读取的目录不可用，请在电脑检查网关配置。",
+  CLAUDE_CLI_SESSION_NOT_ALLOWED: "此会话不在网关允许读取的目录中。",
+  CLAUDE_CLI_HISTORY_CHANGED: "会话记录已变化，请返回最新消息后重新加载历史。",
+  CLAUDE_CLI_READ_ONLY: "只读预览，发送功能下一版提供",
   CCDESK_OTHER_DEVICE: "这个会话在另一台电脑上，只能在那台电脑上操作。",
   CCDESK_CONTROL_UNAVAILABLE: "CC Desk 没有开启手机控制：请在电脑上打开“CC Desk Tunnel（手机控制）”后重试。",
   CCDESK_RUN_ACTIVE: "会话正在运行，请等它结束或先中断。",
@@ -48,7 +53,7 @@ const ccDeskErrors: Record<string, string> = {
 };
 const friendlyError = (error: unknown) => {
   const status = (error as { status?: number })?.status, code = (error as { code?: unknown })?.code;
-  if (typeof code === "string" && Object.hasOwn(ccDeskErrors, code)) return ccDeskErrors[code];
+  if (typeof code === "string" && Object.hasOwn(agentErrors, code)) return agentErrors[code];
   return status === 401 ? deviceRevokedMessage : status === 410 ? "电脑会话暂时离线，请返回会话列表并等待重新连接。" : status === 404 ? "电脑端尚未提供此 Agent，请更新或检查插件配置。"
     : status === 409 ? "会话状态已变化，请等待重新同步后再操作。" : "无法连接 Agent，请确认电脑上的网关与 Agent 服务正在运行。";
 };
@@ -97,6 +102,7 @@ export default function AgentWorkspace({ navigation, onNavigate, onOpenAgents, o
     finally { if (!request.signal.aborted) setLoading(false); }
   }
   async function loadSessions(target: Agent, append = false, selectedRange = range, silent = false) {
+    if (target.enabled === false) { setSessions([]); setCursor(null); setError(""); return; }
     const request = begin(silent);
     try {
       const params = new URLSearchParams({ ...(query.trim() ? { search: query.trim() } : {}), ...(append && cursor ? { cursor } : {}), ...(target.id === "deepseek" ? { range: selectedRange } : {}) });
@@ -150,9 +156,9 @@ export default function AgentWorkspace({ navigation, onNavigate, onOpenAgents, o
           {agent.id === "deepseek" && <SessionRangeControl range={range} disabled={loading} onChange={next => { setRange(next); void loadSessions(agent, false, next); }} />}
           <form className="search-field" onSubmit={event => { event.preventDefault(); void loadSessions(agent); }}><input aria-label="搜索 Agent 会话" placeholder="搜索会话" value={query} maxLength={200} onChange={event => setQuery(event.target.value)} /><button type="submit" disabled={loading}>搜索</button></form>
           {<ProjectGroups key={agent.id} scope={scope} agentId={agent.id} groups={groupByProject(sessions, session => session.directory)} search={query}>
-            {session => <button className="agent-session-row" key={session.id} onClick={() => { onNavigate(agentSession(agent.id, session.id)); }}><strong>{session.title || "未命名会话"}</strong><time>{new Date(session.updatedAt).toLocaleString()}</time></button>}
+            {session => <button className="agent-session-row" key={session.id} onClick={() => { onNavigate(agentSession(agent.id, session.id)); }}><strong>{session.title || "未命名会话"}</strong><time>{new Date(session.updatedAt).toLocaleString()}</time>{session.desktopOpen && <small>电脑上开着</small>}</button>}
           </ProjectGroups>}
-          {!loading && !sessions.length && !error && <EmptyState compact title="没有会话">{agent.id === "deepseek" ? range === "recent" ? "近 30 天没有匹配会话，可查看更早会话。" : "没有匹配的 DeepSeek 会话，请检查电脑插件连接或搜索条件。" : agent.id === "ccdesk" ? "CC Desk 服务上没有匹配的会话。" : agent.id === "claude" ? `尚无已连接的 ${agent.label} 会话，请先在电脑会话中加载并配置插件。` : "当前目录没有可用的现有会话。"}</EmptyState>}
+          {!loading && !sessions.length && !error && <EmptyState compact title={agent.enabled === false ? "Claude CLI 未启用" : "没有会话"}>{agent.enabled === false ? "请在电脑网关配置 claudeCli.directories，选择允许读取的目录。" : agent.id === "claude-cli" ? "允许目录内没有匹配的本地会话。" : agent.id === "deepseek" ? range === "recent" ? "近 30 天没有匹配会话，可查看更早会话。" : "没有匹配的 DeepSeek 会话，请检查电脑插件连接或搜索条件。" : agent.id === "ccdesk" ? "CC Desk 服务上没有匹配的会话。" : agent.id === "claude" ? `尚无已连接的 ${agent.label} 会话，请先在电脑会话中加载并配置插件。` : "当前目录没有可用的现有会话。"}</EmptyState>}
           {cursor && <button className="action-button" disabled={loading} onClick={() => void loadSessions(agent, true)}>加载更多会话</button>}
         </>}
         {loading && (agent ? !sessions.length : !agents.length) ? <ListSkeleton label="正在读取…" />
@@ -165,6 +171,8 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
   voiceRecovery: VoiceRecoveryPort;
   scopeKey: string; endpoint: string; token: string; agent: Agent; session: AgentSession; draft: string; onDraft: (value: string) => void;
 }) {
+  const readOnly = agent.id === "claude-cli";
+  const pagedHistory = readOnly || agent.id === "deepseek";
   const [snapshot, setSnapshot] = useState<AgentSessionSnapshot | null>(null), snapshotRef = useRef(snapshot); snapshotRef.current = snapshot;
   const draftRef = useRef(draft); draftRef.current = draft;
   const draftSession = `${agent.id}:${session.id}`;
@@ -191,7 +199,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
     onDraft(next);
   }
   async function uploadFiles(files: FileList | null) {
-    if (!files?.length || uploadScope.current || streamRef.current !== "online" || !snapshotRef.current?.control) return;
+    if (readOnly || !files?.length || uploadScope.current || streamRef.current !== "online" || !snapshotRef.current?.control) return;
     const controller = new AbortController(); uploadScope.current = controller; setUploading(true); setError("");
     let uploaded: PendingAttachment[] = [];
     try {
@@ -268,7 +276,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
   }
   async function operate(action: "message" | "interrupt" | "question" | "permission" | "queue-cancel", suffix: string, extra: Record<string, unknown>, requestId?: string) {
     const current = snapshotRef.current, currentScope = scope.current;
-    if (streamRef.current !== "online" || !currentScope || currentScope.signal.aborted || busyRef.current || !current?.connected || !current.control) return false;
+    if (readOnly || streamRef.current !== "online" || !currentScope || currentScope.signal.aborted || busyRef.current || !current?.connected || !current.control) return false;
     busyRef.current = true; setBusy(true); setError("");
     const clientMessageId = crypto.randomUUID(), controlToken = current.control.token;
     if (action === "message") {
@@ -308,17 +316,17 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
     try {
       const result = await apiGet<{ messages: CodexMessage[]; cursor: string | null }>(buildUrl(endpoint, `${base}/history?${new URLSearchParams({ cursor: historyCursor })}`), token, controller.signal);
       if (controller.signal.aborted) return;
-      setHistory(current => agent.id === "deepseek"
+      setHistory(current => pagedHistory
         ? agentHistoryWindow(current.length ? current : snapshotRef.current?.messages ?? [], result.messages, maxMessagesPerThread)
         : [...new Map([...result.messages, ...current].map(message => [message.id, message])).values()].slice(-190)); setHistoryCursor(result.cursor);
       requestAnimationFrame(() => { if (viewport.current) viewport.current.scrollTop = previousTop + viewport.current.scrollHeight - previousHeight; });
     } catch (caught) { if (!controller.signal.aborted) setError(friendlyError(caught)); }
     finally { if (!controller.signal.aborted) { historyLock.current = false; setHistoryBusy(false); } }
   }
-  const messages = [...new Map([...history, ...(agent.id === "deepseek" && history.length ? [] : snapshot?.messages ?? [])].map(message => [message.id, message])).values()].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  const messages = [...new Map([...history, ...(pagedHistory && history.length ? [] : snapshot?.messages ?? [])].map(message => [message.id, message])).values()].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
   const unresolved = snapshot?.submission && snapshot.submission.delivery !== "confirmed";
   const queuedSubmission = snapshot?.queue?.items.some(item => item.clientMessageId === snapshot.submission?.clientMessageId);
-  const sendEnabled = Boolean(control?.canSend && !busy && !uploading && !unresolved && !pendingDraft.current && (input.text.trim() || attachments.length));
+  const sendEnabled = Boolean(!readOnly && control?.canSend && !busy && !uploading && !unresolved && !pendingDraft.current && (input.text.trim() || attachments.length));
   function send(delivery: "steer" | "queue" = "queue") {
     if (!sendEnabled || (delivery === "steer" && !control?.canSteer)) return;
     void operate("message", "/messages", { text: composeMessageWithAttachments(input.text, attachments), delivery });
@@ -326,35 +334,38 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
   const sessionStatus = agentSessionStatus(snapshot, online);
   return <section className="agent-chat">
     <SystemNotice className="agent-connection" error={stream === "unauthorized"}>{online ? `${agent.label} 已连接` : stream === "unauthorized" ? deviceRevokedMessage : "正在恢复连接…"}</SystemNotice>
+    {readOnly && <SystemNotice>只读预览，发送功能下一版提供</SystemNotice>}
+    {readOnly && (snapshot?.session.desktopOpen ?? session.desktopOpen) && <SystemNotice>电脑上开着，请到 Claude Code 操作。</SystemNotice>}
     <div className="messages-viewport" ref={viewport} onScroll={() => { const element = viewport.current; if (element) { nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 100; reading.current[draftSession] = element.scrollTop; } }}>
       {(snapshot?.partialText || agent.id === "claude" || agent.id === "deepseek" || agent.id === "ccdesk") && <details className="agent-capabilities"><summary>会话能力与同步范围</summary>
         {snapshot?.partialText && <p>当前显示已同步的消息与工具记录，长内容可能截断；更早历史以本通道提供的加载入口为准。</p>}
+        {readOnly && <p>按本地消息链顺序显示；SDK 不提供消息时间，较早压缩记录可能不完整。只显示正文和简短工具摘要。</p>}
         {agent.id === "claude" && <p>消息在当前任务结束后处理；提问和单次审批可在手机处理。</p>}
         {agent.id === "ccdesk" && <p>只能操作这台电脑上的会话，其他电脑上的会话只能查看。发消息、审批和中断需要电脑上开着“CC Desk Tunnel（手机控制）”；权限请求可允许一次或拒绝。</p>}
         {agent.id === "deepseek" && <p>查看历史不会启动任务；发送后继续原会话，运行中可引导或排队。权限请求须核对完整参数后允许一次或拒绝。</p>}
       </details>}
       {snapshot?.operationError && <SystemNotice error>{snapshot.operationError.code === "rejected" ? "电脑会话拒绝了本次操作，输入内容已保留。" : "操作尚未送达电脑便已过期，输入内容已保留。"}</SystemNotice>}
-      {historyCursor && (agent.id === "deepseek" || history.length < 190) && <button className="history-button" disabled={historyBusy} onClick={() => void older()}>{historyBusy ? "读取历史中…" : "加载更早的消息"}</button>}
-      {agent.id === "deepseek" && history.length > 0 && <button className="history-button" disabled={historyBusy} onClick={() => { setHistory([]); setHistoryCursor(snapshot?.historyCursor ?? null); nearBottom.current = true; requestAnimationFrame(() => viewport.current?.scrollTo({ top: viewport.current.scrollHeight })); }}>正在浏览历史 · 返回最新</button>}
-      {agent.id !== "deepseek" && history.length >= 190 && <p className="setting-description">已达到手机历史显示上限，更早记录可在电脑查看。</p>}
+      {historyCursor && (pagedHistory || history.length < 190) && <button className="history-button" disabled={historyBusy} onClick={() => void older()}>{historyBusy ? "读取历史中…" : "加载更早的消息"}</button>}
+      {pagedHistory && history.length > 0 && <button className="history-button" disabled={historyBusy} onClick={() => { setHistory([]); setHistoryCursor(snapshot?.historyCursor ?? null); nearBottom.current = true; requestAnimationFrame(() => viewport.current?.scrollTo({ top: viewport.current.scrollHeight })); }}>正在浏览历史 · 返回最新</button>}
+      {!pagedHistory && history.length >= 190 && <p className="setting-description">已达到手机历史显示上限，更早记录可在电脑查看。</p>}
       <MessageMediaProvider key={draftSession} endpoint={endpoint} token={token} agentId={agent.id} sessionId={session.id}>
         <MessageTimeline messages={messages} running={snapshot?.status === "running"} renderMessage={(message, expandToolDetails, assistantContinuation) => <MessageBubble message={message} assistantContinuation={assistantContinuation} expandToolDetails={expandToolDetails} assistantLabel={agent.label} smooth={false} smoothPending={false} onSmoothDone={() => {}} onCopy={() => writeClipboard(message.text)} />} />
       </MessageMediaProvider>
-      {snapshot?.questions.map(question => <AgentQuestions key={question.id} request={question} agentLabel={agent.label} disabled={!online || busy} onRespond={answers => operate("question", `/questions/${question.id}/respond`, { answers }, question.id)} />)}
-      {snapshot?.permissions.map(permission => <PermissionCard key={permission.id} permission={permission} agentLabel={agent.label} disabled={!online || busy} onRespond={decision => operate("permission", `/permissions/${permission.id}/respond`, { decision }, permission.id)} />)}
+      {snapshot?.questions.map(question => <AgentQuestions key={question.id} request={question} agentLabel={agent.label} disabled={readOnly || !online || busy} onRespond={answers => operate("question", `/questions/${question.id}/respond`, { answers }, question.id)} />)}
+      {snapshot?.permissions.map(permission => <PermissionCard key={permission.id} permission={permission} agentLabel={agent.label} disabled={readOnly || !online || busy} onRespond={decision => operate("permission", `/permissions/${permission.id}/respond`, { decision }, permission.id)} />)}
       {!snapshot && stream !== "unauthorized" && <MessageSkeleton label="正在读取原会话" />}
     </div>
     <footer className="composer-panel agent-composer">
       {error && <SystemNotice error>{error}</SystemNotice>}
       {unresolved && !queuedSubmission && <SystemNotice>{snapshot?.submission?.delivery === "uncertain" ? "提交结果未知，正在核对；请勿重复发送。" : "已提交，等待服务确认。"}</SystemNotice>}
-      {snapshot?.queue && <AgentQueue queue={snapshot.queue} disabled={!online || busy} onCancel={id => operate("queue-cancel", `/queue/${encodeURIComponent(id)}/cancel`, {}, id)} />}
+      {snapshot?.queue && <AgentQueue queue={snapshot.queue} disabled={readOnly || !online || busy} onCancel={id => operate("queue-cancel", `/queue/${encodeURIComponent(id)}/cancel`, {}, id)} />}
       {attachments.length > 0 && <AttachmentTray attachments={attachments} onRemove={id => onDraft(composeAgentDraft(input.text, attachments.filter(item => item.id !== id)))} />}
       <input ref={uploadInput} type="file" multiple className="hidden-file-input" onChange={event => void uploadFiles(event.target.files)} />
       <ComputerComposer draft={input.text} onDraft={editText} onSend={send} onStop={() => void operate("interrupt", "/interrupt", {})} onUpload={() => uploadInput.current?.click()}
-        voice={<VoiceInput context={{ cwd: session.directory, title: session.title, messages }} scope={scopeKey} thread={draftSession} recovery={voiceRecovery} endpoint={endpoint} token={token} draft={input.text} onDraft={editText} />} label="发送给当前 Agent 会话"
-        placeholder={online ? `向 ${agent.label} 发送消息` : "草稿已保留，等待恢复连接…"} status={<ComposerSessionStatus status={sessionStatus} lastTurn={snapshot?.lastTurn} running={snapshot?.status === "running"} fallback={`${agent.label} · 当前会话`} />}
-        disabled={!online} uploading={uploading} uploadDisabled={!online || !token} busy={busy} running={snapshot?.status === "running"} hasContent={Boolean(input.text.trim() || attachments.length)}
-        canSend={sendEnabled} canStop={Boolean(control?.canInterrupt)} deliveries={{ steer: sendEnabled && Boolean(control?.canSteer), queue: sendEnabled }}
+        voice={readOnly ? null : <VoiceInput context={{ cwd: session.directory, title: session.title, messages }} scope={scopeKey} thread={draftSession} recovery={voiceRecovery} endpoint={endpoint} token={token} draft={input.text} onDraft={editText} />} label="发送给当前 Agent 会话"
+        placeholder={readOnly ? "只读预览，发送功能下一版提供" : online ? `向 ${agent.label} 发送消息` : "草稿已保留，等待恢复连接…"} status={<ComposerSessionStatus status={sessionStatus} lastTurn={snapshot?.lastTurn} running={snapshot?.status === "running"} fallback={`${agent.label} · 当前会话`} />}
+        disabled={readOnly || !online} uploading={uploading} uploadDisabled={readOnly || !online || !token} busy={busy} running={snapshot?.status === "running"} hasContent={Boolean(input.text.trim() || attachments.length)}
+        canSend={sendEnabled} canStop={Boolean(!readOnly && control?.canInterrupt)} deliveries={{ steer: sendEnabled && Boolean(control?.canSteer), queue: sendEnabled }}
         maxLength={Math.max(0, 20_000 - (draft.length - input.text.length))} />
     </footer>
   </section>;

@@ -50,6 +50,7 @@ export function createAgentSessionRoutes(context: {
       app.get("/api/agents/:agentId/sessions", async request => {
         const { agentId: id } = z.object({ agentId }).parse(request.params);
         const query = z.object({ search: z.string().max(200).optional(), cursor: z.string().max(8192).optional(), range: z.enum(["recent", "all"]).optional() }).parse(request.query);
+        if (id === "claude-cli" && Object.keys(request.query as object).some(key => !["search", "cursor"].includes(key))) throw agentError("CLAUDE_CLI_QUERY_INVALID", 400);
         if (query.range && id !== "deepseek") throw agentError("AGENT_RANGE_UNSUPPORTED", 400);
         return gateway.sessions(id).listSessions(query.search, query.cursor, query.range);
       });

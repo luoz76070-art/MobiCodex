@@ -1,0 +1,7 @@
+# Design
+
+ClaudeCliAdapter通过构造参数注入仅读SDK接口和插件会话查询函数；网关组装层提供默认SDK实现和插件查询。目录配置在托管schema和RelayConfig贯通；所有操作都重新确认白名单及session metadata的真实cwd，不缓存路径授权。列表仅投影目录末级名，不输出绝对目录。
+
+SDK listSessions按配置目录调用includeWorktrees:false；通过其无dir列表发现白名单下子目录会话，再按真实cwd过滤，后续读取始终带可信dir。游标在服务端签名并绑定搜索或会话及页边界，不携带路径；历史使用SDK消息链和offset/limit投影。有人在看才创建单飞轮询，关闭最后订阅或网关即释放，失败断流，迟到结果无效。
+
+沿用统一AgentSession/AgentSessionSnapshot，增加可选desktopOpen标记和readOnly提示；所有控制能力false。正文只读取已知text块，工具只显示名称与固定调用/结果摘要，不透传参数、结果对象或thinking块。手机列表用目录名分组，输入/附件/语音禁用，不另造页面。

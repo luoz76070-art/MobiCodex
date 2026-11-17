@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const output = path.join(root, 'dist-plugin');
@@ -17,6 +18,10 @@ await build({
   define: { __GATEWAY_BUILD_ID__: JSON.stringify(`gateway-${randomUUID()}`) },
   banner: { js: "import { createRequire as _createRequire } from 'node:module'; const require = _createRequire(import.meta.url);" },
 });
+// Preserve the SDK's own terms beside the gateway bundle that embeds its read helpers.
+const relayRequire = createRequire(path.join(root, 'apps/relay/package.json'));
+const sdkDirectory = path.dirname(relayRequire.resolve('@anthropic-ai/claude-agent-sdk'));
+await fs.copyFile(path.join(sdkDirectory, 'LICENSE.md'), path.join(plugin, 'lib/CLAUDE-AGENT-SDK-LICENSE.md'));
 const marketplace = { name: 'mobile-codex-local', interface: { displayName: 'Mobile Codex 本地预览' }, plugins: [{ name: 'mobile-codex', source: { source: 'local', path: './mobile-codex' }, policy: { installation: 'AVAILABLE', authentication: 'ON_INSTALL' }, category: 'Productivity' }] };
 await fs.mkdir(path.join(output, '.agents/plugins'), { recursive: true });
 await fs.writeFile(path.join(output, '.agents/plugins/marketplace.json'), JSON.stringify(marketplace, null, 2) + '\n');

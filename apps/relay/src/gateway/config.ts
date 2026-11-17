@@ -7,6 +7,7 @@ import { openCodeConfigSchema } from "../agents/openCodeClient.js";
 import { claudeConfigSchema } from "../agents/claudeProtocol.js";
 import { deepSeekConfigSchema } from "../agents/deepSeekProtocol.js";
 import { ccDeskConfigSchema } from "../agents/ccDeskProtocol.js";
+import { claudeCliConfigSchema } from "../agents/claudeCliAdapter.js";
 
 const absolutePath = z.string().refine(value => path.isAbsolute(value));
 const secret = z.string().min(32).max(512);
@@ -19,6 +20,7 @@ const schema = z.object({
   claude: claudeConfigSchema.optional(),
   deepseek: deepSeekConfigSchema.optional(),
   ccdesk: ccDeskConfigSchema.optional(),
+  claudeCli: claudeCliConfigSchema.optional(),
 }).strict();
 export type ManagedConfig = z.infer<typeof schema>;
 

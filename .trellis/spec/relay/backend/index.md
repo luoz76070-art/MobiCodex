@@ -14,6 +14,8 @@
 
 修改Claude Mods宿主模块、本机bridge或共享Agent会话ID校验时另读 [Claude契约](claude-contract.md)。
 
+修改独立 Claude CLI 本地只读通道时另读 [Claude CLI 契约](claude-cli-contract.md)。
+
 修改DeepSeek官方Harness插件、本机HTTP/SSE或UUID别名时另读 [DeepSeek契约](deepseek-contract.md)。
 
 ## Quality Check

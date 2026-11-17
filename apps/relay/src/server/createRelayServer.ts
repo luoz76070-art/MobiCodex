@@ -24,6 +24,7 @@ import { LiveTurnController, type LiveTurnSnapshot } from "../codex/liveTurnCont
 import { UploadStore } from "../store/uploadStore.js";
 import { createProjectImageReader, registerThreadImageRoutes } from "./threadImageRoutes.js";
 import { createAgentGateway, type AgentGateway } from "../agents/agentGateway.js";
+import type { ClaudeCliSdk } from "../agents/claudeCliAdapter.js";
 import type { GatewayRuntimeStatus } from "../gateway/managedGateway.js";
 import { createAgentSessionRoutes } from "./agentSessionRoutes.js";
 import { createAttentionRoutes } from "./attentionRoutes.js";
@@ -47,6 +48,7 @@ export type RelayServerOptions = {
     desktopControl: DesktopControl;
     uploads: UploadStore;
     agentGateway: AgentGateway;
+    claudeCliSdk: ClaudeCliSdk;
     voice: VoiceService;
     /** F6 tests: stand-in for reading the exhausted channel's reset time. */
     quotaResetAt: (model: string | null) => Promise<string | null>;
@@ -61,7 +63,10 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
   const liveTurns = options.services?.liveTurns ?? new LiveTurnController(config.defaultCwd);
   const desktopControl = options.services?.desktopControl ?? new DesktopControl(store, { codexHome: config.codexHome, transport: config.desktopTransport, loadThread: createDesktopThreadLoader(store) });
   const uploads = options.services?.uploads ?? new UploadStore(config.defaultCwd);
-  const agentGateway = options.services?.agentGateway ?? createAgentGateway({ codexHome: config.codexHome, opencode: config.opencode, claude: config.claude, deepseek: config.deepseek, ccdesk: config.ccdesk });
+  const agentGateway: AgentGateway = options.services?.agentGateway ?? createAgentGateway({ codexHome: config.codexHome, opencode: config.opencode, claude: config.claude, deepseek: config.deepseek, ccdesk: config.ccdesk, claudeCli: config.claudeCli }, {
+    claudeCliSdk: options.services?.claudeCliSdk,
+    claudeRegistered: async id => Boolean((await claudeBridge?.listSessions())?.sessions.some(session => session.id === id)),
+  });
   const claudeBridge = config.claude ? agentGateway.claudeBridge() : null;
   const submissions = new SubmissionRegistry();
   const devices = await DeviceRegistry.open(path.join(config.defaultCwd, ".mobile-codex", "devices.json"));

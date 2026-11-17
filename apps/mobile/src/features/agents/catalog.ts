@@ -1,4 +1,4 @@
-export type Agent = { id: string; label: string; transport: string; sessionApi?: 1; state?: string };
+export type Agent = { id: string; label: string; transport: string; sessionApi?: 1; state?: string; enabled?: boolean };
 export const codexAgent: Agent = { id: "codex", label: "Codex", transport: "codex" };
 export function availableAgents(agents: Agent[]): Agent[] {
   return agents.filter(item => /^[a-z][a-z0-9-]{0,63}$/u.test(item.id) && item.id !== "codex" && (item.sessionApi === 1

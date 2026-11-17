@@ -1,9 +1,10 @@
 /** U13: what the Agent picker shows per Agent — reachability, how many sessions, when it was last active. */
-export type AgentSummary = { status: "checking" | "online" | "offline"; count: number | null; more: boolean; updatedAt: string | null };
+export type AgentSummary = { status: "checking" | "online" | "offline" | "disabled"; count: number | null; more: boolean; updatedAt: string | null };
 
 export const checkingSummary: AgentSummary = { status: "checking", count: null, more: false, updatedAt: null };
+export const disabledSummary: AgentSummary = { status: "disabled", count: null, more: false, updatedAt: null };
 export const offlineSummary: AgentSummary = { status: "offline", count: null, more: false, updatedAt: null };
-export const agentStatusLabels: Record<AgentSummary["status"], string> = { checking: "检测中", online: "在线", offline: "离线" };
+export const agentStatusLabels: Record<AgentSummary["status"], string> = { checking: "检测中", online: "在线", offline: "离线", disabled: "未启用" };
 
 export function summarizeSessions(sessions: { updatedAt: string }[], more: boolean): AgentSummary {
   let latest: string | null = null, latestTime = -Infinity;
@@ -30,6 +31,7 @@ export function relativeActivity(iso: string | null, now = Date.now()) {
 /** One line under the Agent name; `recentOnly` marks lists that only cover the last 30 days (DeepSeek). */
 export function summaryLine(summary: AgentSummary | undefined, recentOnly = false, now = Date.now()) {
   if (!summary || summary.status === "checking") return "";
+  if (summary.status === "disabled") return "请在电脑网关配置允许读取的目录";
   if (summary.status === "offline") return "暂时连不上，点开查看原因";
   if (summary.count === null) return "";
   const scope = recentOnly ? "近 30 天" : "";

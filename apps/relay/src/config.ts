@@ -4,6 +4,7 @@ import { openCodeConfigSchema, type OpenCodeConfig } from "./agents/openCodeClie
 import { claudeConfigSchema, type ClaudeConfig } from "./agents/claudeProtocol.js";
 import { deepSeekConfigSchema, type DeepSeekConfig } from "./agents/deepSeekProtocol.js";
 import type { CcDeskConfig } from "./agents/ccDeskProtocol.js";
+import type { ClaudeCliConfig } from "./agents/claudeCliAdapter.js";
 
 export type RelayConfig = {
   host: string;
@@ -18,6 +19,7 @@ export type RelayConfig = {
   claude?: ClaudeConfig;
   deepseek?: DeepSeekConfig;
   ccdesk?: CcDeskConfig;
+  claudeCli?: ClaudeCliConfig;
   /** Days a done/returned capture card keeps its images; 0 keeps them forever. */
   retentionDays?: number;
 };
