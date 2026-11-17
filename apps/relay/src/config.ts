@@ -11,6 +11,8 @@ export type RelayConfig = {
   token: string;
   codexHome: string;
   defaultCwd: string;
+  /** Private gateway data directory; never derive feedback storage from the project cwd. */
+  dataDirectory?: string;
   desktopTransport?: "legacy" | "native";
   opencode?: OpenCodeConfig;
   claude?: ClaudeConfig;

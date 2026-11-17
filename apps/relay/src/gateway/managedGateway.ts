@@ -11,7 +11,7 @@ export type GatewayRuntimeStatus = {
   endpoint: string;
 };
 
-export async function startManagedGateway(input: ManagedConfig) {
+export async function startManagedGateway(input: ManagedConfig, dataDirectory?: string) {
   const config = parseManagedConfig(input);
   const instanceId = randomUUID(), startedAt = new Date().toISOString();
   let tunnel: ReturnType<typeof startTunnel> | undefined;
@@ -25,7 +25,7 @@ export async function startManagedGateway(input: ManagedConfig) {
     tunnel: { enabled: Boolean(config.tunnel), state: tunnelState }, endpoint: pairingEndpoint(config),
   });
   const app = await createRelayServer({
-    config: { host: "127.0.0.1", port: config.port, token: config.token, codexHome: config.codexHome, defaultCwd: config.workspace, desktopTransport: "native", opencode: config.opencode, claude: config.claude, deepseek: config.deepseek, ccdesk: config.ccdesk },
+    config: { host: "127.0.0.1", port: config.port, token: config.token, codexHome: config.codexHome, defaultCwd: config.workspace, dataDirectory, desktopTransport: "native", opencode: config.opencode, claude: config.claude, deepseek: config.deepseek, ccdesk: config.ccdesk },
     logger: false,
     gateway: { snapshot, diagnostics: diagnostics.snapshot, managerKey: config.managerKey, requestStop: () => { void stop().catch(() => console.error('{"error":"GATEWAY_STOP_FAILED"}')); } },
   });

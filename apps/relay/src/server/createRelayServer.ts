@@ -1,3 +1,5 @@
+import { registerFeedbackRoutes } from './feedbackRoutes.js';
+import { defaultGatewayConfigPath } from '../gateway/config.js';
 import { CaptureAssetStore } from '../capture/store.js';
 import path from "node:path";
 import { openHandoffTarget } from "./handoffChannels.js";
@@ -177,6 +179,7 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
   app.get("/api/connection", async () => ({ ok: true, authenticated: true }));
   app.get("/api/diagnostics", async () => ({ schema: "mobile-codex-gateway-diagnostics-v1", buildId: gatewayBuildId,
     tunnel: options.gateway?.diagnostics?.() ?? { enabled: false, omitted: 0, events: [] } }));
+  registerFeedbackRoutes(app, { dataDirectory: config.dataDirectory ?? path.dirname(defaultGatewayConfigPath()), owners, devices });
   registerVoiceRoutes(app, { owners, devices, credentials: voiceCredentials, service: voice });
   if (config.claude && claudeBridge) registerClaudeBridgeRoutes(app, claudeBridge);
 
