@@ -11,7 +11,9 @@ import { agentError, type AgentDelivery, type AgentOperation, type AgentSessionS
 
 const run = promisify(execFile);
 const WATCHES = 8;
-const LINGER_MS = 120_000;
+// A phone that leaves for a while comes back to a warm session. Reopening one costs a full history page, which over a
+// relayed link takes 20-30 s; an idle lingering reader costs almost nothing.
+const LINGER_MS = 600_000;
 const none = { inspectLoadedSessions: false, sendMessage: false, steer: false, interrupt: false, approve: false };
 type Listener = { receive: (snapshot: AgentSessionSnapshot) => void; disconnect: () => void };
 type Entry = {

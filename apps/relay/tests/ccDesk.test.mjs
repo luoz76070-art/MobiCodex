@@ -239,12 +239,12 @@ for (const reason of ['stop', 'connection close']) test(`default linger is unref
   const scheduled = t.mock.method(globalThis, 'setTimeout');
   const cleared = t.mock.method(globalThis, 'clearTimeout');
   watch.close();
-  const deadlines = scheduled.mock.calls.filter(call => call.arguments[1] === 120_000);
-  assert.equal(deadlines.length, 1, 'two minutes by default');
+  const deadlines = scheduled.mock.calls.filter(call => call.arguments[1] === 600_000);
+  assert.equal(deadlines.length, 1, 'ten minutes by default');
   const timer = deadlines[0].result;
   assert.equal(timer.hasRef(), false, 'linger cannot keep the process alive');
   watch.close();
-  assert.equal(scheduled.mock.calls.filter(call => call.arguments[1] === 120_000).length, 1, 'duplicate cancellation does not extend the deadline');
+  assert.equal(scheduled.mock.calls.filter(call => call.arguments[1] === 600_000).length, 1, 'duplicate cancellation does not extend the deadline');
   if (reason === 'stop') await instance.stop();
   else connections[0].close();
   assert.ok(cleared.mock.calls.some(call => call.arguments[0] === timer), 'the linger timer is cancelled');
