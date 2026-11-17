@@ -242,7 +242,7 @@ export function VoiceInput({ endpoint, token, draft, onDraft, scope, thread, rec
         }
       }}>
         <header><strong>语音输入</strong><button type="button" className="icon-button" aria-label="关闭语音输入" onClick={() => { cancel(); setOpen(false); setPhase("idle"); }}><X size={20} /></button></header>
-        <p className="setting-description">{capture ? "录音最长10分钟，边录边转文字。采用原始转写作为事项说明，不做自动整理。" : "录音最长10分钟，边录边转文字。预览后回填草稿，再由你发送。"}</p>
+        <p className="setting-description">{capture ? "录音最长10分钟，边录边转文字。采用原始转写回填描述，不做自动整理。" : "录音最长10分钟，边录边转文字。预览后回填草稿，再由你发送。"}</p>
         {!capture && <div className="voice-modes" aria-label="语音处理方式">{(["text", "prompt"] as const).map(value => <button type="button" key={value} aria-pressed={mode === value} disabled={busy} onClick={() => setMode(value)}>{value === "text" ? "仅转文字" : "整理提示词"}</button>)}</div>}
         {!available && <p role="status">录音需要安装支持语音的新版 Android APK。</p>}
         {phase === "recording" ? <button type="button" className="action-button voice-recording" onClick={() => void VoiceRecorder.stop({ sessionId: session.current!.id }).catch(caught => { cancel(); setPhase("idle"); setError(voiceError(caught)); })}><Square size={17} />结束录音 · {session.current?.segmented ? `${clock(seconds)} / ${clock(session.current.limit ?? 600)}` : `${seconds}s / 120s`}</button>

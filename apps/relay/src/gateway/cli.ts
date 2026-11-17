@@ -123,7 +123,7 @@ export async function runGatewayCli(args: string[], entryFile: string, services:
     const stop = () => { signaled = true; void service?.stop().catch(() => { process.exitCode = 1; console.error('{"error":"GATEWAY_STOP_FAILED"}'); }); };
     process.on("SIGTERM", stop); process.on("SIGINT", stop);
     try {
-      service = await startManagedGateway(config);
+      service = await startManagedGateway(config, path.dirname(file));
       if (signaled) await service.stop();
       await service.done;
     } finally { process.off("SIGTERM", stop); process.off("SIGINT", stop); }

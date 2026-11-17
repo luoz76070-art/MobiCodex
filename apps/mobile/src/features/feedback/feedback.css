@@ -1,0 +1,7 @@
+.feedback-scrim { z-index: 215; }
+.feedback-sheet { overflow-wrap: anywhere; }
+.feedback-sheet input[type="file"] { max-width: 100%; }
+.feedback-context { margin: var(--space-8) 0; font-size: var(--font-size-13); }
+.feedback-context > div { display: grid; grid-template-columns: 7em minmax(0, 1fr); gap: var(--space-8); margin-block: var(--space-4); }
+.feedback-context dt { color: var(--muted); }
+.feedback-context dd { margin: 0; }
