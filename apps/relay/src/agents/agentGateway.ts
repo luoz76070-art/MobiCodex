@@ -10,7 +10,7 @@ import type { ClaudeConfig } from "./claudeProtocol.js";
 import { CcDeskAdapter } from "./ccDeskAdapter.js";
 import type { CcDeskConfig } from "./ccDeskProtocol.js";
 import { agentError, type SessionAdapter } from "./sessions.js";
-import { listSessions, getSessionInfo, getSessionMessages } from "@anthropic-ai/claude-agent-sdk";
+import { listSessions, getSessionInfo, getSessionMessages, query } from "@anthropic-ai/claude-agent-sdk";
 import { ClaudeCliAdapter, type ClaudeCliConfig, type ClaudeCliSdk } from "./claudeCliAdapter.js";
 
 export type AgentStatus = {
@@ -26,9 +26,12 @@ export type AgentStatus = {
   loadedSessions: { count: number; hasMore: boolean } | null;
   checkedAt: string | null;
   errorCode: string | null;
+  errorMessage?: string | null;
+  cliVersion?: string;
 };
 
 export interface AgentAdapter {
+  ready?(): Promise<void>;
   readonly sessionApi?: SessionAdapter;
   snapshot(): AgentStatus;
   probe(): Promise<AgentStatus>;
@@ -102,6 +105,7 @@ export class AgentGateway {
   }
 
   snapshot(): AgentStatus[] { return [...this.adapters.values()].map(adapter => ({ ...adapter.snapshot(), ...(adapter.sessionApi ? { sessionApi: 1 as const } : {}) })); }
+  async ready() { await Promise.all([...this.adapters.values()].map(adapter => adapter.ready?.())); }
 
   probe(id: string): Promise<AgentStatus> {
     if (this.stopped) throw Object.assign(localAppServerError("AGENT_GATEWAY_STOPPED"), { statusCode: 503 });
@@ -135,6 +139,6 @@ export function createAgentGateway(config: { codexHome: string; opencode?: OpenC
   if (config.claude) adapters.push(new ClaudeAdapter());
   if (config.deepseek) adapters.push(new DeepSeekAdapter(new DeepSeekClient(config.deepseek)));
   if (config.ccdesk) adapters.push(new CcDeskAdapter(config.ccdesk));
-  adapters.push(new ClaudeCliAdapter(config.claudeCli, ports.claudeCliSdk ?? { listSessions, getSessionInfo, getSessionMessages }, ports.claudeRegistered));
+  adapters.push(new ClaudeCliAdapter(config.claudeCli, ports.claudeCliSdk ?? { listSessions, getSessionInfo, getSessionMessages, query }, ports.claudeRegistered));
   return new AgentGateway(adapters);
 }

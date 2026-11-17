@@ -46,7 +46,7 @@
     "test:ccdesk": "node --test scripts/test-ccdesk-control.mjs && pnpm --filter @mobile-codex/relay build && node --test --test-timeout=20000 apps/relay/tests/ccDesk.test.mjs",
     "test:attention": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/attention.test.mjs apps/relay/tests/modelSwitch.test.mjs",
     "test:feedback": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/feedback.test.mjs scripts/test-mobile-feedback.mjs",
-    "test:claude-cli": "pnpm --filter @mobile-codex/relay build && node --test --test-timeout=15000 apps/relay/tests/claudeCli.test.mjs"
+    "test:claude-cli": "pnpm --filter @mobile-codex/relay build && node --test --test-timeout=15000 apps/relay/tests/claudeCli.test.mjs apps/relay/tests/claudeCliRun.test.mjs"
   },
   "devDependencies": {
     "esbuild": "0.28.2",
