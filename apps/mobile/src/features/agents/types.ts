@@ -2,7 +2,7 @@ import type { ActivityEvidence } from "../../../../../shared/activityEvidence.js
 import type { CodexMessage } from "../../app/types";
 import type { LastTurn } from "../../../../../shared/lastTurn";
 
-export type AgentSession = { id: string; title: string; directory: string; updatedAt: string };
+export type AgentSession = { id: string; title: string; directory: string; updatedAt: string; desktopOpen?: boolean };
 export type AgentQuestion = {
   id: string; status: "pending" | "submitted" | "uncertain";
   unavailableReason?: string | null;
@@ -13,6 +13,7 @@ export type AgentPermission = {
   detail: string; unavailableReason: string | null; decisions: ("once" | "always" | "reject")[];
 };
 export type AgentSessionSnapshot = {
+  readOnly?: string;
   activeTurnId?: string | null;
   activityEvidence?: ActivityEvidence | null;
   lastTurn?: LastTurn | null;

@@ -6,7 +6,7 @@ import { ListSkeleton } from "../../shared/Skeleton";
 import { SystemNotice } from "../../shared/SystemNotice";
 import { AgentPickRow } from "./AgentPickRow";
 import { availableAgents, codexAgent, type Agent } from "./catalog";
-import { checkingSummary, offlineSummary, summarizeSessions, type AgentSummary } from "./agentSummary";
+import { checkingSummary, disabledSummary, offlineSummary, summarizeSessions, type AgentSummary } from "./agentSummary";
 import { apiGet, buildUrl } from "../connection/http";
 import { useDeviceRevoked } from "../connection/useDeviceRevoked";
 import { deviceRevokedMessage } from "../connection/authorization";
@@ -37,6 +37,7 @@ export function AgentPicker({ endpoint, token, scope, onSelect, onOpenItems, onO
       setAgents(available);
       setSummaries(Object.fromEntries(available.map(item => [item.id, checkingSummary])));
       await Promise.all(available.map(async item => {
+        if (item.enabled === false) { setSummaries(previous => ({ ...previous, [item.id]: disabledSummary })); return; }
         try {
           const cached = item.id === "codex" ? loadWorkspaceCache(scope).threads : null;
           const data = cached ? { sessions: cached, cursor: cached.length >= 120 ? "more" : null }
@@ -54,7 +55,7 @@ export function AgentPicker({ endpoint, token, scope, onSelect, onOpenItems, onO
     {(revoked || error) && <SystemNotice error>{revoked ? deviceRevokedMessage : error}</SystemNotice>}
     <PullToRefresh className="agent-session-list" onRefresh={loadAgents}>
       {agents.map(agent => <AgentPickRow key={agent.id} id={agent.id} label={agent.label} summary={summaries[agent.id]} recentOnly={agent.id === "deepseek"} onOpen={() => onSelect(agent.id)}
-        description={agent.id === "codex" ? "电脑桌面会话与手机工作台" : agent.id === "deepseek" ? "查看电脑会话与历史，继续原线程和处理提问" : agent.id === "ccdesk" ? "查看 CC Desk 会话，发消息、审批与中断" : agent.id === "claude" ? "打开已加载插件的会话，查看输出、排队输入与中断" : "打开现有会话，查看输出与处理提问"} />)}
+        description={agent.id === "codex" ? "电脑桌面会话与手机工作台" : agent.id === "deepseek" ? "查看电脑会话与历史，继续原线程和处理提问" : agent.id === "ccdesk" ? "查看 CC Desk 会话，发消息、审批与中断" : agent.id === "claude-cli" ? "只读查看允许目录中的本地会话与最新输出" : agent.id === "claude" ? "打开已加载插件的会话，查看输出、排队输入与中断" : "打开现有会话，查看输出与处理提问"} />)}
       {!loading && agents.length === 1 && !error && <EmptyState compact title="还没有接入其他 Agent">配置 DeepSeek Harness、Claude Code 插件、CC Desk 或 OpenCode 服务后，下拉刷新此页。</EmptyState>}
       {loading && <ListSkeleton label="正在读取…" />}
     </PullToRefresh>
