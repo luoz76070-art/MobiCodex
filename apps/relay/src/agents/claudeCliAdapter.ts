@@ -27,6 +27,7 @@ export class ClaudeCliAdapter implements AgentAdapter, SessionAdapter {
   private readonly secret = randomBytes(32);
   private readonly controlToken = randomUUID();
   private readonly entries = new Map<string, Entry>();
+  private readonly activityListeners = new Set<() => void>();
   private stopped = false;
   private readonly runtime?: ClaudeCliRuntime;
   private readonly localDirectories = new Map<string, string>();
@@ -47,6 +48,8 @@ export class ClaudeCliAdapter implements AgentAdapter, SessionAdapter {
       capabilities: { ...capabilities, sendMessage: Boolean(this.runtime?.available), steer: Boolean(this.runtime?.available), interrupt: Boolean(this.runtime?.available), approve: Boolean(this.runtime?.available) }, loadedSessions: null, checkedAt: null, errorCode: enabled ? this.runtime?.errorCode ?? null : "CLAUDE_CLI_DISABLED", errorMessage: this.runtime?.errorMessage ?? null, cliVersion: this.runtime?.version };
   }
   async ready() { await this.runtime?.ready(); }
+  runningCount() { return this.runtime?.runningCount() ?? 0; }
+  onActivity(listener: () => void) { this.activityListeners.add(listener); return () => { this.activityListeners.delete(listener); }; }
   async probe() { await this.roots(); await this.ready(); return this.snapshot(); }
   validSessionId(id: string) { return uuid.test(id); }
   async listSessions(search = "", cursor?: string) {
@@ -328,6 +331,7 @@ export class ClaudeCliAdapter implements AgentAdapter, SessionAdapter {
       control: { token: this.controlToken, canSend, canSteer: false, canInterrupt: false }, submission: null };
   }
   private publishRuntime(id: string) {
+    for (const listener of this.activityListeners) { try { listener(); } catch { /* Read-only observers cannot fail a turn. */ } }
     const entry = this.entries.get(id), snapshot = this.runtime?.snapshot(id);
     // Remember the record fingerprint observed after our own turn, so reclaiming a
     // process does not misclassify its unchanged last write as an external writer.

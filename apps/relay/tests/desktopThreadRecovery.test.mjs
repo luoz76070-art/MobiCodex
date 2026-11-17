@@ -118,7 +118,7 @@ test('invalid discovery response and lost IPC do not open a desktop view', async
 
 test('HTTP connection checks stay passive; only an authenticated conversation stream enables recovery', async t => {
   const f = await fixture(t);
-  const app = await createRelayServer({ logger: false, config: { host: '127.0.0.1', port: 0, token: 'synthetic-recovery-admin', codexHome: f.root, defaultCwd: f.root, desktopTransport: 'native' }, services: { desktopControl: f.control } });
+  const app = await createRelayServer({ logger: false, config: { keepAwake: false, host: '127.0.0.1', port: 0, token: 'synthetic-recovery-admin', codexHome: f.root, defaultCwd: f.root, desktopTransport: 'native' }, services: { desktopControl: f.control } });
   t.after(async () => { app.server.closeAllConnections(); await app.close(); });
   const base = await app.listen({ host: '127.0.0.1', port: 0 }), headers = { authorization: 'Bearer synthetic-recovery-admin' };
   assert.equal((await app.inject({ url: '/api/connection', headers })).statusCode, 200);

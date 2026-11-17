@@ -64,6 +64,7 @@ export class ClaudeCliRuntime {
   owns(id: string) { const run = this.runs.get(id); return Boolean(run && !run.closed); }
   snapshot(id: string) { return this.runs.get(id)?.snapshot; }
   sessions() { return [...this.runs.values()].map(run => run.snapshot.session); }
+  runningCount() { return [...this.runs.values()].filter(run => !run.closed && run.snapshot.status === "running").length; }
   watch(id: string) {
     this.viewers.set(id, (this.viewers.get(id) ?? 0) + 1);
     clearTimeout(this.runs.get(id)?.timer);

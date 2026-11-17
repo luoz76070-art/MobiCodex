@@ -252,7 +252,7 @@ test('default HTTP factory authenticates directory/create endpoints and rejects 
   const f = await fixture(t), executable = path.join(f.root, 'fake-claude');
   await fs.writeFile(executable, '#!/usr/bin/env node\nif (process.argv[2] !== "--version") process.exit(99);\nconsole.log("2.1.326 (Claude Code)");\n', { mode: 0o700 });
   const config = { host: '', port: 0, token: 'synthetic-admin', codexHome: path.join(f.root, 'empty-codex'), defaultCwd: f.root, claudeCli: { directories: [f.directory], executable } };
-  const app = await createRelayServer({ logger: false, config, services: { claudeCliSdk: f.sdk, desktopControl: { stop: async () => {} } } }); t.after(() => app.close());
+  const app = await createRelayServer({ logger: false, config: { ...config, keepAwake: false }, services: { claudeCliSdk: f.sdk, desktopControl: { stop: async () => {} } } }); t.after(() => app.close());
   const headers = { authorization: `Bearer ${config.token}` }, route = '/api/agents/claude-cli';
   for (const [method, url, payload] of [['GET', `${route}/directories`], ['POST', `${route}/sessions`, { directory: 'invalid', text: 'Synthetic' }]]) assert.equal((await app.inject({ method, url, payload })).statusCode, 401);
   const directories = (await app.inject({ url: `${route}/directories`, headers })).json().directories;
@@ -397,7 +397,7 @@ test('production interaction timeout is exactly thirty minutes and cancellation 
 test('HTTP approvals and controls preserve authentication, control token validation and idempotency', async t => {
   const f = await fixture(t);
   const config = { host: '', port: 0, token: 'synthetic-admin', codexHome: path.join(f.root, 'empty-codex'), defaultCwd: f.root };
-  const app = await createRelayServer({ logger: false, config, services: { agentGateway: new AgentGateway([f.adapter]), desktopControl: { stop: async () => {} } } }); t.after(() => app.close());
+  const app = await createRelayServer({ logger: false, config: { ...config, keepAwake: false }, services: { agentGateway: new AgentGateway([f.adapter]), desktopControl: { stop: async () => {} } } }); t.after(() => app.close());
   const headers = { authorization: `Bearer ${config.token}` }, base = `/api/agents/claude-cli/sessions/${f.id}`;
   assert.equal((await app.inject({ url: `${base}/controls` })).statusCode, 401);
   assert.equal((await app.inject({ url: `${base}/controls`, headers })).statusCode, 409);
@@ -450,4 +450,14 @@ test('canceled signals and malformed questions fail closed; pending payload and 
   assert.equal((await ask(f).answer).behavior, 'deny'); assert.equal(f.current().permissions.length, 32);
   await f.adapter.interruptSession(f.id, f.operation());
   assert.ok((await Promise.all(requests.map(request => request.answer))).every(reply => reply.behavior === 'deny')); assert.deepEqual(f.current().permissions, []);
+});
+
+test('F5 counts running turns rather than retained Claude CLI query processes', async t => {
+  const f = await fixture(t); assert.equal(f.adapter.runningCount(), 0);
+  const activity = []; const release = f.adapter.onActivity(() => activity.push(f.adapter.runningCount())); t.after(release);
+  await f.adapter.sendMessage(f.id, f.operation()); assert.equal(f.adapter.runningCount(), 1);
+  f.result(); await until(() => f.current().status === 'idle');
+  assert.equal(f.adapter.runningCount(), 0); assert.equal(f.runs[0].closes, 0); assert.ok(activity.includes(1)); assert.equal(activity.at(-1), 0);
+  await f.adapter.sendMessage(f.id, f.operation()); assert.equal(f.adapter.runningCount(), 1);
+  f.runs[0].frames.crash(); await until(() => f.current().lastTurn?.status === 'failed'); assert.equal(f.adapter.runningCount(), 0);
 });

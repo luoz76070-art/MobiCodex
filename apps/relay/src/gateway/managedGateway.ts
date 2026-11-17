@@ -26,7 +26,7 @@ export async function startManagedGateway(input: ManagedConfig, dataDirectory?: 
   });
   const app = await createRelayServer({
     config: { host: "127.0.0.1", port: config.port, token: config.token, codexHome: config.codexHome, defaultCwd: config.workspace, dataDirectory, desktopTransport: "native", opencode: config.opencode, claude: config.claude, deepseek: config.deepseek, ccdesk: config.ccdesk,
-      claudeCli: config.claudeCli },
+      claudeCli: config.claudeCli, keepAwake: config.keepAwake },
     logger: false,
     gateway: { snapshot, diagnostics: diagnostics.snapshot, managerKey: config.managerKey, requestStop: () => { void stop().catch(() => console.error('{"error":"GATEWAY_STOP_FAILED"}')); } },
   });

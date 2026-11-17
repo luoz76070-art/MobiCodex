@@ -1,6 +1,6 @@
 import type { AgentAdapter, AgentStatus } from "./agentGateway.js";
 import { DeepSeekClient } from "./deepSeekClient.js";
-import { deepSeekDelivery, deepSeekHistory, deepSeekInfo, deepSeekSessionId, deepSeekSessions } from "./deepSeekProtocol.js";
+import { deepSeekActivity, deepSeekDelivery, deepSeekHistory, deepSeekInfo, deepSeekSessionId, deepSeekSessions } from "./deepSeekProtocol.js";
 import { agentError, type AgentDelivery, type AgentOperation, type AgentSessionSnapshot, type SessionAdapter } from "./sessions.js";
 
 type Listener = { receive: (snapshot: AgentSessionSnapshot) => void; disconnect: () => void };
@@ -19,6 +19,8 @@ export class DeepSeekAdapter implements AgentAdapter, SessionAdapter {
   constructor(private readonly client: DeepSeekClient) {}
   validSessionId(id: string) { return deepSeekSessionId.safeParse(id).success; }
   snapshot() { return structuredClone(this.state); }
+  runningCount() { return [...this.entries.values()].filter(entry => entry.snapshot?.connected && entry.snapshot.status === "running").length; }
+  async refreshRunningCount() { return (await this.client.json("/activity", deepSeekActivity)).running; }
   probe(): Promise<AgentStatus> {
     if (this.probing) return this.probing;
     this.state = { ...this.state, state: "probing", errorCode: null };

@@ -49,7 +49,7 @@ test('device revocation closes existing SSE; authentication precedes JSON parsin
   const turns = new EventEmitter();
   turns.stop = async () => {};
   turns.getTurn = () => ({ turnId: 'synthetic-turn', threadId: 'synthetic', status: 'inProgress', messages: [] });
-  const app = await createRelayServer({ logger: false, config: { host: '127.0.0.1', port: 0, token: 'synthetic-admin', codexHome: path.join(root, 'no-sessions'), defaultCwd: root }, services: { liveTurns: turns, desktopControl: { stop: async () => {} } } });
+  const app = await createRelayServer({ logger: false, config: { keepAwake: false, host: '127.0.0.1', port: 0, token: 'synthetic-admin', codexHome: path.join(root, 'no-sessions'), defaultCwd: root }, services: { liveTurns: turns, desktopControl: { stop: async () => {} } } });
   t.after(async () => { app.server.closeAllConnections(); await app.close(); });
   assert.equal((await app.inject({ method: 'POST', url: '/api/uploads', headers: { 'content-type': 'application/json' }, payload: '{bad' })).statusCode, 401);
   const auth = { authorization: 'Bearer synthetic-admin' };
@@ -80,7 +80,7 @@ test('uploads reserve capacity before parsing and release it after completion', 
   let release;
   const gate = new Promise(resolve => { release = resolve; });
   let saves = 0;
-  const app = await createRelayServer({ logger: false, config: { host: '127.0.0.1', port: 0, token: 'synthetic-admin', codexHome: root, defaultCwd: root }, services: { uploads: { saveUpload: async () => { saves++; await gate; return { ok: true }; } }, desktopControl: { stop: async () => {} }, liveTurns: { stop: async () => {} } } });
+  const app = await createRelayServer({ logger: false, config: { keepAwake: false, host: '127.0.0.1', port: 0, token: 'synthetic-admin', codexHome: root, defaultCwd: root }, services: { uploads: { saveUpload: async () => { saves++; await gate; return { ok: true }; } }, desktopControl: { stop: async () => {} }, liveTurns: { stop: async () => {} } } });
   t.after(() => app.close());
   const input = { method: 'POST', url: '/api/uploads', headers: { authorization: 'Bearer synthetic-admin' }, payload: { fileName: 'fixture', dataBase64: 'eA==' } };
   const first = app.inject(input), second = app.inject(input);

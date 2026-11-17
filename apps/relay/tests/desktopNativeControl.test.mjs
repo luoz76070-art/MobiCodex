@@ -259,7 +259,7 @@ test('released subscriptions invalidate old control tokens without writing', asy
 });
 
 async function httpFixture(t, f) {
-  const app = await createRelayServer({ logger: false, config: { host: '127.0.0.1', port: 0, token: 'synthetic-token', codexHome: f.root, defaultCwd: f.root }, services: {
+  const app = await createRelayServer({ logger: false, config: { keepAwake: false, host: '127.0.0.1', port: 0, token: 'synthetic-token', codexHome: f.root, defaultCwd: f.root }, services: {
     store: f.store, desktopControl: f.control, live: { stop() {} }, liveTurns: { stop() {} }, uploads: {}, agentGateway: { stop() {} },
   } });
   t.after(() => app.close());
@@ -272,7 +272,7 @@ test('default native HTTP factory restores its private queue and applies device 
   await fs.mkdir(path.dirname(file));
   const record = (status, owner) => ({ threadId, clientMessageId: randomUUID(), owner, text: 'synthetic pending work', fingerprint: 'a'.repeat(64), createdAt: Date.now(), status });
   await fs.writeFile(file, JSON.stringify([record('waiting', 'admin'), record('waiting', 'revoked-device'), record('sending', 'revoked-device')]));
-  const app = await createRelayServer({ logger: false, config: { host: '127.0.0.1', port: 0, token: 'synthetic-token', codexHome: root, defaultCwd: root, desktopTransport: 'native' }, services: {
+  const app = await createRelayServer({ logger: false, config: { keepAwake: false, host: '127.0.0.1', port: 0, token: 'synthetic-token', codexHome: root, defaultCwd: root, desktopTransport: 'native' }, services: {
     store: { close() {} }, live: { stop() {} }, liveTurns: { stop() {} }, uploads: {}, agentGateway: { stop() {} },
   } });
   t.after(async () => { await app.close(); await fs.rm(root, { recursive: true, force: true }); });

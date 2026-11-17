@@ -158,7 +158,7 @@ test('HTTP baseline and JSONL SSE deliver thinking, work, output and completion 
   const root = path.dirname(path.dirname(file));
   const secret = 'isolated-activity-test-token';
   const desktop = { status: async () => ({ ok: false }), getStreamSnapshot: () => null, onStreamSnapshot: () => () => {}, stop: async () => {} };
-  const app = await createRelayServer({ logger: false, config: { host: '127.0.0.1', port: 0, token: secret, codexHome: root, defaultCwd: root }, services: { store, desktopControl: desktop } });
+  const app = await createRelayServer({ logger: false, config: { keepAwake: false, host: '127.0.0.1', port: 0, token: secret, codexHome: root, defaultCwd: root }, services: { store, desktopControl: desktop } });
   t.after(async () => { app.server.closeAllConnections(); await app.close(); });
   const base = await app.listen({ host: '127.0.0.1', port: 0 });
   const headers = { authorization: `Bearer ${secret}` };

@@ -164,7 +164,7 @@ test('lease expiry invalidates tokens, wakes a held poll and closes subscribers'
 async function serverFixture(t, adapter = new ClaudeAdapter({ leaseMs: 1000, pollMs: 50, operationMs: 500 })) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-claude-isolated-'));
   const config = { host: '127.0.0.1', port: 0, token: 'synthetic-admin', codexHome: path.join(root, 'empty-codex'), defaultCwd: root, claude: { bridgeToken: 'synthetic-host-key-'.repeat(3) } };
-  const app = await createRelayServer({ logger: false, config, services: { agentGateway: new AgentGateway([adapter]), desktopControl: { stop: async () => {} } } });
+  const app = await createRelayServer({ logger: false, config: { ...config, keepAwake: false }, services: { agentGateway: new AgentGateway([adapter]), desktopControl: { stop: async () => {} } } });
   await app.listen({ host: '127.0.0.1', port: 0 });
   t.after(async () => { await app.close(); await fs.rm(root, { recursive: true, force: true }); });
   return { app, adapter, config, base: `http://127.0.0.1:${app.server.address().port}`, hostHeaders: { authorization: `Bearer ${config.claude.bridgeToken}` }, auth: { authorization: 'Bearer synthetic-admin' } };
@@ -526,4 +526,10 @@ test('S2 Claude uses unchanged state/text/tool events for bounded evidence and c
   assert.equal(f.latest().activityEvidence.turnId, 'b');
   f.emit([{ type: 'tool', turnId: 'a', id: 'late-tool', text: 'PRIVATE', kind: 'function_call' }]);
   assert.equal(f.latest().activityEvidence.turnId, 'b');
+});
+
+test('F5 Claude bridge count reads registered lifecycle even without phone subscriptions', async t => {
+  const f = fixture(t); assert.equal(f.adapter.runningCount(), 0);
+  f.emit([{ type: 'state', turnId: 'synthetic-running', activity: 'thinking' }]); assert.equal(f.adapter.runningCount(), 1);
+  f.emit([{ type: 'state', turnId: null, activity: 'thinking' }]); assert.equal(f.adapter.runningCount(), 0);
 });

@@ -28,3 +28,21 @@ JSONL 游标表示完整 UTF-8 记录的字节边界；未完成末行不能越�
 - 配对码 5 分钟、一次性，最多 8 个待用码/16 台设备；设备凭证仅存哈希，默认保存在 defaultCwd 下 `.mobile-codex/devices.json`，0600 原子写；操作串行，撤销立即关闭流并废止流 token。
 - onRequest 完成鉴权再解析正文；日志只含 method/path，不含 query/凭证/正文。Tunnel secret 走 Authorization header；旧 Broker 握手 query 兼容保留，部署仍需检查代理日志策略。
 - 公网修复先严格校验 TLS、检查实际进程 cwd 和 `/api/connection`，再按 Broker → Mac 切换；源码构建成功不能代替运行版本验证。续期需 timer、deploy hook 与目标证书 dry-run 证据；流程见 `docs/ops/remote-connection-repair.md`。
+
+## F5 空闲睡眠租约
+
+`keepAwake` 默认 true；托管配置和 Relay 环境 `MOBILE_CODEX_KEEP_AWAKE=false` 可关闭。
+`gateway/keepAwake.ts` 只拥有系统进程和 60 秒释放计时，不推测任务生命周期。
+`keepAwakeMonitor.ts` 读取已有 live turns、已观察的 Desktop 快照、Claude CLI
+runtime、Claude 插件登记状态及配置的 OpenCode/DeepSeek 本机活动接口；CC Desk 不计入。
+Desktop 已知运行线程保留只读 follow 到结束，不为查状态加载未知线程；无法观测的
+Desktop 线程不声称覆盖。CLI 空闲保留的 Query 不算任务。桥接每 2 秒只读对账，
+失败保留上次计数并在诊断中标 `unavailableSources`，恢复后清除；长期断连可能延长唤醒。
+DeepSeek 的鉴权 `GET /activity` 只投影原生 agent.status 数量，不开日志或激活会话；
+旧插件没有此接口时仍统计现有快照中的活动会话，并提示部分状态不可用；完整覆盖需同步升级插件。
+
+macOS 固定 argv `/usr/bin/caffeinate -i -w <pid>`；Linux 使用
+`systemd-inhibit --what=idle --mode=block` 包住 stdin EOF 即退出的自有 Node helper。
+不使用 shell、display/system/lid 抑制或 detached 子进程。缺命令/启动与运行错误
+只更新状态，不影响 Agent；preClose 先停止观察、清计时并释放进程。测试注入
+假的 starter/时钟，普通 HTTP fixture 显式禁用 F5，不得运行真实 caffeinate。

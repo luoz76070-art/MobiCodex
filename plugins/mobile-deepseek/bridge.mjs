@@ -359,6 +359,8 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
       const queryRoute = catalog && (url.pathname === '/sessions' || /\/history$/u.test(url.pathname));
       if (url.hash || (url.search && !queryRoute) || [...url.searchParams.keys()].some(key => !['search', 'cursor', 'range'].includes(key))) throw fail('INPUT_INVALID', 400);
       if (req.method === 'GET' && url.pathname === '/info') return json({ protocol: 1, harnessVersion, messagePhases: true, toolMessages: 1, interactions: interactions.available(), ...(catalog ? { scope: 'all', history: true } : {}) });
+      // F5 observes the host's live status without opening logs or activating cold sessions.
+      if (req.method === 'GET' && url.pathname === '/activity') return json({ running: ctx.agents.list().filter(allowed).filter(agent => agent.status === 'running').length });
       if (req.method === 'GET' && url.pathname === '/sessions') {
         if (catalog) return json(await catalog.list(url.searchParams.get('search'), url.searchParams.get('cursor'), controller.signal, url.searchParams.get('range') ?? 'recent'));
         const sessions = ctx.agents.list().filter(allowed).slice(0, 128).map(session); return json({ sessions, cursor: null });

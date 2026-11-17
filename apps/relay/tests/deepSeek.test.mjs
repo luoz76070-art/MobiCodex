@@ -317,7 +317,7 @@ test('dsh late uncertain cancellation cannot restore an item removed by authorit
 test('dsh public queue cancellation requires a paired device and deduplicates identical operations', async t => {
   const f = await fixture(t, { running: true, nativeQueue: true }); await f.watch();
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-dsh-queue-test-'));
-  const app = await createRelayServer({ logger: false, config: { host: '127.0.0.1', port: 0, token: 'synthetic-admin', codexHome: path.join(root, 'empty-codex'), defaultCwd: root }, services: { agentGateway: new AgentGateway([f.adapter]), desktopControl: { stop: async () => {} } } });
+  const app = await createRelayServer({ logger: false, config: { keepAwake: false, host: '127.0.0.1', port: 0, token: 'synthetic-admin', codexHome: path.join(root, 'empty-codex'), defaultCwd: root }, services: { agentGateway: new AgentGateway([f.adapter]), desktopControl: { stop: async () => {} } } });
   t.after(async () => { await app.close(); await fs.rm(root, { recursive: true, force: true }); });
   const pairing = (await app.inject({ method: 'POST', url: '/api/pairing', headers: { authorization: 'Bearer synthetic-admin' } })).json();
   const device = (await app.inject({ method: 'POST', url: '/api/pairing/consume', payload: { code: pairing.code } })).json();
@@ -568,7 +568,7 @@ test('dsh alias never redirects a disposed handle to a replacement with the same
 test('dsh relay production factory registers configured adapter without an injected AgentGateway', async t => {
   const f = await fixture(t);
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-dsh-factory-test-'));
-  const app = await createRelayServer({ logger: false, config: {
+  const app = await createRelayServer({ logger: false, config: { keepAwake: false,
     host: '127.0.0.1', port: 0, token: 'synthetic-admin', codexHome: path.join(root, 'empty-codex'), defaultCwd: root, deepseek: f.config,
   }, services: { desktopControl: { stop: async () => {} } } });
   t.after(async () => { await app.close(); await fs.rm(root, { recursive: true, force: true }); });
@@ -595,7 +595,7 @@ test('dsh public Agent routes retain pairing auth, session-bound SSE tokens and 
   f.event('tool/call', { turn: 1, step: 1, callId: 'http-tool', name: 'bash', arguments: '{"command":"printf safe"}' });
   const nativePermission = f.addPending('approval/request', { toolName: 'bash', callId: 'http-tool' });
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-dsh-test-'));
-  const app = await createRelayServer({ logger: false, config: { host: '127.0.0.1', port: 0, token: 'synthetic-admin', codexHome: path.join(root, 'empty-codex'), defaultCwd: root }, services: { agentGateway: new AgentGateway([f.adapter]), desktopControl: { stop: async () => {} } } });
+  const app = await createRelayServer({ logger: false, config: { keepAwake: false, host: '127.0.0.1', port: 0, token: 'synthetic-admin', codexHome: path.join(root, 'empty-codex'), defaultCwd: root }, services: { agentGateway: new AgentGateway([f.adapter]), desktopControl: { stop: async () => {} } } });
   t.after(async () => { await app.close(); await fs.rm(root, { recursive: true, force: true }); });
   await app.listen({ host: '127.0.0.1', port: 0 });
   const auth = { authorization: 'Bearer synthetic-admin' }, route = `/api/agents/deepseek/sessions/${f.id}`, base = `http://127.0.0.1:${app.server.address().port}`;
@@ -943,4 +943,15 @@ test('S2 DeepSeek evidence is per-turn metadata, never default working or privat
   f.agent.status = 'idle'; f.emit('agent/status', { agent: f.agent });
   await until(() => current(f).activeTurnId === null);
   assert.equal(current(f).activityEvidence, null);
+});
+
+test('F5 activity counts native running status with no subscriptions, logs or session activation', async t => {
+  const f = await fixture(t, { running: true, large: true });
+  const before = f.stats();
+  assert.equal(await f.adapter.refreshRunningCount(), 1);
+  const foreign = { id: 'foreign', status: 'running', session: { header: { cwd: path.resolve('output/f5/foreign'), createdAt: 1000 } } };
+  f.agents.set(foreign.id, foreign); assert.equal(await f.adapter.refreshRunningCount(), 1);
+  f.agent.status = 'idle'; assert.equal(await f.adapter.refreshRunningCount(), 0);
+  assert.equal(f.stats().reads, before.reads); assert.equal(f.stats().observations, before.observations); assert.equal(f.calls.length, 0);
+  const rejected = await fetch(new URL('/activity', f.config.url)); assert.equal(rejected.status, 403);
 });

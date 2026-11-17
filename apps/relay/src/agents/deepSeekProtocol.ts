@@ -16,6 +16,7 @@ export const deepSeekConfigSchema = z.object({
 }).strict();
 export type DeepSeekConfig = z.infer<typeof deepSeekConfigSchema>;
 export const deepSeekSessionId = z.string().uuid();
+export const deepSeekActivity = z.object({ running: z.number().int().nonnegative() });
 const session = z.object({ id: deepSeekSessionId, title: z.string().max(256), directory: z.string().max(4096), updatedAt: z.string().datetime() });
 export const deepSeekInfo = z.object({ protocol: z.literal(1), harnessVersion: z.enum(["0.2.1-rc.2", "0.2.1-rc.3", "0.2.1-rc.5", "0.2.2-rc.1", "0.2.2-rc.3"]), messagePhases: z.boolean().optional(), toolMessages: z.literal(1).optional(), interactions: z.boolean().optional(), scope: z.literal("all").optional(), history: z.boolean().optional() });
 export const deepSeekSessions = z.object({ sessions: z.array(session).max(128), cursor: z.string().uuid().nullable() });

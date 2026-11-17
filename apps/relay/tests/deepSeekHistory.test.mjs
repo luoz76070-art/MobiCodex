@@ -215,7 +215,7 @@ test('recent catalog uses cached metadata, retains running/viewed sessions and d
 test('production HTTP factory forwards recent/all range and enforces authentication', async t => {
   const f = await fixture(t), old = Date.now() - 45 * 86400_000; f.rows[0].updatedAt = old;
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-dsh-history-http-'));
-  const app = await createRelayServer({ logger: false, config: { host: '127.0.0.1', port: 0, token: 'synthetic-admin', codexHome: path.join(root, 'empty'), defaultCwd: root, deepseek: f.config }, services: { desktopControl: { stop: async () => {} } } });
+  const app = await createRelayServer({ logger: false, config: { keepAwake: false, host: '127.0.0.1', port: 0, token: 'synthetic-admin', codexHome: path.join(root, 'empty'), defaultCwd: root, deepseek: f.config }, services: { desktopControl: { stop: async () => {} } } });
   t.after(async () => { await app.close(); await fs.rm(root, { recursive: true, force: true }); });
   const headers = { authorization: 'Bearer synthetic-admin' }, url = '/api/agents/deepseek/sessions';
   assert.equal((await app.inject({ url })).statusCode, 401);

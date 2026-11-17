@@ -48,6 +48,11 @@ export class OpenCodeAdapter implements AgentAdapter, SessionAdapter {
   readonly sessionApi: SessionAdapter = this;
   validSessionId(id: string) { return sessionIdSchema.safeParse(id).success; }
   snapshot(): AgentStatus { return structuredClone(this.state); }
+  runningCount() { return [...this.entries.values()].filter(entry => entry.snapshot?.connected && entry.snapshot.status === "running").length; }
+  async refreshRunningCount() {
+    const active = await this.client.json("/api/session/active", activeSchema);
+    return Object.keys(active.data).length;
+  }
 
   probe(): Promise<AgentStatus> {
     if (this.probing) return this.probing;

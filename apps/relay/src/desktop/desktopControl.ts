@@ -378,6 +378,11 @@ export class DesktopControl {
     return this.streamSnapshots.get(threadId) ?? null;
   }
 
+  /** Only states already available to desktop control; never loads threads for F5. */
+  runningThreadIds(): string[] {
+    return [...this.streamSnapshots.values()].filter(snapshot => snapshot.status === "starting" || snapshot.status === "inProgress" || Boolean(snapshot.activeTurnId)).map(snapshot => snapshot.threadId);
+  }
+
   onStreamSnapshot(handler: (snapshot: DesktopStreamSnapshot) => void): () => void {
     this.streamSnapshotListeners.add(handler);
     return () => this.streamSnapshotListeners.delete(handler);

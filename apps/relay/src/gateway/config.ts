@@ -21,6 +21,7 @@ const schema = z.object({
   deepseek: deepSeekConfigSchema.optional(),
   ccdesk: ccDeskConfigSchema.optional(),
   claudeCli: claudeCliConfigSchema.optional(),
+  keepAwake: z.boolean().default(true),
 }).strict();
 export type ManagedConfig = z.infer<typeof schema>;
 

@@ -41,6 +41,7 @@ export class ClaudeAdapter implements AgentAdapter, SessionAdapter {
       loadedSessions: { count, hasMore: false }, checkedAt: null, errorCode: null };
   }
   async probe() { this.running(); return this.snapshot(); }
+  runningCount() { this.expire(); return [...this.entries.values()].filter(entry => entry.connected && Boolean(entry.turnId)).length; }
 
   register(input: z.infer<typeof claudeRegisterSchema>) {
     this.running(); this.expire(); input = claudeRegisterSchema.parse(input);

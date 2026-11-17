@@ -20,6 +20,7 @@ export type RelayConfig = {
   deepseek?: DeepSeekConfig;
   ccdesk?: CcDeskConfig;
   claudeCli?: ClaudeCliConfig;
+  keepAwake?: boolean;
   /** Days a done/returned capture card keeps its images; 0 keeps them forever. */
   retentionDays?: number;
 };
@@ -55,6 +56,7 @@ export function loadConfig(): RelayConfig {
     defaultCwd: process.env.MOBILE_CODEX_DEFAULT_CWD ?? process.cwd(),
     desktopTransport,
     retentionDays,
+    keepAwake: process.env.MOBILE_CODEX_KEEP_AWAKE !== "false",
     ...(opencode?.success ? { opencode: opencode.data } : {}),
     ...(claude?.success ? { claude: claude.data } : {}),
     ...(deepseek?.success ? { deepseek: deepseek.data } : {}),

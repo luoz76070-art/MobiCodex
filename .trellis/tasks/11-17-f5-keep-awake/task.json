@@ -1,0 +1,7 @@
+{
+  "title": "F5 gateway keep-awake while local agents work",
+  "status": "completed",
+  "branch": "codex/f5-keep-awake",
+  "base_branch": "main",
+  "scope": "relay/mobile connection status"
+}

@@ -37,10 +37,13 @@ import { VoiceCredentialStore } from "../voice/credentials.js";
 import { VoiceService } from "../voice/service.js";
 import { registerVoiceRoutes } from "./voiceRoutes.js";
 import { gatewayBuildId, type createGatewayDiagnostics } from "../gateway/diagnostics.js";
+import { KeepAwake, type KeepAwakePorts } from "../gateway/keepAwake.js";
+import { monitorKeepAwake } from "../gateway/keepAwakeMonitor.js";
 
 export type RelayServerOptions = {
   config?: RelayConfig;
   logger?: boolean;
+  keepAwakePorts?: KeepAwakePorts;
   gateway?: { snapshot: () => GatewayRuntimeStatus; diagnostics?: ReturnType<typeof createGatewayDiagnostics>["snapshot"]; managerKey: string; requestStop: () => void };
   services?: Partial<{
     store: CodexStore;
@@ -84,6 +87,8 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
   const app = Fastify({ logger: options.logger === false ? false : { serializers: { req: req => ({ method: req.method, url: req.url?.split("?")[0] }) }, redact: ["req.headers.authorization"] }, bodyLimit: 36 * 1024 * 1024 });
 
   const streams = new Set<PassThrough>();
+  const keepAwake = new KeepAwake(config.keepAwake ?? true, options.keepAwakePorts);
+  const awakeMonitor = monitorKeepAwake(keepAwake, { liveTurns, desktop: desktopControl, agents: agentGateway }, config.keepAwake !== false);
   const readImage = createProjectImageReader();
   const attention = new AttentionHub({ desktop: desktopControl, liveTurns, gateway: agentGateway, codex: store });
   const attentionRoutes = createAttentionRoutes({ hub: attention, owners, devices, streams, deviceStreams });
@@ -93,7 +98,7 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
   const workItemRoutes = createWorkItemRoutes({ retentionDays: config.retentionDays, root: config.defaultCwd, captures, owners, devices, streams, deviceStreams, openHandoff: openHandoffTarget({ gateway: agentGateway, desktop: desktopControl, codex: store }) });
   // A route may still await its upstream's first frame before reply.send(stream).
   // Cancel adapters before HTTP drain, otherwise onClose cannot release that wait.
-  app.addHook("preClose", async () => { voice.stop(); attention.stop(); workItemRoutes.cancelHandoffs(); for (const stream of streams) stream.destroy(); await Promise.all([agentGateway.stop(), desktopControl.messageQueue?.stop()]); });
+  app.addHook("preClose", async () => { await awakeMonitor.stop(); voice.stop(); attention.stop(); workItemRoutes.cancelHandoffs(); for (const stream of streams) stream.destroy(); await Promise.all([agentGateway.stop(), desktopControl.messageQueue?.stop()]); });
   app.addHook("onClose", async () => { store.close(); await Promise.all([desktopControl.stop(), liveTurns.stop(), live.stop?.(), workItemRoutes.stop(), captures.drain()]); });
 
   await app.register(cors, {
@@ -185,6 +190,7 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
 
   app.get("/api/connection", async () => ({ ok: true, authenticated: true }));
   app.get("/api/diagnostics", async () => ({ schema: "mobile-codex-gateway-diagnostics-v1", buildId: gatewayBuildId,
+    keepAwake: keepAwake.snapshot(),
     tunnel: options.gateway?.diagnostics?.() ?? { enabled: false, omitted: 0, events: [] } }));
   registerFeedbackRoutes(app, { dataDirectory: config.dataDirectory ?? path.dirname(defaultGatewayConfigPath()), owners, devices });
   registerVoiceRoutes(app, { owners, devices, credentials: voiceCredentials, service: voice });

@@ -436,7 +436,7 @@ test('stop cancels initialization and never stops or creates a session in the up
 
 test('Relay routes authenticate devices, bind SSE token to agent/session, deduplicate writes and revoke live streams', async t => {
   const f = await fixture(t);
-  const app = await createRelayServer({ logger: false, config: { host: '127.0.0.1', port: 0, token: 'synthetic-admin', codexHome: path.join(f.root, 'empty-codex'), defaultCwd: f.root },
+  const app = await createRelayServer({ logger: false, config: { keepAwake: false, host: '127.0.0.1', port: 0, token: 'synthetic-admin', codexHome: path.join(f.root, 'empty-codex'), defaultCwd: f.root },
     services: { agentGateway: new AgentGateway([f.adapter]), desktopControl: { stop: async () => {} } } });
   t.after(() => app.close());
   await app.listen({ host: '127.0.0.1', port: 0 });

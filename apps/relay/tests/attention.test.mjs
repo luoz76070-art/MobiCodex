@@ -39,7 +39,7 @@ async function fixture(t) {
       thread: { id: 'live-thread', threadName: '后台任务' }, error: null, updatedAt: new Date().toISOString(), lastTurn: null }; this.turns.set(snapshot.turnId, snapshot); return snapshot; },
     getTurn(id) { return this.turns.get(id) ?? null; },
     async respondApproval(params) { calls.push(['live-approval', params.turnId, params.approvalId, params.decision]); return {}; } });
-  const app = await createRelayServer({ logger: false, config: { host: '127.0.0.1', port: 0, token: 'admin', codexHome: path.join(root, 'empty'), defaultCwd: root }, services: {
+  const app = await createRelayServer({ logger: false, config: { keepAwake: false, host: '127.0.0.1', port: 0, token: 'admin', codexHome: path.join(root, 'empty'), defaultCwd: root }, services: {
     store: { close() {}, getThreadSummary: async id => id === threadId ? { id, threadName: '修复登录页', cwd: root, source: 'vscode', originator: 'desktop' } : null },
     live: { stop: async () => {} }, liveTurns, desktopControl: desktop,
     agentGateway: { stop: async () => {}, sessions: () => adapter, snapshot: () => [{ id: 'deepseek', sessionApi: 1 }] },

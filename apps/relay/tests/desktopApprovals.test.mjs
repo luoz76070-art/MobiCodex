@@ -189,7 +189,7 @@ test('revision gaps invalidate old approval tokens before following again', asyn
 
 test('HTTP requires authentication, an exact decision and current opaque token; SSE publishes only bound cards', async t => {
   const f = await fixture(t); f.behavior = 'ack';
-  const app = await createRelayServer({ logger: false, config: { host: '127.0.0.1', port: 0, token: 'synthetic-token', codexHome: f.root, defaultCwd: f.root }, services: {
+  const app = await createRelayServer({ logger: false, config: { keepAwake: false, host: '127.0.0.1', port: 0, token: 'synthetic-token', codexHome: f.root, defaultCwd: f.root }, services: {
     store: f.store, desktopControl: f.control, live: { stop() {} }, liveTurns: { stop() {} }, uploads: {}, agentGateway: { stop() {} },
   } });
   t.after(() => app.close());

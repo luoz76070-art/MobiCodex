@@ -20,7 +20,7 @@ test('manual gateway diagnostics require authentication and expose only bounded 
   const response = await f.call('/api/diagnostics'); assert.equal(response.status, 200);
   const report = await response.json();
   assert.match(report.buildId, /^gateway-[a-f0-9-]{36}$/);
-  assert.deepEqual(Object.keys(report).sort(), ['buildId', 'schema', 'tunnel']);
+  assert.deepEqual(Object.keys(report).sort(), ['buildId', 'keepAwake', 'schema', 'tunnel']);
   assert.deepEqual(report.tunnel, { enabled: false, omitted: 0, events: [] });
   for (const value of [f.config.token, f.config.managerKey, f.config.workspace, f.config.codexHome]) assert.equal(JSON.stringify(report).includes(value), false);
 });
@@ -98,7 +98,7 @@ for (const phase of ['info', 'first-frame', 'active']) test(`stop drains DeepSee
     await until(() => bridge.pending.size === 0);
     assert.equal(await inspectGateway(f.config), null);
     assert.equal(bridge.server.listening, true, 'stopping the gateway must leave its upstream host running');
-    assert.deepEqual(bridge.requests, phase === 'info' ? ['GET /info'] : ['GET /info', `GET /sessions/${bridge.id}/events`]);
+    assert.deepEqual(bridge.requests, phase === 'info' ? ['GET /activity', 'GET /info'] : ['GET /activity', 'GET /info', `GET /sessions/${bridge.id}/events`]);
     const next = await f.start(); assert.notEqual(next.snapshot().instanceId, service.snapshot().instanceId);
   } finally {
     clearTimeout(timeout); downstream.destroy(); bridge.release(); await service.stop();

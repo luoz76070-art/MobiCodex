@@ -144,7 +144,7 @@ test('routes: switch options, and a switch is an ordinary send on the same threa
   const turn = id => ({ threadId: id, turnId: 'next-turn', status: 'inProgress', messages: [], events: [], approvals: [], userInputs: [], thread: null, error: null, updatedAt: new Date().toISOString(), messageCount: 0, eventCount: 0 });
   const liveTurns = Object.assign(new EventEmitter(), { stop: async () => {}, listModels: async () => catalog, getTurn: () => null,
     async startTurn(params) { starts.push(params); return turn(params.threadId ?? 'fresh'); } });
-  const app = await createRelayServer({ logger: false, config: { host: '127.0.0.1', port: 0, token: 'admin', codexHome: home, defaultCwd: home }, services: {
+  const app = await createRelayServer({ logger: false, config: { keepAwake: false, host: '127.0.0.1', port: 0, token: 'admin', codexHome: home, defaultCwd: home }, services: {
     store: { close() {}, getThreadSummary: async id => id === threadId || id === bareId ? { id, threadName: '修复登录页', cwd: '/work/project', source: 'vscode', originator: 'Codex Desktop', rolloutPath: id === bareId ? bare : file, updatedAt: '' } : null },
     live: { stop: async () => {} }, liveTurns, quotaResetAt: async model => model === 'ccs-team/gpt-6-astra' ? '2026-11-21T03:05:00.000Z' : null,
     desktopControl: { stop: async () => {}, messageQueue: { stop: async () => {}, revoke: async () => {} }, onStreamSnapshot: () => () => {}, followThread: () => () => {}, getStreamSnapshot: () => null,

@@ -31,6 +31,10 @@ export type AgentStatus = {
 };
 
 export interface AgentAdapter {
+  /** Reads existing running-turn state without opening a session or starting an Agent. */
+  runningCount?(): number;
+  refreshRunningCount?(): Promise<number>;
+  onActivity?(listener: () => void): () => void;
   ready?(): Promise<void>;
   readonly sessionApi?: SessionAdapter;
   snapshot(): AgentStatus;
@@ -97,6 +101,7 @@ export class CodexExistingServerAdapter implements AgentAdapter {
 
 export class AgentGateway {
   private readonly adapters: Map<string, AgentAdapter>;
+  private readonly activity = new Map<string, number>();
   private stopped = false;
 
   constructor(adapters: AgentAdapter[]) {
@@ -106,6 +111,26 @@ export class AgentGateway {
 
   snapshot(): AgentStatus[] { return [...this.adapters.values()].map(adapter => ({ ...adapter.snapshot(), ...(adapter.sessionApi ? { sessionApi: 1 as const } : {}) })); }
   async ready() { await Promise.all([...this.adapters.values()].map(adapter => adapter.ready?.())); }
+
+  cachedRunningCounts() {
+    const counts = new Map(this.activity);
+    for (const [id, adapter] of this.adapters) if (id !== "ccdesk" && adapter.runningCount) counts.set(id, Math.max(counts.get(id) ?? 0, adapter.runningCount()));
+    return [...counts].map(([agentId, count]) => ({ agentId, count }));
+  }
+  async runningCounts() {
+    const unavailableSources: string[] = [];
+    await Promise.all([...this.adapters].filter(([id, adapter]) => id !== "ccdesk" && adapter.refreshRunningCount).map(async ([id, adapter]) => {
+      try {
+        const count = await adapter.refreshRunningCount!();
+        if (!this.stopped) this.activity.set(id, count);
+      } catch { unavailableSources.push(id); } // Retain the last observed count until recovery.
+    }));
+    return { reasons: this.cachedRunningCounts(), unavailableSources: unavailableSources.sort() };
+  }
+  onActivity(listener: () => void) {
+    const releases = [...this.adapters].filter(([id]) => id !== "ccdesk").flatMap(([, adapter]) => adapter.onActivity ? [adapter.onActivity(listener)] : []);
+    return () => { for (const release of releases) release(); };
+  }
 
   probe(id: string): Promise<AgentStatus> {
     if (this.stopped) throw Object.assign(localAppServerError("AGENT_GATEWAY_STOPPED"), { statusCode: 503 });

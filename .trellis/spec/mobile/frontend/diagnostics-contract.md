@@ -57,3 +57,10 @@ Android ACTION_CREATE_DOCUMENT使用固定生成文件名，后台写入选择�
 - 错误：复制全部JSON、只统计文本节点。正确：默认短摘要，详细报告文件化，以article身份关联三层证据。
 - 错误：用源码版本或active热更新当运行Web版本。正确：分别读取编译ID、原生状态及当前HTML标记，未知不猜。
 - 错误：原样导出连接错误。正确：独立白名单journal，记录有限的原因枚举与代次。
+
+F5 在同一鉴权响应中可选增加 `keepAwake:{state,reasons,releasing,errorCode?,unavailableSources}`。
+state 为 disabled/idle/holding/unsupported/error；reasons 仅含稳定 agentId 与任务 count，
+不含会话身份、cwd 或错误原文。现有诊断导出继续按其白名单投影，不扩大导出内容。
+电脑连接卡片在打开/重新检测时读取该字段，沿用 setting-description 状态行；
+旧网关缺字段或诊断 404 只显示兼容提示，不把已成功的连接判为失败。切电脑/关闭
+取消请求并丢弃旧回包；展示层只接受已知状态/Agent 标签与非负整数。
