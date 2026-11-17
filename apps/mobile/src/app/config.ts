@@ -14,7 +14,8 @@ export const defaultToken =
 
 export const defaultTheme = (localStorage.getItem("themeMode") as ThemeMode | null) ?? "system";
 
-export const defaultSplitMode = (localStorage.getItem("splitMode") as SplitMode | null) ?? "auto";
+// The split layout follows the screen; the manual choice was removed in #38.
+export const defaultSplitMode: SplitMode = "auto";
 
 export const defaultApprovalPolicy = (localStorage.getItem("approvalPolicy") as ApprovalPolicy | null) ?? "never";
 

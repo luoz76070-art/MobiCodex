@@ -75,7 +75,7 @@ test('the settings back handler consumes back before Agent navigation and leaves
 test('Agent settings callback reaches every header and Codex-only actions are explicit', () => {
   assert.match(agents, /<WorkspaceHeader[^]*?onOpenSettings={onOpenSettings}/);
   assert.match(agents, /selected && agent \? <AgentChat[^]*?key={`\$\{agent.id}:\$\{selected.id}`}/);
-  for (const label of ['运行策略（仅 Codex）', '分屏（仅 Codex）', '会话显示诊断（仅 Codex）', '保存刷新（仅 Codex）']) assert.ok(settings.includes(label), label);
+  for (const label of ['运行策略（仅 Codex）', '会话显示诊断（仅 Codex）', '保存刷新（仅 Codex）']) assert.ok(settings.includes(label), label);
   assert.match(settings, /disabled={!codex\?\.available \|\| codex.busy}/);
   assert.match(app, /return \(\) => onSettingsTools\(null\)/);
   assert.doesNotMatch(app.slice(app.indexOf('function Workspace')), /settings-sheet|<VoiceSettings/);

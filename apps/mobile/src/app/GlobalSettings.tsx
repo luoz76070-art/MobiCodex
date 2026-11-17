@@ -1,7 +1,7 @@
 import { openFeedback } from '../features/feedback/model';
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Activity, AlertCircle, Bell, CheckCircle2, Clipboard, Columns3, Copy, Download, ExternalLink, Eye, EyeOff, KeyRound, Loader2, Menu, Monitor, Moon, RefreshCcw, Rows3, Server, Settings, Sparkles, Sun, Terminal, Wifi, X } from "lucide-react";
+import { Activity, AlertCircle, Bell, CheckCircle2, Clipboard, Copy, Download, ExternalLink, Eye, EyeOff, KeyRound, Loader2, Monitor, Moon, RefreshCcw, Server, Settings, Sparkles, Sun, Terminal, Wifi, X } from "lucide-react";
 import type { ApprovalPolicy, ConnectionProfile, DiagnosticStep, RelayStatus, SandboxMode, SplitMode, ThemeMode } from "./types";
 import { appVersionLabel as standaloneVersionLabel } from "./config";
 import { ConnectionCard } from "../features/connection/ConnectionCard";
@@ -448,27 +448,6 @@ export function GlobalSettings({ connection, settingsOpen, onClose, onApply, pre
           </div>
         </section>
 
-        <section className="settings-section">
-          <h3>分屏（仅 Codex）</h3>
-          <div className="segmented four">
-            <button className={splitMode === "auto" ? "active" : ""} onClick={() => setSplitMode("auto")}>
-              <Monitor size={15} />
-              <span>自动</span>
-            </button>
-            <button className={splitMode === "left" ? "active" : ""} onClick={() => setSplitMode("left")}>
-              <Columns3 size={15} />
-              <span>左侧</span>
-            </button>
-            <button className={splitMode === "top" ? "active" : ""} onClick={() => setSplitMode("top")}>
-              <Rows3 size={15} />
-              <span>顶部</span>
-            </button>
-            <button className={splitMode === "drawer" ? "active" : ""} onClick={() => setSplitMode("drawer")}>
-              <Menu size={15} />
-              <span>抽屉</span>
-            </button>
-          </div>
-        </section>
 
         {(diagnostics.length > 0 || diagnosticText) && (
           <section className={`diagnostics ${connectionState}`}>

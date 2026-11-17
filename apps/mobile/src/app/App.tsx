@@ -56,7 +56,7 @@ import { composeMessageWithAttachments, attachmentSummaryText, fileToBase64, mim
 import { isNearBottom, scrollMessagesToBottom } from "../features/chat/viewport";
 import { clamp } from "../shared/preferences";
 import { stageHotUpdate } from "../features/updates/hotUpdate";
-import { Mic, Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Columns3, Rows3, Copy, Activity, AlertCircle, ChevronDown } from "lucide-react";
+import { Mic, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Copy, Activity, AlertCircle, ChevronDown } from "lucide-react";
 import { UserInputCard } from "../features/chat/UserInputCard";
 import { QuotaSwitchCard } from "../features/quota/QuotaSwitchCard";
 import { dismissQuota, loadSwitchRecords, needsQuotaSwitch, quotaDismissed, rejectedSwitchDetail, saveSwitchRecord, standInNotice, switchNotReadyDetail, switchPrompt, switchUncertainDetail, type QuotaSwitchOptions } from "../features/quota/quotaSwitch";
@@ -1800,24 +1800,6 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
             <button className={sourceFilter === "all" ? "active" : ""} onClick={() => setSourceFilter("all")}>全部</button>
             <button className={sourceFilter === "desktop" ? "active" : ""} onClick={() => setSourceFilter("desktop")}>电脑发起</button>
             <button className={sourceFilter === "relay" ? "active" : ""} onClick={() => setSourceFilter("relay")}>手机发起</button>
-          </div>
-          <div className="layout-switcher">
-            <button className={splitMode === "auto" ? "active" : ""} onClick={() => setSplitMode("auto")}>
-              <Monitor size={14} />
-              <span>自动</span>
-            </button>
-            <button className={splitMode === "left" ? "active" : ""} onClick={() => setSplitMode("left")}>
-              <Columns3 size={14} />
-              <span>左侧</span>
-            </button>
-            <button className={splitMode === "top" ? "active" : ""} onClick={() => setSplitMode("top")}>
-              <Rows3 size={14} />
-              <span>顶部</span>
-            </button>
-            <button className={splitMode === "drawer" ? "active" : ""} onClick={() => setSplitMode("drawer")}>
-              <Menu size={14} />
-              <span>抽屉</span>
-            </button>
           </div>
 
           <PullToRefresh className="thread-list" label="Codex 线程列表" onRefresh={() => loadThreads()}>
