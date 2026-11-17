@@ -31,7 +31,17 @@ type Run = {
   interactions?: ClaudeCliInteractions; query?: ClaudeCliQuery; input: InputStream; snapshot: AgentSessionSnapshot; pending: Input[];
   streamId?: string; blocks: Map<number, string>; timer?: ReturnType<typeof setTimeout>;
   interrupted: boolean; closed: boolean; turnId: string;
+  /** The last model API failure Claude Code retried in this turn. */
+  apiError?: { status: number | null; attempt: number; max: number };
 };
+
+/** How the phone names a model API failure that Claude Code is retrying or gave up on. */
+export function apiErrorLabel(status: number | null | undefined) {
+  if (status === 429) return "限流（429）";
+  if (status === 401 || status === 403) return `拒绝了认证（${status}）`;
+  if (typeof status === "number" && status >= 500) return `出错（${status}）`;
+  return typeof status === "number" ? `返回 ${status}` : "连不上";
+}
 
 /** Owns only processes created by this gateway. Reading a record never starts query(). */
 export class ClaudeCliRuntime {
@@ -169,7 +179,7 @@ export class ClaudeCliRuntime {
   private receipt(run: Run, clientMessageId: string, action: "message" | "interrupt") { run.snapshot.submission = { clientMessageId, action, delivery: "confirmed" }; }
   private deliver(id: string, run: Run, input: Input, steer: boolean) {
     clearTimeout(run.timer);
-    if (run.snapshot.status !== "running") { run.turnId = randomUUID(); run.interrupted = false; }
+    if (run.snapshot.status !== "running") { run.turnId = randomUUID(); run.interrupted = false; run.apiError = undefined; run.snapshot.notice = null; }
     run.snapshot.status = "running"; run.snapshot.activity = "thinking"; run.snapshot.activeTurnId = run.turnId;
     run.input.push({ type: "user", uuid: input.clientMessageId as ReturnType<typeof randomUUID>, session_id: id, parent_tool_use_id: null,
       message: { role: "user", content: input.text }, ...(steer ? { priority: "now" as const } : {}) });
@@ -200,11 +210,21 @@ export class ClaudeCliRuntime {
   }
   private event(id: string, run: Run, message: SDKMessage) {
     if (message.session_id !== id || ("parent_tool_use_id" in message && message.parent_tool_use_id) || ("agent_id" in message && message.agent_id)) return;
+    const retry = message as { type: string; subtype?: string; attempt?: unknown; max_retries?: unknown; error_status?: unknown };
+    if (retry.type === "system" && retry.subtype === "api_retry") {
+      // Claude Code keeps retrying a failing model API on its own; say so instead of an endless "thinking".
+      const status = typeof retry.error_status === "number" ? retry.error_status : null;
+      const attempt = typeof retry.attempt === "number" ? retry.attempt : 0, max = typeof retry.max_retries === "number" ? retry.max_retries : 0;
+      run.apiError = { status, attempt, max };
+      run.snapshot.notice = `模型接口${apiErrorLabel(status)}，Claude Code 正在第 ${attempt}${max ? `/${max}` : ""} 次重试…`;
+      this.changed(id, run);
+      return;
+    }
     if (message.type === "system" && message.subtype === "init") {
       run.snapshot.runtimeSettings!.model = message.model;
     } else if (message.type === "stream_event") {
       const event = message.event;
-      if (event.type === "message_start") { run.streamId = `stream:${event.message.id}`; run.blocks.clear(); }
+      if (event.type === "message_start") { run.streamId = `stream:${event.message.id}`; run.blocks.clear(); run.snapshot.notice = null; }
       else if (event.type === "content_block_start") {
         if (event.content_block.type === "text") { run.blocks.set(event.index, event.content_block.text.slice(0, 4000)); run.snapshot.activity = "outputting"; }
         else if (event.content_block.type === "tool_use") { run.blocks.set(event.index, `工具调用：${event.content_block.name.slice(0, 80)}`); run.snapshot.activity = "working"; }
@@ -215,6 +235,7 @@ export class ClaudeCliRuntime {
       const text = [...run.blocks.entries()].sort(([a], [b]) => a - b).map(([, text]) => text).join("\n").slice(0, 4000);
       if (text && run.streamId) this.upsert(run, { id: run.streamId, timestamp: "", role: "assistant", kind: "agent_message", text, turnId: run.turnId });
     } else if (message.type === "assistant") {
+      run.snapshot.notice = null;
       if (run.streamId) run.snapshot.messages = run.snapshot.messages.filter(item => item.id !== run.streamId);
       run.streamId = undefined; run.blocks.clear();
       const text = message.message.content.flatMap(part => part.type === "text" ? [part.text] : part.type === "tool_use" ? [`工具调用：${part.name.slice(0, 80)}`] : []).join("\n").slice(0, 4000);
@@ -223,7 +244,10 @@ export class ClaudeCliRuntime {
     } else if (message.type === "result") {
       run.interactions?.revoke();
       const status = run.interrupted ? "interrupted" : message.is_error || message.subtype !== "success" ? "failed" : "completed";
-      run.snapshot.lastTurn = { turnId: run.turnId, status, reason: { code: `CLAUDE_CLI_${status.toUpperCase()}`, message: status === "completed" ? "已完成" : status === "interrupted" ? "已中断" : "运行失败，请在电脑检查 Claude Code。" }, endedAt: new Date(this.now()).toISOString(), timeSource: "observed" };
+      const apiFailure = status === "failed" && run.apiError
+        ? `模型接口${apiErrorLabel(run.apiError.status)}，Claude Code 重试 ${run.apiError.attempt} 次后放弃。请检查电脑上 Claude Code 使用的渠道，或稍后再试。` : null;
+      run.snapshot.notice = null;
+      run.snapshot.lastTurn = { turnId: run.turnId, status, reason: { code: apiFailure && run.apiError?.status === 429 ? "rate_limited" : `CLAUDE_CLI_${status.toUpperCase()}`, message: status === "completed" ? "已完成" : status === "interrupted" ? "已中断" : apiFailure ?? "运行失败，请在电脑检查 Claude Code。" }, endedAt: new Date(this.now()).toISOString(), timeSource: "observed" };
       run.snapshot.status = "idle"; run.snapshot.activity = "outputting"; run.snapshot.activeTurnId = null;
       this.changed(id, run);
       const next = run.pending.shift();

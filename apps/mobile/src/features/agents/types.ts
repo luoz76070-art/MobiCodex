@@ -28,6 +28,8 @@ export type AgentSessionSnapshot = {
   partialText: boolean;
   queue?: { available: boolean; items: { clientMessageId: string; text: string; status: "waiting" | "paused" | "cancelling" | "uncertain" }[] };
   operationError?: { clientMessageId: string; code: "rejected" | "expired" } | null;
+  /** Transient host condition while a turn is stuck, e.g. the model API retrying. */
+  notice?: string | null;
   control: { token: string; canSend: boolean; canSteer: boolean; canInterrupt: boolean } | null;
   submission: { clientMessageId: string; action: "message" | "interrupt"; delivery: "submitted" | "confirmed" | "uncertain" } | null;
 };

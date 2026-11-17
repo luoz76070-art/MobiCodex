@@ -274,3 +274,9 @@ test('chat routes shared approval, question and switching actions; retraction an
   f.receive({ ...active, permissions: [], questions: [], runtimeSettings: undefined });
   assert.equal(nodes(f.render()).find(node => node.type?.name === 'PermissionCard'), undefined); assert.equal(f.find('AgentQuestions'), undefined); assert.equal(f.find('AgentSessionControls'), undefined);
 });
+
+test('a stuck turn shows the host notice (model API retrying) only while running', async () => {
+  const workspace = await (await import('node:fs/promises')).readFile('apps/mobile/src/features/agents/AgentWorkspace.tsx', 'utf8');
+  assert.match(workspace, /snapshot\?\.status === "running" && snapshot\.notice && <SystemNotice>\{snapshot\.notice\}<\/SystemNotice>/);
+});
+

@@ -422,6 +422,7 @@ function AgentChat({ endpoint, token, agent, session, draft, onDraft, scopeKey, 
         {agent.id === "ccdesk" && <p>只能操作这台电脑上的会话，其他电脑上的会话只能查看。发消息、审批和中断需要电脑上开着“CC Desk Tunnel（手机控制）”；权限请求可允许一次或拒绝。</p>}
         {agent.id === "deepseek" && <p>查看历史不会启动任务；发送后继续原会话，运行中可引导或排队。权限请求须核对完整参数后允许一次或拒绝。</p>}
       </details>}
+      {snapshot?.status === "running" && snapshot.notice && <SystemNotice>{snapshot.notice}</SystemNotice>}
       {snapshot?.operationError && <SystemNotice error>{snapshot.operationError.code === "rejected" ? "电脑会话拒绝了本次操作，输入内容已保留。" : "操作尚未送达电脑便已过期，输入内容已保留。"}</SystemNotice>}
       {historyCursor && (pagedHistory || history.length < 190) && <button className="history-button" disabled={historyBusy} onClick={() => void older()}>{historyBusy ? "读取历史中…" : "加载更早的消息"}</button>}
       {pagedHistory && history.length > 0 && <button className="history-button" disabled={historyBusy} onClick={() => { setHistory([]); setHistoryCursor(snapshot?.historyCursor ?? null); nearBottom.current = true; requestAnimationFrame(() => viewport.current?.scrollTo({ top: viewport.current.scrollHeight })); }}>正在浏览历史 · 返回最新</button>}

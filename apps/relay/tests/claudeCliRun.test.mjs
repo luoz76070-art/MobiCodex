@@ -461,3 +461,30 @@ test('F5 counts running turns rather than retained Claude CLI query processes', 
   await f.adapter.sendMessage(f.id, f.operation()); assert.equal(f.adapter.runningCount(), 1);
   f.runs[0].frames.crash(); await until(() => f.current().lastTurn?.status === 'failed'); assert.equal(f.adapter.runningCount(), 0);
 });
+
+test('a model API that Claude Code keeps retrying is shown, cleared on output and named when the turn gives up', async t => {
+  const f = await fixture(t); await f.adapter.sendMessage(f.id, f.operation());
+  await until(() => f.runs[0].inputs.length === 1);
+  f.frame('system', { subtype: 'api_retry', attempt: 2, max_retries: 10, retry_delay_ms: 500, error_status: 429, error: 'rate_limit' });
+  await until(() => Boolean(f.current().notice));
+  assert.match(f.current().notice, /限流（429）.*第 2\/10 次重试/u); assert.equal(f.current().status, 'running');
+  f.frame('stream_event', { event: { type: 'message_start', message: { id: 'm1' } } });
+  await until(() => f.current().notice === null);
+  f.frame('system', { subtype: 'api_retry', attempt: 3, max_retries: 10, error_status: 502, error: 'server_error' });
+  await until(() => /出错（502）/u.test(f.current().notice ?? ''));
+  f.result({ subtype: 'error_during_execution', is_error: true });
+  await until(() => f.current().status === 'idle');
+  assert.equal(f.current().notice, null); assert.equal(f.current().lastTurn.status, 'failed');
+  assert.equal(f.current().lastTurn.reason.code, 'CLAUDE_CLI_FAILED');
+  assert.match(f.current().lastTurn.reason.message, /出错（502）.*重试 3 次后放弃/u);
+  await f.adapter.sendMessage(f.id, f.operation('Again'));
+  f.frame('system', { subtype: 'api_retry', attempt: 10, max_retries: 10, error_status: 429 });
+  await until(() => /限流/u.test(f.current().notice ?? ''));
+  f.result({ subtype: 'error_during_execution', is_error: true });
+  await until(() => f.current().status === 'idle');
+  assert.equal(f.current().lastTurn.reason.code, 'rate_limited');
+  await f.adapter.sendMessage(f.id, f.operation('Clean')); f.result();
+  await until(() => f.current().lastTurn?.status === 'completed' && f.current().status === 'idle');
+  assert.equal(f.current().lastTurn.reason.message, '已完成', 'a later clean turn does not inherit the old API failure');
+});
+
