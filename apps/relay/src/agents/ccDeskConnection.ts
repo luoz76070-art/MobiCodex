@@ -24,6 +24,10 @@ function requestCode(code: string | undefined) {
   return agentError("CCDESK_REQUEST_FAILED", 502);
 }
 
+// The service may sit behind a relayed overlay link (e.g. Tailscale via DERP, ~350 ms and low bandwidth), where a
+// history page takes well over 15 s. Timing out there only restarts the same transfer in a loop, so wait longer.
+const connectTimeoutMs = 30_000, requestTimeoutMs = 60_000;
+
 /**
  * One reading connection to the CC Desk service: list, follow one session, read history. It asks for no execution
  * channel. A service that shows each computer only its own sessions needs it to say which computer it is; then
@@ -42,7 +46,7 @@ export class CcDeskConnection extends EventEmitter {
   get device() { return this.options.device ?? null; }
 
   open(): Promise<CcDeskReady> {
-    const { url, fingerprint, token, timeoutMs = 15_000 } = this.options;
+    const { url, fingerprint, token, timeoutMs = connectTimeoutMs } = this.options;
     return new Promise((resolve, reject) => {
       let settled = false;
       const fail = (code: string) => {
@@ -106,7 +110,7 @@ export class CcDeskConnection extends EventEmitter {
     if (this.closed || !this.ready || socket?.readyState !== WebSocket.OPEN) return Promise.reject(agentError("CCDESK_DISCONNECTED"));
     const requestId = typeof command.requestId === "string" ? command.requestId : randomUUID();
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.waiting.delete(requestId); reject(agentError("CCDESK_TIMEOUT", 504)); }, this.options.timeoutMs ?? 15_000);
+      const timer = setTimeout(() => { this.waiting.delete(requestId); reject(agentError("CCDESK_TIMEOUT", 504)); }, this.options.timeoutMs ?? requestTimeoutMs);
       this.waiting.set(requestId, { expect, resolve, reject, timer });
       socket.send(JSON.stringify({ ...command, requestId }));
     });
