@@ -11,6 +11,7 @@ import { PullToRefresh } from "../shared/PullToRefresh";
 import { EmptyState } from "../shared/EmptyState";
 import { ListSkeleton, MessageSkeleton } from "../shared/Skeleton";
 import { WorkItemsPage } from "../features/workItems/WorkItemsPage";
+import { NewThreadProjectPicker } from "../features/threads/NewThreadProjectPicker";
 import { ThreadRow } from "../features/threads/ThreadRow";
 import { SidebarScrim } from "../features/threads/SidebarScrim";
 import type { HandoffTarget } from '../../../../shared/handoff';
@@ -55,7 +56,7 @@ import { composeMessageWithAttachments, attachmentSummaryText, fileToBase64, mim
 import { isNearBottom, scrollMessagesToBottom } from "../features/chat/viewport";
 import { clamp } from "../shared/preferences";
 import { stageHotUpdate } from "../features/updates/hotUpdate";
-import { Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Columns3, Rows3, Copy, Activity, AlertCircle, ChevronDown } from "lucide-react";
+import { Mic, Menu, RefreshCcw, Settings, PanelLeft, X, Search, Sparkles, Monitor, Columns3, Rows3, Copy, Activity, AlertCircle, ChevronDown } from "lucide-react";
 import { UserInputCard } from "../features/chat/UserInputCard";
 import { QuotaSwitchCard } from "../features/quota/QuotaSwitchCard";
 import { dismissQuota, loadSwitchRecords, needsQuotaSwitch, quotaDismissed, rejectedSwitchDetail, saveSwitchRecord, standInNotice, switchNotReadyDetail, switchPrompt, switchUncertainDetail, type QuotaSwitchOptions } from "../features/quota/quotaSwitch";
@@ -297,6 +298,11 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
   const [threads, setThreads] = useState<ThreadSummary[]>(workspaceCache.threads);
   const [threadState, setThreadState] = useState<Record<string, ThreadRuntime>>(() => loadThreadRuntimeCache(scope));
   const [cacheSaveResult, setCacheSaveResult] = useState<ThreadCacheSaveResult>({ status: "saved" });
+  const newThreadProjectRef = useRef(threadState[newThreadId]?.newThreadCwd);
+  useEffect(() => { newThreadProjectRef.current = threadState[newThreadId]?.newThreadCwd; }, [threadState]);
+  const [projectPicker, setProjectPicker] = useState<string | null>(null);
+  const projectChoiceRef = useRef<{ promise: Promise<string | null>; resolve: (cwd: string | null) => void } | null>(null);
+  useEffect(() => () => { projectChoiceRef.current?.resolve(null); projectChoiceRef.current = null; }, []);
   const [selectedDetails, setSelectedDetails] = useState<ThreadSummary | null>(null);
   const isNewThread = navigation.sessionId === newThreadId;
   const selected = navigation.level === "session" && !isNewThread
@@ -371,12 +377,13 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
   const groupedFiltered = useMemo(() => groupThreadsByProject(filtered), [filtered]);
 
   const workspaceTitle = selected?.threadName || (isNewThread ? "新线程" : "MobiCodex");
-  const workspaceProject = selected?.cwd ? projectGroupLabel(selected.cwd) : "";
+  const workspaceCwd = selected?.cwd || (isNewThread ? activeRuntime.newThreadCwd : undefined);
+  const workspaceProject = workspaceCwd ? projectGroupLabel(workspaceCwd) : "";
   const workspaceConnectionLabel = connectionState === "ok" ? "已连接" : connectionState === "testing" ? "正在连接" : connectionState === "error" ? "连接不上" : "未连接";
   const workspaceSubtitle =
     selected?.cwd ||
     (connectionState === "ok" ? "已连接电脑" : connectionState === "testing" ? "正在检测连接" : "打开设置连接电脑");
-  const chatSubtitle = selected?.cwd || (isNewThread ? "准备创建新的 Codex 线程" : workspaceSubtitle);
+  const chatSubtitle = workspaceCwd || (isNewThread ? "请选择新会话项目" : workspaceSubtitle);
   const isDesktopWatch = activeRuntime.watchMode === "desktop-tail";
   const desktopCapability = activeRuntime.desktopControl;
   const desktopSend = desktopSendControl(activeRuntime, relayStatus?.desktopControl?.mode);
@@ -525,10 +532,13 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
   }, [handoffTarget, onTargetOpened]);
   useEffect(() => {
     if (!intakeShortcut || consumedShortcut.current === intakeShortcut.id) return;
-    if (!startNewThread()) return;
-    consumedShortcut.current = intakeShortcut.id;
-    if (intakeShortcut.payload.target === "voice") setVoiceOpenRequest(++voiceRequestSequence.current);
-    onShortcutOpened(intakeShortcut.id);
+    const shortcut = intakeShortcut;
+    consumedShortcut.current = shortcut.id;
+    void startNewThread(newThreadProjectRef.current).then(started => {
+      if (scopeAbortRef.current.signal.aborted) return;
+      if (started && shortcut.payload.target === "voice") setVoiceOpenRequest(++voiceRequestSequence.current);
+      onShortcutOpened(shortcut.id);
+    });
     // The shortcut is a one-shot command, independent of subsequent workspace updates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intakeShortcut, onShortcutOpened]);
@@ -653,13 +663,47 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
     }
   }
 
-  function startNewThread() {
-    if (!onSelectSession(newThreadId)) return false;
+  function chooseNewThreadProject(cwd: string | null) {
+    const pending = projectChoiceRef.current;
+    projectChoiceRef.current = null;
+    setProjectPicker(null);
+    pending?.resolve(cwd);
+  }
+
+  function requestNewThreadProject(): Promise<string | null> {
+    if (projectChoiceRef.current) return projectChoiceRef.current.promise;
+    let resolve!: (cwd: string | null) => void;
+    const promise = new Promise<string | null>(done => { resolve = done; });
+    projectChoiceRef.current = { promise, resolve };
+    setProjectPicker(selected?.cwd ?? newThreadProjectRef.current ?? "");
+    return promise;
+  }
+
+  async function startNewThread(cwd?: string) {
+    const project = cwd || await requestNewThreadProject();
+    if (!project || scopeAbortRef.current.signal.aborted || !onSelectSession(newThreadId)) return false;
+    newThreadProjectRef.current = project;
     setVoiceOpenRequest(0);
-    patchRuntime(newThreadId, { messages: [], draft: "", attachments: [], loaded: true, status: "新线程" });
+    patchRuntime(newThreadId, { messages: [], newThreadCwd: project, loaded: true, status: "新线程" });
     setSidebarOpen(false);
     setStatus("新线程");
     return true;
+  }
+
+  function editDraft(value: string) {
+    if (!activeThreadKey && !onSelectSession(newThreadId)) return;
+    patchRuntime(activeThreadKey || newThreadId, { draft: value, desktopSendFeedback: undefined });
+    if (!selected && !newThreadProjectRef.current) void startNewThread();
+  }
+
+  async function openNewThreadVoice() {
+    if (!await startNewThread(newThreadProjectRef.current)) return;
+    setVoiceOpenRequest(++voiceRequestSequence.current);
+  }
+
+  async function openUploadFiles() {
+    if (!selected && !newThreadProjectRef.current && !await startNewThread()) return;
+    uploadInputRef.current?.click();
   }
 
   async function sendMessage(delivery?: "steer" | "queue") {
@@ -681,6 +725,7 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
     const pendingAttachments = runtime.attachments;
     const message = composeMessageWithAttachments(userText, pendingAttachments);
     if (!threadKey || !message) return;
+    if (!selected && !runtime.newThreadCwd) { void startNewThread(); return; }
     const clientMessageId = runtime.pendingMessageText === message && runtime.pendingMessageId ? runtime.pendingMessageId : crypto.randomUUID();
     patchRuntime(threadKey, { pendingMessageId: clientMessageId, pendingMessageText: message, pendingMessageSource: undefined });
     const control = desktopSendControl(runtime, relayStatus?.desktopControl?.mode);
@@ -727,7 +772,7 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
           threadId: targetThread?.id,
           message,
           clientMessageId,
-          cwd: targetThread?.cwd,
+          cwd: targetThread?.cwd ?? runtime.newThreadCwd,
           approvalPolicy,
           sandbox: sandboxMode,
         },
@@ -737,7 +782,7 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
         id: data.threadId,
         threadName: `手机: ${firstLine(userText) || attachmentSummaryText(pendingAttachments) || "新线程"}`,
         updatedAt: new Date().toISOString(),
-        cwd: targetThread?.cwd ?? null,
+        cwd: targetThread?.cwd ?? runtime.newThreadCwd ?? null,
         source: "appServer",
         originator: "Codex app-server",
       };
@@ -770,15 +815,22 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
       }
       void loadThreads();
     } catch (error) {
+      const unknownProject = !targetThread && (error as { code?: string }).code === "unknown_project";
+      if (unknownProject) {
+        newThreadProjectRef.current = undefined;
+        void startNewThread();
+      }
       setStatus(toFriendlyFetchError(error));
-      patchRuntime(threadKey, {
+      updateRuntime(threadKey, current => ({ ...current,
+        ...(unknownProject ? { newThreadCwd: undefined, pendingMessageId: undefined, pendingMessageText: undefined,
+          messages: current.messages.filter(item => item.id !== optimistic.id) } : {}),
         sending: false,
-        draft: userText,
-        attachments: pendingAttachments,
+        draft: unknownProject ? [runtime.draft, current.draft].filter(Boolean).join("\n\n") : userText,
+        attachments: unknownProject ? [...pendingAttachments, ...current.attachments.filter(item => !pendingAttachments.some(previous => previous.id === item.id))] : pendingAttachments,
         status: toFriendlyFetchError(error),
         turnStatus: "failed",
         lastTurnError: toFriendlyFetchError(error),
-      });
+      }));
     }
   }
 
@@ -1111,6 +1163,8 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
       setStatus("请先填写 Token");
       return false;
     }
+    if (targetKey === newThreadId && !newThreadProjectRef.current && !await startNewThread()) return false;
+    signal.throwIfAborted();
     setUploading(true);
     setStatus("上传文件中");
     let uploadedAttachments: PendingAttachment[] = [];
@@ -1154,7 +1208,7 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
     } else {
       if (action === "current" && !selected) throw new Error("请先打开一个线程");
       const targetKey = action === "new-task" ? newThreadId : selected!.id;
-      if (action === "new-task" && !startNewThread()) throw new Error("当前草稿未能保存，请保留当前页面并重试。");
+      if (action === "new-task" && !await startNewThread(newThreadProjectRef.current)) throw new Error("当前草稿未能保存，请保留当前页面并重试。");
       if (!await uploadFiles(files, targetKey, signal)) throw new Error("附件未能上传，分享内容仍保留，请连接电脑后重试。");
       signal.throwIfAborted(); scopeAbortRef.current.signal.throwIfAborted();
       updateRuntime(targetKey, runtime => ({ ...runtime, loaded: true,
@@ -1690,6 +1744,8 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
 
   return (
     <main className={`codex-shell ${layoutClass} ${resizingPane ? "is-resizing" : ""}`} style={shellStyle}>
+      {projectPicker !== null && createPortal(<NewThreadProjectPicker endpoint={endpoint} token={token} initialCwd={projectPicker} notice={isNewThread ? activeRuntime.lastTurnError : undefined}
+        onChoose={cwd => chooseNewThreadProject(cwd)} onCancel={() => chooseNewThreadProject(null)} />, document.body)}
       {intakeShare && createPortal(<ShareSheet key={intakeShare.id} payload={intakeShare} currentTitle={selected ? selected.threadName || "线程" : null} onChoose={chooseIntakeShare} onCancel={cancelIntakeShare} />, document.body)}
       {handoff && <HandoffCard key={handoff.id} handoff={handoff} scope={scope} threads={threads} selectedId={selected?.id}
         ready={Boolean(nativeDesktop && desktopSend.ready && !submittingMessage && !uploading && !activeRuntime.pendingMessageId && (!isLiveTurnActive || canQueue))}
@@ -1729,7 +1785,7 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
           </label>
 
           <div className="sidebar-tools">
-            <button className="tool-button primary" onClick={startNewThread}>
+            <button className="tool-button primary" onClick={() => void startNewThread()}>
               <Sparkles size={16} />
               <span>新线程</span>
             </button>
@@ -1765,7 +1821,7 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
 
           <PullToRefresh className="thread-list" label="Codex 线程列表" onRefresh={() => loadThreads()}>
             <SessionRangeControl range={threadRange} disabled={loading} onChange={range => { setThreadRange(range); void loadThreads({ range }); }} />
-            <ProjectGroups scope={scope} agentId="codex" groups={groupedFiltered} search={query}>
+            <ProjectGroups scope={scope} agentId="codex" groups={groupedFiltered} search={query} onNewThread={cwd => void startNewThread(cwd)}>
               {thread => <ThreadRow key={thread.id} thread={thread} selected={selected?.id === thread.id}
                 activeDesktop={activeDesktopThreadId === thread.id} sourceFilter={sourceFilter}
                 onOpen={() => void openThread(thread, { closeSidebar: true })} />}
@@ -1888,8 +1944,8 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
             </details>}
             {isLiveTurnActive && nativeDesktop && !canQueue && <SystemNotice>排队需要更新网关；可使用引导发送。</SystemNotice>}
             <input ref={uploadInputRef} type="file" multiple className="hidden-file-input" onChange={event => void uploadFiles(event.target.files)} />
-            <ComputerComposer draft={draft} onDraft={value => { if (!activeThreadKey) onSelectSession(newThreadId, true); patchRuntime(activeThreadKey || newThreadId, { draft: value, desktopSendFeedback: undefined }); }}
-              onSend={delivery => void sendMessage(delivery)} onStop={() => void interruptActiveTurn()} onUpload={() => uploadInputRef.current?.click()}
+            <ComputerComposer draft={draft} onDraft={editDraft}
+              onSend={delivery => void sendMessage(delivery)} onStop={() => void interruptActiveTurn()} onUpload={() => void openUploadFiles()}
               disabled={!canControlSelected} uploadDisabled={!token.trim()} uploading={uploading} running={isLiveTurnActive} hasContent={hasMessageContent}
               busy={submittingMessage || (sending && !isLiveTurnActive)} canSend={canSend} canStop={canInterrupt}
               deliveries={nativeDesktop ? { steer: canSubmitMessage, queue: canSend } : undefined}
@@ -1897,8 +1953,8 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
                 feedback={!activeRuntime.desktopSubmission ? activeRuntime.desktopSendFeedback : undefined}
                 fallback={`${isDesktopWatch ? "电脑" : "Relay"} · ${isDesktopHistoryOnly ? "历史会话" : "当前会话"}`} />}
               statusTitle={activeRuntime.desktopSendFeedback || (sessionStatus?.detail || controlText)} placeholder="向 Codex 发送消息"
-              voice={<VoiceInput openRequest={voiceOpenRequest} context={{ cwd: selected?.cwd, title: selected?.threadName, messages }} scope={scope} thread={`codex:${activeThreadKey || newThreadId}`} recovery={voiceRecovery} key={`${scope}:codex:${activeThreadKey || newThreadId}`} endpoint={endpoint} token={token} draft={draft}
-                onDraft={value => { if (!activeThreadKey) onSelectSession(newThreadId, true); patchRuntime(activeThreadKey || newThreadId, { draft: value, desktopSendFeedback: undefined }); }} />} />
+              voice={!selected && !activeRuntime.newThreadCwd ? <button type="button" className="voice-entry" aria-label="语音输入" title="语音输入" disabled={!token || !endpoint} onClick={() => void openNewThreadVoice()}><Mic size={20} aria-hidden="true" /></button> : <VoiceInput openRequest={voiceOpenRequest} context={{ cwd: workspaceCwd, title: selected?.threadName, messages }} scope={scope} thread={`codex:${activeThreadKey || newThreadId}`} recovery={voiceRecovery} key={`${scope}:codex:${activeThreadKey || newThreadId}`} endpoint={endpoint} token={token} draft={draft}
+                onDraft={editDraft} />} />
           </footer>
         </section>
       </section>

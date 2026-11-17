@@ -99,6 +99,8 @@ export type ThreadRuntime = {
   lastTurn?: LastTurn | null;
   messages: CodexMessage[];
   draft: string;
+  /** Explicit project for the unsent Codex new-thread draft. */
+  newThreadCwd?: string;
   sending: boolean;
   loading: boolean;
   status: string;

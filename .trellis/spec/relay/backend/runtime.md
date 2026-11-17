@@ -20,6 +20,7 @@ JSONL 游标表示完整 UTF-8 记录的字节边界；未完成末行不能越�
 - `readThreadLatest` 初次打开补齐最近 turnStatus，向前查生命周期标记最多 8 MiB；只恢复状态，不能改变消息页或游标。`turnActivity.ts` 统一解析基线/增量，activity 只含 thinking/working/outputting，不携带推理原文或工具参数。普通助手正文不代表完成，显式完成/打断/失败事件才结束 turn。
 - rollout 路径使用规范 UUID，不锁定 `019` 前缀。索引冷盘点后靠 fs.watch 更新并每 60 秒对账；根目录 dev/ino/birthtime 改变须重建 watcher。头缓存按文件签名失效，摘要接口不读取全历史。
 - `/api/threads`默认range=recent（近30×24小时），显式all查看更早；使用索引updated_at与rollout mtime较新值，在搜索/分页及排除项标题/头部读取前过滤。取limit+1确定准确hasMore，nextOffset为实际返回数。CodexStore内部listThreads的since默认0，保留桌面定位/活动检测原有全范围语义。冷目录盘点及索引读取仍覆盖全部元数据，不能宣称只扫描近期文件。隔离回归见threadList.test.mjs。
+- `GET /api/projects` 经统一鉴权返回 `{projects:[{name,cwd}]}`，合并所有分页线程 cwd、可选桌面全局状态的项目根和 defaultCwd；只保留现存目录，realpath 去重。桌面状态缺失、损坏或结构不匹配时忽略。新建 `/api/live/turns` 显式 cwd 必须为绝对目录，并与目录集合真实路径精确匹配；未知、相对、前缀或越界链接均以 400 `unknown_project` 在 thread/start 前拒绝。省略 cwd 兼容旧客户端默认目录，已有 threadId 的续发保持原契约。隔离回归见 projects.test.mjs。
 - app-server 在同一初始化 Promise 完成前不发布 client；断线失效，停止期间旧初始化不能复活。只读调用共享客户端，独立发送客户端不能混接事件；start 在 await 前预留容量。
 - 输入全进程串行，最多 16 个事务；每请求 0700 目录/0600 文件。只终止自己拥有的 helper 子进程，不能全局 pkill；helper 开始后的未知结果禁止换输入方法重发。
 - 幂等记录仅单进程、24 小时、1000 条，不保证跨重启 exactly-once。SSE 每设备 4/全局 32，上传每设备 2/全局 4；上传解析前预留，成功/异常/取消均释放。base64 仍非流式文件上传。

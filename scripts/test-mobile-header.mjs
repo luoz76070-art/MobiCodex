@@ -54,7 +54,7 @@ test('shared top bar has exactly four controls in the same order for every Agent
     if (agentId === 'codex') assert.match(html, /<strong>[^<]+<\/strong><span class="status-dot ok"/);
   }
   assert.match(app, /<WorkspaceHeader agentId="codex"[^]*?onSwitchAgent={onOpenAgents}[^]*?onOpenSettings={onOpenSettings}/);
-  assert.match(app, /workspaceProject = selected\?\.cwd \? projectGroupLabel\(selected\.cwd\)/);
+  assert.match(app, /workspaceProject = workspaceCwd \? projectGroupLabel\(workspaceCwd\)/);
   assert.doesNotMatch(app, /workspaceReady/);
 });
 test('the Agent picker retains the same four slots, without a redundant switch button', () => {

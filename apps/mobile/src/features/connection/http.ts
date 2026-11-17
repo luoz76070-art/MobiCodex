@@ -153,6 +153,9 @@ export function ensureHttpOk(status: number, data?: unknown) {
   if (typeof reason === 'string' && Object.hasOwn(handoffErrors, reason)) {
     throw Object.assign(new Error(handoffErrors[reason]), { status, code: reason });
   }
+  if (reason === "unknown_project") {
+    throw Object.assign(new Error("这个项目在电脑上找不到了，请重新选择"), { status, code: reason });
+  }
   const voiceCode = typeof reason === "string" && Object.hasOwn(voiceErrors, reason) ? reason : undefined;
   const code = voiceCode ?? (status === 409 && typeof reason === "string" && Object.hasOwn(desktopErrors, reason) ? reason : undefined);
   const detail = voiceCode ? voiceErrors[voiceCode] : code ? desktopErrors[code] : status === 409 ? "会话或提交状态发生冲突，请刷新会话并核对消息记录。" : undefined;

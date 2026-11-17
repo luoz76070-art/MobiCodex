@@ -15,6 +15,8 @@ const notifications = new Map();
 const counters = {};
 const clipboardFixture = { text: '', writes: 0, fail: false };
 const uploadFixture = { fail: false, delay: 0 };
+const projectFixture = { mode: 'ready', submissions: [] };
+const knownProjects = [{ name: 'codex-to-phone', cwd: '/workspace/codex-to-phone' }, { name: 'demo', cwd: '/workspace/client/demo' }];
 const imageFixture = { fail: false, delay: 0 };
 const diagnosticFixture = { gateway: 'ok', nativeVersionCode: null, activeVersion: '', pendingVersion: '', fileMode: 'saved', saves: 0, text: '' };
 const voiceFixture = { region: 'cn', workspace: '', qwenConfigured: true, deepseekConfigured: true, deepseekBaseUrl: 'https://api.deepseek.com', qwenBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', asrModel: 'qwen-audio-3.1-asr-flash', promptModel: 'deepseek-v4-flash', denied: false, failRefine: false, delay: 0, transcriptions: 0, refinements: 0, cancellations: 0 };
@@ -211,6 +213,10 @@ const server = http.createServer(async (req, res) => {
       state.listDelay = Math.min(3000, Math.max(0, Number(url.searchParams.get('delay')) || 0));
       if (url.searchParams.get('reactivate') === '1') state.reactivated = true;
       return json(res, { ok: true });
+    }
+    if (url.pathname === '/fixture/new-thread-project') {
+      if (url.searchParams.has('mode')) projectFixture.mode = url.searchParams.get('mode');
+      return json(res, projectFixture);
     }
     if (url.pathname === '/fixture/agent') {
       const name = url.searchParams.get('name') ?? 'A';
@@ -463,7 +469,18 @@ const server = http.createServer(async (req, res) => {
         counters[`${name}:range:${url.searchParams.get('range') ?? 'recent'}:${offset}`] = (counters[`${name}:range:${url.searchParams.get('range') ?? 'recent'}:${offset}`] ?? 0) + 1;
         return json(res, { threads: matching.slice(offset, offset + limit), nextOffset: offset + Math.min(limit, matching.length - offset), hasMore: offset + limit < matching.length });
       }
+      if (route === '/api/projects') return projectFixture.mode === 'unavailable'
+        ? json(res, { error: 'synthetic_unavailable' }, 503)
+        : json(res, { projects: projectFixture.mode === 'empty' ? [] : knownProjects });
+      if (route === '/api/live/turns' && req.method === 'POST') {
+        let body = ''; for await (const chunk of req) body += chunk;
+        const input = JSON.parse(body); projectFixture.submissions.push(input);
+        if (projectFixture.mode === 'unknown' || !knownProjects.some(project => project.cwd === input.cwd)) return json(res, { error: 'unknown_project' }, 400);
+        const created = { ...thread(name), id: 'fixture-created', cwd: input.cwd, source: 'appServer', originator: 'Codex app-server' };
+        return json(res, { thread: created, threadId: created.id, turnId: 'fixture-project-turn', status: 'completed', messages: [], approvals: [], eventCount: 0 });
+      }
       if (route === '/api/live/turns') return json(res, { turns: [] });
+      if (route === '/api/threads/fixture-created') return json(res, { thread: { ...thread(name), id: 'fixture-created', cwd: projectFixture.submissions.at(-1)?.cwd, source: 'appServer' }, messages: [], lastTurn: null });
       if (route === '/api/desktop/active') return json(res, { thread: state.background ? { ...thread(name), id: 'different-foreground-thread' } : thread(name), source: 'ipc-stream' });
       if (route === '/api/connection') return json(res, { ok: true });
       if (route === '/api/uploads' && req.method === 'POST') {
