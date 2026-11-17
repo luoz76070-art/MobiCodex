@@ -32,7 +32,7 @@ async function service({ protocol = 17, visibility = 'shared' } = {}) {
   const server = https.createServer({ key: fs.readFileSync(path.join(scratch, 'key.pem')), cert: fs.readFileSync(path.join(scratch, 'cert.pem')) });
   const wss = new WebSocketServer({ server, path: '/ws' });
   const now = () => new Date().toISOString();
-  const state = { sessions: new Map(), events: new Map(), peers: new Set(), frames: [], deviceFrames: 0, auths: 0, renames: 0, leaves: 0, sequence: new Map() };
+  const state = { sessions: new Map(), events: new Map(), peers: new Set(), frames: [], deviceFrames: 0, auths: 0, renames: 0, leaves: 0, sequence: new Map(), open: new Map() };
   // As the service with PROXY_SESSION_VISIBILITY=device: a computer sees only its own sessions.
   const visible = (peer, session) => visibility !== 'device' || (peer.device && session.device.id === peer.device.id);
   const ready = peer => send(peer, { type: 'ready', protocolVersion: protocol, connectionId: randomUUID(), adapter: 'claude-code', version: '0.3.2',
@@ -84,10 +84,17 @@ async function service({ protocol = 17, visibility = 'shared' } = {}) {
         return send(peer, { type: 'response', requestId: message.requestId, ok: false, code: 'not_found', message: 'no' });
       const all = state.events.get(message.sessionId) ?? [];
       if (message.type === 'session.subscribe') {
+        // As the service: only what follows `afterSequence` when that fits a page, else the last page.
         peer.subscription = message.sessionId;
-        const events = all.slice(-6);
-        send(peer, { type: 'session.snapshot', requestId: message.requestId, session: state.sessions.get(message.sessionId), events, mode: 'replace',
-          firstSequence: events[0]?.sequence ?? 0, lastSequence: all.at(-1)?.sequence ?? 0, hasEarlier: all.length > 6 });
+        const last = all.at(-1)?.sequence ?? 0, after = message.afterSequence ?? 0;
+        if (after > last) return send(peer, { type: 'response', requestId: message.requestId, ok: false, code: 'invalid_cursor', message: 'no' });
+        const newer = all.filter(event => event.sequence > after), append = after > 0 && newer.length <= 6;
+        const events = append ? newer : all.slice(-6);
+        send(peer, { type: 'session.snapshot', requestId: message.requestId, session: state.sessions.get(message.sessionId), events, mode: append ? 'append' : 'replace',
+          firstSequence: events[0]?.sequence ?? 0, lastSequence: last, hasEarlier: !append && all.length > 6 });
+        // The history ends where the run's unfinished output begins.
+        const open = state.open.get(message.sessionId);
+        if (open) send(peer, { type: 'session.fragment', sessionId: message.sessionId, runId: open.runId, payload: open.payload });
       } else if (message.type === 'session.history') {
         const before = all.filter(event => event.sequence < message.beforeSequence), events = before.slice(-6);
         send(peer, { type: 'session.snapshot', requestId: message.requestId, session: state.sessions.get(message.sessionId), events, mode: 'prepend',
@@ -100,6 +107,7 @@ async function service({ protocol = 17, visibility = 'shared' } = {}) {
   return { state, get deviceFrames() { return state.deviceFrames; }, get auths() { return state.auths; }, get renames() { return state.renames; }, get leaves() { return state.leaves; },
     events: state.events, sessions: state.sessions, peers: state.peers, frames: state.frames,
     url: `wss://127.0.0.1:${server.address().port}/ws`, session, record, fragment, update,
+    open: (sessionId, runId, payload) => { if (payload) state.open.set(sessionId, { runId, payload }); else state.open.delete(sessionId); },
     close: () => new Promise(resolve => { for (const client of wss.clients) client.terminate(); wss.close(); server.close(resolve); }) };
 }
 
@@ -186,6 +194,93 @@ test('the last listener starts a deadline; expiry closes the connection and a la
   const returned = await watcher(instance, id);
   assert.notEqual(returned.last().control.token, first.last().control.token);
   assert.equal(fake.frames.filter(frame => frame.type === 'session.subscribe').length, 2);
+});
+
+test('a session read before is followed from where it was: only the events since, nothing twice, the running output once', async t => {
+  const fake = await service();
+  const id = fake.session(randomUUID(), 'resume', MAC), run = randomUUID(), answer = randomUUID(), more = randomUUID(), tool = randomUUID(), approval = randomUUID();
+  const instance = adapter(fake, null, {}, { lingerMs: 20 });
+  t.after(async () => { await instance.stop(); await fake.close(); });
+  fake.record(id, run, { type: 'message.user', messageId: randomUUID(), text: '先看看' });
+  fake.record(id, run, { type: 'text.delta', messageId: answer, text: '第一段' });
+  fake.record(id, run, { type: 'tool.requested', toolId: tool, name: 'Bash', input: '{"command":"ls"}' });
+  fake.record(id, run, { type: 'approval.requested', approvalId: approval, toolId: tool });
+  fake.update(id, { activeRun: { id: run, status: 'awaiting_approval', connectionId: 'c' } });
+  const first = await watcher(instance, id);
+  assert.equal(first.last().permissions.length, 1);
+  fake.fragment(id, run, { type: 'text.delta', messageId: more, text: '正在' });
+  await until(() => first.last().messages.some(message => message.text === '正在'), 'live output');
+  first.close();
+  await until(() => fake.peers.size === 0, 'reader dropped');
+  // While nobody reads, the approval is answered and the turn goes on; its newest output is not recorded yet.
+  fake.record(id, run, { type: 'approval.resolved', approvalId: approval });
+  fake.record(id, run, { type: 'tool.result', toolId: tool, status: 'completed', output: 'a.txt' });
+  fake.update(id, { activeRun: { id: run, status: 'running', connectionId: 'c' } });
+  fake.open(id, run, { type: 'text.delta', messageId: more, text: '正在写第二段' });
+  const returned = await watcher(instance, id);
+  assert.deepEqual(fake.frames.filter(frame => frame.type === 'session.subscribe').map(frame => frame.afterSequence), [0, 4]);
+  await until(() => returned.last().messages.some(message => message.text === '正在写第二段'), 'running output');
+  const view = returned.last(), texts = view.messages.map(message => message.text);
+  assert.equal(texts.filter(text => text === '第一段').length, 1);
+  assert.ok(texts.includes('先看看'));
+  assert.ok(texts.some(text => text.startsWith('Status: completed')));
+  assert.ok(!texts.some(text => text.includes('正在正在')), 'output from before the gap is not repeated');
+  assert.equal(view.permissions.length, 0);
+  assert.equal(view.status, 'running');
+  assert.notEqual(view.control.token, first.last().control.token, 'a new reader gets a new control token');
+});
+
+test('output right behind the page is applied after it, however the socket groups the frames', async t => {
+  const fake = await service();
+  const id = fake.session(randomUUID(), 'behind', MAC), run = randomUUID(), more = randomUUID(), sent = ['紧跟着', '紧跟着的输出'];
+  // A socket may hand over several frames at once; the output then comes before the page is read.
+  class Grouped extends CcDeskConnection {
+    emit(name, message, ...rest) {
+      const result = super.emit(name, message, ...rest);
+      if (name === 'message' && message.type === 'session.snapshot')
+        super.emit('message', { type: 'session.fragment', sessionId: id, runId: run, payload: { type: 'text.delta', messageId: more, text: sent.shift() } });
+      return result;
+    }
+  }
+  const instance = adapter(fake, null, {}, { lingerMs: 20, connection: options => new Grouped(options) });
+  t.after(async () => { await instance.stop(); await fake.close(); });
+  fake.record(id, run, { type: 'message.user', messageId: randomUUID(), text: '开始' });
+  fake.update(id, { activeRun: { id: run, status: 'running', connectionId: 'c' } });
+  const first = await watcher(instance, id);
+  await until(() => first.last().messages.some(message => message.text === '紧跟着'), 'output after a fresh page');
+  first.close();
+  await until(() => fake.peers.size === 0, 'reader dropped');
+  fake.record(id, run, { type: 'tool.requested', toolId: randomUUID(), name: 'Read', input: '{"file_path":"a.txt"}' });
+  const returned = await watcher(instance, id);
+  await until(() => returned.last().messages.some(message => message.text === '紧跟着的输出'), 'output after a resumed page');
+  assert.equal(returned.last().messages.length, 3);
+});
+
+test('following again reads a full page when too much happened, the service lost that point, or it is too long ago', async t => {
+  const fake = await service();
+  const id = fake.session(randomUUID(), 'fallback', MAC), run = randomUUID();
+  const instance = adapter(fake, null, {}, { lingerMs: 20 }), forgetful = adapter(fake, null, {}, { lingerMs: 20, rememberMs: 0 });
+  t.after(async () => { await instance.stop(); await forgetful.stop(); await fake.close(); });
+  const say = text => fake.record(id, run, { type: 'message.user', messageId: randomUUID(), text });
+  const texts = watch => watch.last().messages.map(message => message.text);
+  const leave = async watch => { watch.close(); await until(() => fake.peers.size === 0, 'reader dropped'); };
+  const after = count => fake.frames.filter(frame => frame.type === 'session.subscribe').slice(-count).map(frame => frame.afterSequence);
+  say('一'); say('二');
+  await leave(await watcher(instance, id));
+  for (let index = 0; index < 8; index++) say(`新${index}`);
+  let returned = await watcher(instance, id);
+  assert.deepEqual(after(1), [2]);
+  assert.deepEqual(texts(returned), ['新2', '新3', '新4', '新5', '新6', '新7'], 'the last page replaces what was remembered');
+  assert.ok(returned.last().historyCursor, 'earlier events stay reachable');
+  await leave(returned);
+  fake.events.set(id, fake.events.get(id).slice(0, 3));
+  returned = await watcher(instance, id);
+  assert.deepEqual(after(2), [10, 0], 'a point the service does not know is read afresh');
+  assert.deepEqual(texts(returned), ['一', '二', '新0']);
+  await leave(returned);
+  await leave(await watcher(forgetful, id));
+  await watcher(forgetful, id);
+  assert.deepEqual(after(2), [0, 0], 'an old memory is not used');
 });
 
 test('at capacity only the oldest lingering entry is evicted, even after an entry returns and leaves again', async t => {

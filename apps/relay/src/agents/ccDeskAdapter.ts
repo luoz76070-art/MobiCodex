@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { promisify } from "node:util";
 import { activityEvidence } from "../store/activityEvidence.js";
 import type { AgentAdapter, AgentStatus } from "./agentGateway.js";
-import { CcDeskConnection, type CcDeskConnectionOptions } from "./ccDeskConnection.js";
+import { CcDeskConnection, type CcDeskConnectionOptions, type CcDeskSnapshot } from "./ccDeskConnection.js";
 import { CcDeskControl } from "./ccDeskControl.js";
 import { CCDESK_KEYCHAIN_SERVICE, ccDeskId, type CcDeskConfig, type CcDeskServerMessage, type CcDeskSession } from "./ccDeskProtocol.js";
 import { CcDeskTranscript } from "./ccDeskTranscript.js";
@@ -14,12 +14,16 @@ const WATCHES = 8;
 // A phone that leaves for a while comes back to a warm session. Reopening one costs a full history page, which over a
 // relayed link takes 20-30 s; an idle lingering reader costs almost nothing.
 const LINGER_MS = 600_000;
+// A session that stops being read is remembered for a while, so following it again asks only for the events since.
+const REMEMBERED = 16, REMEMBER_MS = 3_600_000;
 const none = { inspectLoadedSessions: false, sendMessage: false, steer: false, interrupt: false, approve: false };
 type Listener = { receive: (snapshot: AgentSessionSnapshot) => void; disconnect: () => void };
 type Entry = {
   id: string; token: string; session: CcDeskSession | null; transcript: CcDeskTranscript; listeners: Set<Listener>;
   connection: CcDeskConnection | null; pending: Promise<void>; timer?: NodeJS.Timeout; dropped: boolean;
   lingerTimer?: NodeJS.Timeout; lingerOrder?: number;
+  /** Frames that arrive while the first page is on its way; those after it are applied once it is. */
+  early: CcDeskServerMessage[] | null;
   submission: AgentSessionSnapshot["submission"]; operationError: AgentSessionSnapshot["operationError"];
 };
 export type CcDeskDependencies = {
@@ -27,7 +31,9 @@ export type CcDeskDependencies = {
   connection?: (options: CcDeskConnectionOptions) => CcDeskConnection;
   control?: CcDeskControl;
   lingerMs?: number;
+  rememberMs?: number;
 };
+type Remembered = { transcript: CcDeskTranscript; at: number };
 
 /** Reads the service token from the login keychain, where `mobile-codex ccdesk login` put it. */
 export async function keychainToken(account: string) {
@@ -51,6 +57,7 @@ export class CcDeskAdapter implements AgentAdapter, SessionAdapter {
   private state: AgentStatus = { id: "ccdesk", label: "CC Desk", state: "unprobed", transport: "ccdesk-ws", usesAccessibility: false,
     sameDesktopThreadVerified: false, capabilities: { ...none }, loadedSessions: null, checkedAt: null, errorCode: null };
   private readonly entries = new Map<string, Entry>();
+  private readonly remembered = new Map<string, Remembered>();
   private lingerOrder = 0;
   private readonly control: CcDeskControl;
   private probing: Promise<AgentStatus> | null = null;
@@ -136,18 +143,27 @@ export class CcDeskAdapter implements AgentAdapter, SessionAdapter {
         this.drop(oldest, false);
       }
       const created: Entry = { id, token: randomUUID(), session: null, transcript: new CcDeskTranscript(), listeners: new Set(), connection: null,
-        pending: Promise.resolve(), dropped: false, submission: null, operationError: null };
+        pending: Promise.resolve(), dropped: false, early: [], submission: null, operationError: null };
       entry = created;
       this.entries.set(id, created);
+      const cached = this.recall(id);
       created.pending = (async () => {
         const connection = await this.connect();
         if (created.dropped || this.stopped) { connection.close(); throw agentError("CCDESK_DISCONNECTED"); }
         created.connection = connection;
         connection.on("message", (message: CcDeskServerMessage) => this.receive(created, message));
         connection.once("close", () => this.drop(created));
-        const page = await connection.request({ type: "session.subscribe", sessionId: id, afterSequence: 0 }, "snapshot").catch(error => { throw this.unseen(connection, error); });
+        const page = await this.subscribe(created, connection, cached);
         created.session = page.session;
-        created.transcript.load(page);
+        // A running turn's output follows the page; anything before it is in the page or superseded by it.
+        const early = created.early ?? [];
+        created.early = null;
+        let after = -1;
+        for (let index = 0; index < early.length; index++) {
+          const message = early[index]!;
+          if (message.type === "session.snapshot" && message.requestId === page.requestId) after = index;
+        }
+        for (const message of early.slice(after + 1)) this.receive(created, message);
       })();
     }
     this.clearLinger(entry);
@@ -202,6 +218,7 @@ export class CcDeskAdapter implements AgentAdapter, SessionAdapter {
     this.control.stop();
     for (const entry of [...this.entries.values()]) this.drop(entry);
     this.entries.clear();
+    this.remembered.clear();
   }
 
   /** Not found to a reader that could not say which computer it is: most likely hidden from it, not gone. */
@@ -229,7 +246,44 @@ export class CcDeskAdapter implements AgentAdapter, SessionAdapter {
     }
   }
 
+  /**
+   * Follows a session. One read before, it asks only for the events since; a service with too many of them sends
+   * its last page instead (`replace`), and one that no longer knows that point, or any other failure, is asked afresh.
+   */
+  private async subscribe(entry: Entry, connection: CcDeskConnection, cached: Remembered | undefined): Promise<CcDeskSnapshot> {
+    const ask = (afterSequence: number) => connection.request({ type: "session.subscribe", sessionId: entry.id, afterSequence }, "snapshot");
+    let page = cached ? await ask(cached.transcript.lastSequence).catch(() => null) : null;
+    if (page?.mode === "append") {
+      entry.transcript = cached!.transcript;
+      entry.transcript.resume(page);
+    } else {
+      page ??= await ask(0).catch(error => { throw this.unseen(connection, error); });
+      entry.transcript.load(page);
+    }
+    this.remembered.delete(entry.id);
+    return page;
+  }
+
+  private recall(id: string) {
+    const kept = this.remembered.get(id);
+    if (!kept || Date.now() - kept.at < (this.deps.rememberMs ?? REMEMBER_MS)) return kept;
+    this.remembered.delete(id);
+    return undefined;
+  }
+
+  private remember(entry: Entry) {
+    this.remembered.delete(entry.id);
+    this.remembered.set(entry.id, { transcript: entry.transcript, at: Date.now() });
+    for (const id of this.remembered.keys()) {
+      if (this.remembered.size <= REMEMBERED) break;
+      this.remembered.delete(id);
+    }
+  }
+
   private receive(entry: Entry, message: CcDeskServerMessage) {
+    // A dropped entry's transcript may already be another's.
+    if (entry.dropped) return;
+    if (entry.early) { entry.early.push(message); return; }
     switch (message.type) {
       case "session.event":
         if (message.event.sessionId !== entry.id) return;
@@ -254,7 +308,7 @@ export class CcDeskAdapter implements AgentAdapter, SessionAdapter {
         entry.transcript.sync(message.session);
         break;
       case "session.deleted":
-        if (message.sessionId === entry.id) this.drop(entry);
+        if (message.sessionId === entry.id) this.drop(entry, true, false);
         return;
       default: return;
     }
@@ -373,9 +427,10 @@ export class CcDeskAdapter implements AgentAdapter, SessionAdapter {
     entry.lingerOrder = undefined;
   }
 
-  private drop(entry: Entry, notify = true) {
+  private drop(entry: Entry, notify = true, remember = true) {
     if (entry.dropped) return;
     entry.dropped = true;
+    if (remember && !this.stopped && entry.session && !entry.early && entry.transcript.lastSequence) this.remember(entry);
     clearTimeout(entry.timer);
     this.clearLinger(entry);
     if (this.entries.get(entry.id) === entry) this.entries.delete(entry.id);

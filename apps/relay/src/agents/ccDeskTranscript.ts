@@ -63,6 +63,23 @@ export class CcDeskTranscript {
     this.trim();
   }
 
+  /** The newest recorded event; a later subscribe asks only for what follows it. */
+  get lastSequence() { return this.last; }
+
+  /**
+   * Catches a remembered transcript up with what was recorded since (an `append` page). The service resends a
+   * running turn's unrecorded output whole after the page, and answers that were in flight are pending again until
+   * the events say otherwise, as they would be in a transcript read afresh.
+   */
+  resume(page: { events: CcDeskEvent[]; session?: CcDeskSession }) {
+    this.live.clear();
+    for (const approval of this.approvals.values()) approval.status = "pending";
+    const known = this.last;
+    for (const event of page.events) if (event.sequence > known) this.apply(event, true);
+    if (page.session) this.sync(page.session);
+    this.trim();
+  }
+
   /** The service's word on whether a run is going; events say how it ended. */
   sync(session: CcDeskSession) {
     const run = session.activeRun;
