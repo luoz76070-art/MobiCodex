@@ -26,10 +26,8 @@ export function ShareSheet({ payload, currentTitle, onChoose, onCancel }: {
     if (action.current) return;
     const controller = new AbortController(); action.current = controller; setBusy(true); setError("");
     try {
-      if (value === "feedback") {
-        const options = await shareFeedbackOptions(payload, controller.signal);
-        if (!controller.signal.aborted) { onCancel(); openFeedback(options); }
-      } else await onChoose(value, controller.signal);
+      if (value === "feedback") { onCancel(); openFeedback(shareFeedbackOptions(payload)); }
+      else await onChoose(value, controller.signal);
     }
     catch (caught) { if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "分享内容未能读取，请重试。"); }
     finally { if (!controller.signal.aborted) { action.current = null; setBusy(false); } }

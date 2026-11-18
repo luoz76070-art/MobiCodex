@@ -1,4 +1,5 @@
 import { registerFeedbackRoutes } from './feedbackRoutes.js';
+import type { FeedbackIssueClient } from '../feedback/github.js';
 import { defaultGatewayConfigPath } from '../gateway/config.js';
 import { CaptureAssetStore } from '../capture/store.js';
 import path from "node:path";
@@ -54,6 +55,8 @@ export type RelayServerOptions = {
     agentGateway: AgentGateway;
     claudeCliSdk: ClaudeCliSdk;
     voice: VoiceService;
+    /** Stand-in for the gh CLI when filing feedback on GitHub. */
+    feedbackIssues: FeedbackIssueClient;
     /** F6 tests: stand-in for reading the exhausted channel's reset time. */
     quotaResetAt: (model: string | null) => Promise<string | null>;
   }>;
@@ -192,7 +195,8 @@ export async function createRelayServer(options: RelayServerOptions = {}) {
   app.get("/api/diagnostics", async () => ({ schema: "mobile-codex-gateway-diagnostics-v1", buildId: gatewayBuildId,
     keepAwake: keepAwake.snapshot(),
     tunnel: options.gateway?.diagnostics?.() ?? { enabled: false, omitted: 0, events: [] } }));
-  registerFeedbackRoutes(app, { dataDirectory: config.dataDirectory ?? path.dirname(defaultGatewayConfigPath()), owners, devices });
+  registerFeedbackRoutes(app, { dataDirectory: config.dataDirectory ?? path.dirname(defaultGatewayConfigPath()), owners, devices,
+    github: config.feedback?.github, hide: [config.token, ...(config.feedbackHide ?? [])], issueClient: options.services?.feedbackIssues });
   registerVoiceRoutes(app, { owners, devices, credentials: voiceCredentials, service: voice });
   if (config.claude && claudeBridge) registerClaudeBridgeRoutes(app, claudeBridge);
 

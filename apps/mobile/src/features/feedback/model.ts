@@ -1,10 +1,14 @@
-import { fileToBase64 } from '../chat/attachments';
 import { redactFeedbackError } from './lastError';
 export type FeedbackContext = { version: string; versionCode: number; page: string; agentId: string; sessionId: string; lastError: string; model: string; os: string };
-export type FeedbackInput = { clientId: string; text: string; context: FeedbackContext; screenshot?: { mimeType: 'image/png' | 'image/jpeg' | 'image/webp'; dataBase64: string } };
-export type FeedbackStatus = { state: 'received' } | { state: 'filed'; issue: number } | { state: 'fixed'; version: string } | { state: 'dismissed'; reason: string };
-export type FeedbackItem = Omit<FeedbackInput, 'screenshot'> & { id: string; createdAt: string; status: FeedbackStatus; screenshot?: { mimeType: string; size: number } };
-export type OpenFeedbackOptions = { text?: string; screenshot?: File; context?: Partial<FeedbackContext>; notice?: string };
+/** `target` names a GitHub repo the computer offers; without it the feedback stays in the computer's inbox. */
+export type FeedbackInput = { clientId: string; text: string; context: FeedbackContext; target?: string };
+export type FeedbackStatus = { state: 'received' } | { state: 'filed'; issue: number; repo?: string } | { state: 'fixed'; version: string }
+  | { state: 'dismissed'; reason: string } | { state: 'retrying'; reason: string };
+/** Entries from older builds may still mention a screenshot kept on the computer. */
+export type FeedbackItem = FeedbackInput & { id: string; createdAt: string; status: FeedbackStatus; screenshot?: { mimeType: string; size: number } };
+export type FeedbackTarget = { id: string; label: string; repo: string; public: boolean };
+export type FeedbackPreview = { target: FeedbackTarget; title: string; body: string };
+export type OpenFeedbackOptions = { text?: string; context?: Partial<FeedbackContext>; notice?: string };
 export const feedbackOpenEvent = 'mobicodex-open-feedback';
 /** Reused by settings, message and share actions. Never sends automatically. */
 export function openFeedback(options: OpenFeedbackOptions = {}) { window.dispatchEvent(new CustomEvent(feedbackOpenEvent, { detail: options })); }
@@ -26,24 +30,33 @@ export function collectFeedbackContext(input: Partial<FeedbackContext>, ua: stri
     page: clip(input.page, 80), agentId: clip(input.agentId, 64), sessionId: clip(input.sessionId, 160),
     lastError: redactFeedbackError(input.lastError ?? ''), model: clip(input.model ?? device.model, 120), os: clip(input.os ?? device.os, 120) };
 }
-export function feedbackStatusText(status: FeedbackStatus): string {
+export function feedbackStatusText(status: FeedbackStatus, target?: string): string {
   switch (status.state) {
-    case 'received': return '已收到';
+    case 'received': return target ? '正在提交到 GitHub' : '已收到';
+    case 'retrying': return `还没提交上，电脑会自动重试：${status.reason}`;
     case 'filed': return `已提交 #${status.issue}`;
     case 'fixed': return `已修复，在 ${status.version}`;
     case 'dismissed': return `未采纳：${status.reason}`;
   }
 }
+/** Only a filed issue with a well-formed repo becomes a link. */
+export function feedbackIssueUrl(status: FeedbackStatus): string {
+  return status.state === 'filed' && status.repo && /^[\w.-]+\/[\w.-]+$/.test(status.repo) ? `https://github.com/${status.repo}/issues/${status.issue}` : '';
+}
 export function validateFeedbackInput(input: FeedbackInput) {
   if (!/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(input.clientId) || !input.text.trim() || input.text.length > 2000) throw new Error('请填写问题描述，最多 2000 字。');
-  if (input.screenshot && (!['image/png', 'image/jpeg', 'image/webp'].includes(input.screenshot.mimeType) || input.screenshot.dataBase64.length > 4 * Math.ceil(5 * 1024 * 1024 / 3))) throw new Error('截图仅支持 5MiB 以内的 PNG、JPEG、WebP。');
+  if (input.target !== undefined && !/^[a-z0-9][a-z0-9-]{0,39}$/.test(input.target)) throw new Error('要提交到的仓库无效，请重新选择。');
 }
-export async function feedbackScreenshot(file: File): Promise<FeedbackInput['screenshot']> {
-  if (!file.size || file.size > 5 * 1024 * 1024) throw new Error('截图最多 5MiB。');
-  const b = new Uint8Array(await file.slice(0, 12).arrayBuffer());
-  const mimeType = b.length >= 8 && [137,80,78,71,13,10,26,10].every((v,i) => b[i] === v) ? 'image/png'
-    : b[0] === 255 && b[1] === 216 && b[2] === 255 ? 'image/jpeg'
-      : new TextDecoder().decode(b.slice(0,4)) === 'RIFF' && new TextDecoder().decode(b.slice(8,12)) === 'WEBP' ? 'image/webp' : null;
-  if (!mimeType) throw new Error('请选择有效的 PNG、JPEG、WebP 截图。');
-  return { mimeType, dataBase64: await fileToBase64(file) };
+const targetKey = (scope: string) => `mobicodexFeedbackTarget:${scope}`;
+/** The last choice per paired computer; '' means "keep it on the computer". */
+export function rememberedFeedbackTarget(scope: string): string | null {
+  try { return window.localStorage?.getItem(targetKey(scope)) ?? null; } catch { return null; }
+}
+export function rememberFeedbackTarget(scope: string, target: string) {
+  try { window.localStorage?.setItem(targetKey(scope), target); } catch { /* Not remembering is harmless. */ }
+}
+/** A remembered repo wins while the computer still offers it; otherwise the first one offered. */
+export function chooseFeedbackTarget(targets: FeedbackTarget[], remembered: string | null): string {
+  if (remembered === '' || (remembered && targets.some(target => target.id === remembered))) return remembered;
+  return targets[0]?.id ?? '';
 }

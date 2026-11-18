@@ -8,7 +8,8 @@ import { apiGet, apiPost, buildUrl } from '../connection/http';
 import { relayAuthorization } from '../connection/authorization';
 import { VoiceInput } from '../voice/VoiceInput';
 import { useCaptureVoice } from '../capture/useCaptureVoice';
-import { collectFeedbackContext, feedbackOpenEvent, feedbackScreenshot, feedbackStatusText, validateFeedbackInput, type FeedbackContext, type FeedbackInput, type FeedbackItem, type OpenFeedbackOptions } from './model';
+import { chooseFeedbackTarget, collectFeedbackContext, feedbackIssueUrl, feedbackOpenEvent, feedbackStatusText, rememberFeedbackTarget, rememberedFeedbackTarget, validateFeedbackInput,
+  type FeedbackContext, type FeedbackInput, type FeedbackItem, type FeedbackPreview, type FeedbackTarget, type OpenFeedbackOptions } from './model';
 import { lastFeedbackError, observeFeedbackErrors } from './lastError';
 import { createFeedbackSender, feedbackQueueStorage, type QueuedFeedback } from './queue';
 import './feedback.css';
@@ -37,7 +38,7 @@ export function FeedbackHost({ scope, endpoint, token, navigation, page }: Props
       changed: () => { if (!controller.signal.aborted) { refresh(); setRevision(value => value + 1); } } });
     const resume = () => { refresh(); if (active() && !document.hidden) void instance.flush().then(() => { if (!controller.signal.aborted) setDeliveryError(''); }, error => {
       if (!controller.signal.aborted) setDeliveryError([400, 413, 422].includes((error as { status?: number }).status ?? 0)
-        ? '电脑拒收了某条反馈的格式或截图，已保留原记录；请核对或联系电脑端处理。' : (error as { status?: number }).status === 429 ? '每台设备每小时最多 20 条，已保存，稍后自动补发。' : '尚未送达电脑，已保存，连接恢复后自动补发。');
+        ? '电脑拒收了某条反馈（格式不对，或电脑上不再提供所选仓库），已保留原记录；请核对或联系电脑端处理。' : (error as { status?: number }).status === 429 ? '每台设备每小时最多 20 条，已保存，稍后自动补发。' : '尚未送达电脑，已保存，连接恢复后自动补发。');
     }); };
     const timer = window.setInterval(resume, 30_000);
     const detach = authorization.subscribe(() => controller.abort());
@@ -60,11 +61,13 @@ type SheetProps = Pick<Props, 'scope' | 'endpoint' | 'token'> & {
   submit: (input: FeedbackInput) => Promise<void>; close: () => void;
 };
 export function FeedbackSheet({ scope, endpoint, token, options, context, queued, revision, storageError, deliveryError, submit, close }: SheetProps) {
-  const [text, setText] = useState(options.text ?? ''), [screenshot, setScreenshot] = useState<File | undefined>(options.screenshot);
+  const [text, setText] = useState(options.text ?? '');
   const [clientId, setClientId] = useState(() => crypto.randomUUID());
   const [busy, setBusy] = useState(false), lock = useRef(false), mounted = useRef(true);
   const [notice, setNotice] = useState(options.notice ?? ''), [error, setError] = useState(''), [listError, setListError] = useState(''), [items, setItems] = useState<FeedbackItem[]>([]);
-  const sheet = useRef<HTMLElement>(null), fileInput = useRef<HTMLInputElement>(null);
+  const [targets, setTargets] = useState<FeedbackTarget[]>([]), [target, setTarget] = useState(''), [preview, setPreview] = useState<FeedbackPreview | null>(null);
+  const sheet = useRef<HTMLElement>(null);
+  const chosen = targets.find(entry => entry.id === target);
   const recovery = useCaptureVoice(scope, endpoint, token, value => setText(current => current ? `${current}\n${value}` : value));
   useBackLayer(true, () => { if (!lock.current) close(); }, 215);
   useEffect(() => {
@@ -85,13 +88,38 @@ export function FeedbackSheet({ scope, endpoint, token, options, context, queued
     window.addEventListener('mobicodex-feedback-retry', visible); window.addEventListener('online', visible); document.addEventListener('visibilitychange', visible); void refresh();
     return () => { controller.abort(); clearInterval(timer); window.removeEventListener('mobicodex-feedback-retry', visible); window.removeEventListener('online', visible); document.removeEventListener('visibilitychange', visible); };
   }, [endpoint, token, revision]);
+  useEffect(() => {
+    // An older computer offers no targets (or no such route): feedback then stays in its inbox as before.
+    const controller = new AbortController();
+    if (endpoint && token && navigator.onLine !== false) void apiGet<{ targets?: FeedbackTarget[] }>(buildUrl(endpoint, '/api/feedback/targets'), token, controller.signal).then(result => {
+      if (controller.signal.aborted || !Array.isArray(result.targets)) return;
+      setTargets(result.targets); setTarget(chooseFeedbackTarget(result.targets, rememberedFeedbackTarget(scope)));
+    }, () => {});
+    return () => controller.abort();
+  }, [scope, endpoint, token]);
+  async function showPreview() {
+    if (lock.current || !chosen) return;
+    lock.current = true; setBusy(true); setError(''); setNotice('');
+    try {
+      if (!endpoint || !token || navigator.onLine === false) throw new Error('预览要连着电脑才能生成，请联网后再试。');
+      const input = { text: text.trim(), context, target: chosen.id };
+      validateFeedbackInput({ clientId, ...input });
+      const result = await apiPost<FeedbackPreview>(buildUrl(endpoint, '/api/feedback/preview'), token, input);
+      if (mounted.current) setPreview(result);
+    } catch (caught) { if (mounted.current) setError(caught instanceof Error && caught.message ? `没能生成预览：${caught.message}` : '没能生成预览，请重试。'); }
+    finally { lock.current = false; if (mounted.current) setBusy(false); }
+  }
   async function send() {
     if (lock.current) return;
     lock.current = true; setBusy(true); setError(''); setNotice('');
     try {
-      const input: FeedbackInput = { clientId, text: text.trim(), context, ...(screenshot ? { screenshot: await feedbackScreenshot(screenshot) } : {}) };
+      // Only a previewed text can go to GitHub: the preview hides the form, so the text cannot change after it.
+      const input: FeedbackInput = { clientId, text: text.trim(), context, ...(preview ? { target: preview.target.id } : {}) };
       validateFeedbackInput(input); await submit(input);
-      if (mounted.current) { setText(''); setScreenshot(undefined); setClientId(crypto.randomUUID()); setNotice('反馈已保存，送达与处理进度见下方。离线时会自动补发。'); }
+      if (mounted.current) {
+        setText(''); setPreview(null); setClientId(crypto.randomUUID());
+        setNotice(preview ? `已交给电脑提交到 ${preview.target.repo}，结果见下方。没连上时会自动补发。` : '反馈已保存，送达与处理进度见下方。离线时会自动补发。');
+      }
     } catch (caught) { if (mounted.current) setError(caught instanceof Error ? caught.message : '未能保存反馈，请保持面板打开后重试。'); }
     finally { lock.current = false; if (mounted.current) setBusy(false); }
   }
@@ -100,24 +128,41 @@ export function FeedbackSheet({ scope, endpoint, token, options, context, queued
     <section ref={sheet} className="voice-sheet feedback-sheet" role="dialog" aria-modal="true" aria-label="反馈问题" tabIndex={-1} onKeyDown={event => {
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (!busy) close(); }
       if (event.key === 'Tab') {
-        const controls = [...event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), textarea:not(:disabled), input:not(:disabled)')], first = controls[0], last = controls.at(-1);
+        const controls = [...event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), textarea:not(:disabled), input:not(:disabled), select:not(:disabled), a[href]')], first = controls[0], last = controls.at(-1);
         if (event.shiftKey && (document.activeElement === first || document.activeElement === sheet.current)) { event.preventDefault(); last?.focus(); }
         else if (!event.shiftKey && (document.activeElement === last || document.activeElement === sheet.current)) { event.preventDefault(); first?.focus(); }
       }
     }}>
       <header><strong>反馈问题</strong><button type="button" className="icon-button" aria-label="关闭反馈" disabled={busy} onClick={close}><X size={18} /></button></header>
-      <p className="setting-description">内容先存到电脑的本地收件箱，不会直接发布到 GitHub。请检查文字和截图中是否有个人信息。</p>
-      <label>一句话描述<textarea aria-label="问题描述" value={text} maxLength={2000} rows={3} disabled={busy} onChange={event => setText(event.target.value)} /></label>
-      {!busy && <VoiceInput endpoint={endpoint} token={token} draft={text} onDraft={setText} scope={scope} thread={`feedback:${clientId}`} recovery={recovery} capture />}
-      <label>附一张截图（可选，最多 5MiB）<input ref={fileInput} key={clientId} type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={event => { setScreenshot(event.target.files?.[0]); setError(''); }} /></label>
-      {screenshot && <p>{screenshot.name}<button type="button" className="text-button" disabled={busy} onClick={() => { setScreenshot(undefined); if (fileInput.current) fileInput.current.value = ''; }}>移除截图</button></p>}
-      <details open><summary>自动附带的信息</summary><dl className="feedback-context">{fields.map(([key, label]) => <div key={key}><dt>{label}</dt><dd>{String(context[key]) || '无'}</dd></div>)}</dl></details>
-      <button type="button" className="action-button" disabled={busy || !text.trim() || text.length > 2000} onClick={() => void send()}>{busy ? '正在保存…' : '提交反馈'}</button>
+      <p className="setting-description">{targets.length
+        ? '选了仓库的反馈会先预览，确认后由电脑上的网关提交成 GitHub issue；提交前会隐藏本机路径、用户名、邮箱、网址、IP 地址和密钥。选「只存到电脑」就不会发到 GitHub。'
+        : '内容先存到电脑的本地收件箱，不会直接发布到 GitHub。请检查文字中是否有个人信息。'}</p>
+      {preview ? <section className="feedback-preview" aria-label="提交前预览">
+        <h3>提交前预览</h3>
+        <p role="note">{preview.target.public ? `将公开发布到 ${preview.target.repo}，所有人都能看到。` : `将提交到 ${preview.target.repo}。`}</p>
+        <strong>{preview.title}</strong>
+        <pre>{preview.body}</pre>
+        <div className="feedback-preview-actions">
+          <button type="button" className="text-button" disabled={busy} onClick={() => setPreview(null)}>返回修改</button>
+          <button type="button" className="action-button" disabled={busy} onClick={() => void send()}>{busy ? '正在保存…' : '确认提交'}</button>
+        </div>
+      </section> : <>
+        <label>一句话描述<textarea aria-label="问题描述" value={text} maxLength={2000} rows={3} disabled={busy} onChange={event => setText(event.target.value)} /></label>
+        {!busy && <VoiceInput endpoint={endpoint} token={token} draft={text} onDraft={setText} scope={scope} thread={`feedback:${clientId}`} recovery={recovery} capture />}
+        {targets.length > 0 && <label>提交到<select aria-label="提交到" value={target} disabled={busy} onChange={event => { setTarget(event.target.value); rememberFeedbackTarget(scope, event.target.value); }}>
+          {targets.map(entry => <option key={entry.id} value={entry.id}>{entry.label}（GitHub issue{entry.public ? '，公开' : ''}）</option>)}
+          <option value="">只存到电脑</option>
+        </select></label>}
+        <details open><summary>自动附带的信息</summary><dl className="feedback-context">{fields.map(([key, label]) => <div key={key}><dt>{label}</dt><dd>{String(context[key]) || '无'}</dd></div>)}</dl></details>
+        <button type="button" className="action-button" disabled={busy || !text.trim() || text.length > 2000} onClick={() => void (chosen ? showPreview() : send())}>
+          {busy ? (chosen ? '正在生成预览…' : '正在保存…') : chosen ? '预览' : '提交反馈'}</button>
+      </>}
       {notice && <p role="status">{notice}</p>}{(error || storageError) && <p role="alert">{error || storageError}</p>}
       <section aria-label="我的反馈"><h3>我的反馈</h3><button type="button" className="text-button" onClick={() => window.dispatchEvent(new Event('mobicodex-feedback-retry'))}>刷新状态 / 重试补发</button>
         {listError && <p role="status">{listError}</p>}{queued.length > 0 && deliveryError && <p role="status">{deliveryError}</p>}
         {queued.filter(entry => !items.some(item => item.clientId === entry.input.clientId)).map(entry => <p key={entry.input.clientId}>{entry.input.text.slice(0, 80)} · 待发送（已保存在手机）</p>)}
-        {items.map(item => <p key={item.id}>{item.text.slice(0, 80)} · {feedbackStatusText(item.status)}</p>)}
+        {items.map(item => { const url = feedbackIssueUrl(item.status), status = feedbackStatusText(item.status, item.target);
+          return <p key={item.id}>{item.text.slice(0, 80)} · {url ? <a href={url} target="_blank" rel="noreferrer">{status}</a> : status}</p>; })}
         {!queued.length && !items.length && !listError && <p>还没有反馈。</p>}
       </section>
     </section>

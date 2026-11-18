@@ -4,6 +4,9 @@ import { startTunnel, type TunnelState } from "../transport/tunnel.js";
 import { parseManagedConfig, pairingEndpoint, type ManagedConfig } from "./config.js";
 import { createGatewayDiagnostics } from "./diagnostics.js";
 
+/** Server host names are hidden from feedback filed on GitHub. */
+const hostOf = (url: string | undefined) => { try { return url ? new URL(url).hostname : undefined; } catch { return undefined; } };
+
 export type GatewayRuntimeStatus = {
   kind: "mobile-codex-gateway"; version: 1; instanceId: string; startedAt: string;
   desktopTransport: "native"; sameDesktopThreadVerified: false;
@@ -26,7 +29,8 @@ export async function startManagedGateway(input: ManagedConfig, dataDirectory?: 
   });
   const app = await createRelayServer({
     config: { host: "127.0.0.1", port: config.port, token: config.token, codexHome: config.codexHome, defaultCwd: config.workspace, dataDirectory, desktopTransport: "native", opencode: config.opencode, claude: config.claude, deepseek: config.deepseek, ccdesk: config.ccdesk,
-      claudeCli: config.claudeCli, keepAwake: config.keepAwake },
+      claudeCli: config.claudeCli, keepAwake: config.keepAwake, feedback: config.feedback,
+      feedbackHide: [config.managerKey, config.tunnel?.relaySecret, hostOf(config.tunnel?.brokerUrl), hostOf(config.publicEndpoint)].filter((value): value is string => Boolean(value)) },
     logger: false,
     gateway: { snapshot, diagnostics: diagnostics.snapshot, managerKey: config.managerKey, requestStop: () => { void stop().catch(() => console.error('{"error":"GATEWAY_STOP_FAILED"}')); } },
   });
