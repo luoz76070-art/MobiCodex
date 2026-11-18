@@ -14,3 +14,19 @@
 
 1. 用下载页的安装包覆盖安装 0.4.3 或更早的版本（同一签名，数据保留）。
 2. 从 0.4.1 或更早升级并且用 Claude CLI：按[网关管理](../../../../plugins/mobile-codex/README.md)用本版源码构建网关（`corepack pnpm build:plugin`），沿用原配置和工作目录切换到新程序。
+
+## 发布结果
+
+2026-11-19 发布。
+
+- **GitHub Release** `mobicodex-v0.4.4`（Actions run 44382682998，成功；同一提交的 CI run 44382370932 通过）：APK、界面包、两份清单和 `SHA256SUMS`。
+- **安装包** `mobile-codex-0.4.4-67a8000282ab.apk`，3,443,934 字节，SHA-256 `67a8000282abcc117c0abbc9ca8b74b3262d9cf05e3c75bcd6bd135f11455e45`，versionCode 47。
+  - 签名证书 SHA-256 `3ffb81f3524a590f469b80476951a22fbc6e441a470b9270079a8c1d452c4a38`，与 0.4.3 相同，可以直接覆盖安装。
+  - 界面包里的版本号是 `0.4.4`，已经没有写死的 `v0.4.0`。
+- **下载页** https://zyzlz.xin/mobile-codex/releases/android/preview/index.html 已换成 0.4.4（旧页面在服务器上备份）。
+  - 更新清单 `preview/latest.json` 指向 0.4.4（code 47），0.4.3 的清单移到 `previous.json`。
+  - 服务器上只留 0.4.3 和 0.4.4 两个安装包；0.4.2 的安装包已从服务器移除，GitHub Releases 上的同名文件仍可下载。
+  - 界面更新通道（`hot/latest.json`）没有改。
+- **电脑端插件**：`codex-plugin` 分支已更新到 0.4.4 的构建，和 0.4.3 那次相比只有随机生成的网关实例 id 不同。
+- **发布后核对**：从公网下载的 APK 与 CI 产物逐字节相同；分段下载返回 206；线上清单为 0.4.4 / 47，`previous.json` 为 0.4.3 / 46。
+- **还要确认**：真机上打开「设置 → 应用更新」，看当前版本是否显示 v0.4.4。
