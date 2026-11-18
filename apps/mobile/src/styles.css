@@ -2373,6 +2373,22 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .product-update-actions { display: flex; flex-wrap: wrap; gap: var(--space-12); margin: var(--space-20) 0; }
 .product-update-actions .action-button { flex: 1 1 180px; min-height: 48px; max-width: 100%; white-space: normal; }
 .product-update-help { color: var(--muted); font-size: var(--font-size-13); line-height: 1.6; overflow-wrap: anywhere; }
+/* Modal sheet shared by 事项 (WorkItemsPage) and the capture panel; the handoff- names are historical. */
+.handoff-scrim { position: fixed; inset: 0; z-index: 210; display: grid; place-items: center; padding: max(var(--space-12), env(safe-area-inset-top)) var(--space-12) max(var(--space-12), env(safe-area-inset-bottom)); background: var(--scrim); }
+.handoff-card { width: min(100%, 560px); max-height: 100%; overflow: auto; padding: var(--space-20); border: 1px solid var(--border); border-radius: var(--radius-24); color: var(--text); background: var(--panel-solid); }
+.handoff-card h2 { margin: 0 0 var(--space-12); }
+.handoff-card p { color: var(--muted); overflow-wrap: anywhere; }
+.handoff-card label { display: grid; gap: var(--space-8); margin: var(--space-16) 0; }
+.handoff-card textarea, .handoff-card select { width: 100%; min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-12); padding: var(--space-12); color: var(--text); background: var(--bg-0); font: inherit; }
+.handoff-card textarea { min-height: 140px; resize: vertical; }
+.handoff-card button { min-height: 44px; padding: var(--space-8) var(--space-12); border: 1px solid var(--border); border-radius: var(--radius-16); color: var(--text); background: var(--panel-soft); font: inherit; cursor: pointer; }
+.handoff-card button:disabled { opacity: .5; cursor: default; }
+.handoff-actions { display: flex; flex-wrap: wrap; gap: var(--space-8); margin: var(--space-12) 0; }
+.handoff-card .primary-button { color: var(--on-accent); background: var(--accent); }
+.handoff-card ul { list-style: none; padding: 0; }
+.handoff-card li { display: flex; align-items: center; gap: var(--space-8); margin: var(--space-8) 0; }
+.handoff-card li span { min-width: 0; overflow-wrap: anywhere; flex: 1; }
+.handoff-preview { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 40vh; overflow: auto; font: inherit; }
 
 /* Execution notes stay visible; only consecutive tool details use a live summary. */
 .process-toggle > span { display: flex; align-items: center; gap: var(--space-8); overflow: hidden; }
