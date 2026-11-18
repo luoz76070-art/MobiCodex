@@ -142,6 +142,17 @@ test('plugin registration and recent external writes reject before query, includ
   await assert.rejects(f.adapter.sendMessage(f.id, f.operation()), { code: 'CLAUDE_CLI_SESSION_BUSY' }); assert.equal(f.runs.length, 0);
 });
 
+test('the retained process registering through the plugin neither blocks a follow-up nor shows as open on the computer', async t => {
+  const f = await fixture(t); await f.adapter.sendMessage(f.id, f.operation('First'));
+  await until(() => f.runs[0].inputs.length === 1); f.result();
+  await until(() => f.current().status === 'idle' && f.current().lastTurn?.status === 'completed');
+  f.registered.add(f.id); // the kept-alive claude process loads the user's plugin and registers this very session
+  await new Promise(resolve => setTimeout(resolve, 60)); assert.equal(f.current().session.desktopOpen, false);
+  await f.adapter.sendMessage(f.id, f.operation('Follow-up'));
+  await until(() => f.runs[0].inputs.length === 2);
+  assert.equal(f.runs[0].inputs[1].message.content, 'Follow-up'); assert.equal(f.runs.length, 1);
+});
+
 test('root escape and symlink retarget are refused at the execution boundary', async t => {
   const f = await fixture(t), link = path.join(f.directory, 'alias'); await fs.symlink(f.outside, link, 'dir');
   f.infos[0].cwd = link;
