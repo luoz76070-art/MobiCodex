@@ -2254,9 +2254,19 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .agent-session-row { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-8); width: 100%; min-height: 72px; margin: var(--space-8) 0; padding: var(--space-16); border: 0; border-radius: var(--radius-16); background: var(--panel-solid); color: var(--text); text-align: left; overflow-wrap: anywhere; }
 .agent-session-row strong { font-size: var(--font-size-17); }
 .agent-session-row small, .agent-session-row time { color: var(--muted); font-size: var(--font-size-13); }
+/* #39: sessions of every Agent are compact list rows like Codex threads, grouped under their project. */
+.agent-session-row.agent-session-item { display: grid; gap: 0; min-height: 56px; margin: 0; padding: var(--space-8) var(--space-12); border-radius: var(--radius-12); background: transparent; overflow-wrap: normal; cursor: pointer; }
+.agent-session-item:active { background: var(--panel-soft); }
+@media (hover: hover) { .agent-session-item:hover { background: var(--panel-soft); } }
+.agent-session-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-size-15); font-weight: 500; line-height: 1.4; }
+.agent-session-meta { display: flex; align-items: center; gap: var(--space-8); min-width: 0; overflow: hidden; white-space: nowrap; color: var(--muted); font-size: var(--font-size-12); line-height: 1.35; }
+.agent-session-item .agent-session-meta time { color: inherit; font-size: inherit; }
+.agent-session-meta .desktop { color: var(--ok); }
+.agent-session-list .project-threads:not([hidden]) { gap: 0; padding-left: var(--space-20); }
+.agent-session-list .thread-group + .thread-group { margin-top: var(--space-8); }
 .agent-session-list .search-field { margin-bottom: var(--space-16); }
 .agent-session-list .search-field input { min-width: 0; }
-.agent-session-list .search-field button { border: 0; background: none; color: var(--text); min-width: 44px; min-height: 44px; }
+.agent-session-list .search-field button { flex: none; border: 0; background: none; color: var(--text); min-width: 44px; min-height: 44px; white-space: nowrap; }
 .agent-chat { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .agent-connection { display: flex; align-items: center; justify-content: center; gap: var(--space-8); padding: var(--space-8) var(--space-12); color: var(--muted); font-size: var(--font-size-13); }
 .agent-chat .messages-viewport { flex: 1; min-height: 0; padding-inline: max(var(--space-16), calc((100% - 760px) / 2)); }

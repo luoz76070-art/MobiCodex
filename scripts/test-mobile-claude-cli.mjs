@@ -39,7 +39,7 @@ const snapshot = { agentId: agent.id, session, connected: true, updatedAt: sessi
 
 function driver(name, props, overrides = {}, code = workspaceSource) {
   const slots = [], effects = [], windowPort = new EventTarget(); let cursor = 0, dirty = true, tree, subscription;
-  const components = ['WorkspaceHeader', 'SystemNotice', 'PullToRefresh', 'ProjectGroups', 'EmptyState', 'AgentPickRow', 'ListSkeleton', 'MessageSkeleton', 'Loader2', 'SessionRangeControl', 'MessageMediaProvider', 'MessageTimeline', 'ComputerComposer', 'ComposerSessionStatus', 'AttachmentTray', 'VoiceInput', 'AgentQueue', 'ClaudeCliCreate', 'AgentQuestions', 'AgentSessionControls', 'ArrowUp', 'MessageSquare'];
+  const components = ['WorkspaceHeader', 'SystemNotice', 'PullToRefresh', 'ProjectGroups', 'EmptyState', 'AgentPickRow', 'ListSkeleton', 'MessageSkeleton', 'Loader2', 'SessionRangeControl', 'MessageMediaProvider', 'MessageTimeline', 'ComputerComposer', 'ComposerSessionStatus', 'AttachmentTray', 'VoiceInput', 'AgentQueue', 'ClaudeCliCreate', 'AgentQuestions', 'AgentSessionControls', 'AgentSessionRow', 'ArrowUp', 'MessageSquare'];
   const deps = { ...model, Fragment: "Fragment", revokeAttachmentPreviews() {}, ...Object.fromEntries(components.map(name => [name, name])),
     h: (type, props, ...children) => ({ type, props: { ...props, children } }),
     useState(value) { const i = cursor++; slots[i] ??= { value: typeof value === 'function' ? value() : value }; return [slots[i].value, next => { const value = typeof next === 'function' ? next(slots[i].value) : next; dirty ||= value !== slots[i].value; slots[i].value = value; }]; },
@@ -85,8 +85,9 @@ test('Claude CLI list uses the shared header, project groups and navigation, and
   const f = driver('AgentWorkspace', { navigation: model.agentList('claude-cli'), onNavigate: next => navigations.push(next), onOpenAgents() {}, endpoint: '', token: 'synthetic', scope: 'synthetic', handoffTarget: null }); t.after(() => f.stop()); await f.settle();
   assert.equal(f.find('WorkspaceHeader').props.agentId, 'claude-cli');
   const group = f.find('ProjectGroups'); assert.equal(group.props.agentId, 'claude-cli');
-  const row = group.props.children[0](session); assert.match(text(row), /电脑上开着/); assert.match(text(row), /Synthetic session/);
-  row.props.onClick(); assert.deepEqual(navigations, [model.agentSession('claude-cli', id)]);
+  // The shared row (#39, rendered in test-mobile-agent-picker) shows the title and “电脑上开着” from desktopOpen.
+  const row = group.props.children[0](session); assert.equal(row.type, 'AgentSessionRow'); assert.equal(row.props.session, session);
+  row.props.onOpen(); assert.deepEqual(navigations, [model.agentSession('claude-cli', id)]);
 });
 
 test('unconfigured workspace explains configuration without requesting history or sessions', async t => {

@@ -37,6 +37,7 @@ import { agentDelivery, agentHistoryWindow, loadAgentDrafts, loadPendingAgentDra
 import type { AgentDelivery, AgentPermission, AgentSession, AgentSessionSnapshot } from "./types";
 import { groupByProject, projectGroupLabel, sessionInRange, sessionListRefreshMs } from "../threads/model";
 import { ProjectGroups } from "../threads/ProjectGroups";
+import { AgentSessionRow } from "./AgentSessionRow";
 import { SessionRangeControl } from "../threads/SessionRangeControl";
 import { agentAttentionKey, attentionAfterSend, setAttentionViewing } from "../notify/attention";
 
@@ -177,7 +178,7 @@ export default function AgentWorkspace({ navigation, onNavigate, onOpenAgents, o
           {agent.id === "deepseek" && <SessionRangeControl range={range} disabled={loading} onChange={next => { setRange(next); void loadSessions(agent, false, next); }} />}
           <form className="search-field" onSubmit={event => { event.preventDefault(); void loadSessions(agent); }}><input aria-label="搜索 Agent 会话" placeholder="搜索会话" value={query} maxLength={200} onChange={event => setQuery(event.target.value)} /><button type="submit" disabled={loading}>搜索</button></form>
           {<ProjectGroups key={agent.id} scope={scope} agentId={agent.id} groups={groupByProject(sessions, session => session.directory)} search={query}>
-            {session => <button className="agent-session-row" key={session.id} onClick={() => { onNavigate(agentSession(agent.id, session.id)); }}><strong>{session.title || "未命名会话"}</strong><time>{new Date(session.updatedAt).toLocaleString()}</time>{session.desktopOpen && <small>电脑上开着</small>}</button>}
+            {session => <AgentSessionRow key={session.id} session={session} onOpen={() => { onNavigate(agentSession(agent.id, session.id)); }} />}
           </ProjectGroups>}
           {!loading && !sessions.length && !error && <EmptyState compact title={agent.enabled === false ? "Claude CLI 未启用" : "没有会话"}>{agent.enabled === false ? "请在电脑网关配置 claudeCli.directories，选择允许读取的目录。" : agent.id === "claude-cli" ? "允许目录内没有匹配的本地会话。" : agent.id === "deepseek" ? range === "recent" ? "近 30 天没有匹配会话，可查看更早会话。" : "没有匹配的 DeepSeek 会话，请检查电脑插件连接或搜索条件。" : agent.id === "ccdesk" ? "CC Desk 服务上没有匹配的会话。" : agent.id === "claude" ? `尚无已连接的 ${agent.label} 会话，请先在电脑会话中加载并配置插件。` : "当前目录没有可用的现有会话。"}</EmptyState>}
           {cursor && <button className="action-button" disabled={loading} onClick={() => void loadSessions(agent, true)}>加载更多会话</button>}

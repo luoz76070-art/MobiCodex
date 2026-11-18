@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -9,7 +10,7 @@ import { build } from 'esbuild';
 const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-picker-'));
 test.after(() => fs.rm(dir, { recursive: true, force: true }));
 await build({
-  stdin: { contents: "export * from './apps/mobile/src/features/agents/agentSummary.ts'; export { AgentPickRow } from './apps/mobile/src/features/agents/AgentPickRow.tsx'; export { createElement } from 'react'; export { renderToStaticMarkup } from 'react-dom/server';", resolveDir: process.cwd(), loader: 'ts' },
+  stdin: { contents: "export * from './apps/mobile/src/features/agents/agentSummary.ts'; export { AgentPickRow } from './apps/mobile/src/features/agents/AgentPickRow.tsx'; export { AgentSessionRow } from './apps/mobile/src/features/agents/AgentSessionRow.tsx'; export { formatListTime } from './apps/mobile/src/shared/format.ts'; export { createElement } from 'react'; export { renderToStaticMarkup } from 'react-dom/server';", resolveDir: process.cwd(), loader: 'ts' },
   outfile: path.join(dir, 'picker.cjs'), bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', nodePaths: [path.resolve('apps/mobile/node_modules')],
 });
 const m = createRequire(import.meta.url)(path.join(dir, 'picker.cjs'));
@@ -50,6 +51,31 @@ test('picker row shows icon, name, status and meta', () => {
   assert.match(html, /<small class="agent-pick-meta"><span>1 个会话<\/span> · <span>最近活动 2 分钟前<\/span><\/small>/);
   const checking = m.renderToStaticMarkup(m.createElement(m.AgentPickRow, { id: 'x', label: 'X', description: 'd', summary: undefined, onOpen() {} }));
   assert.match(checking, /agent-pick-status checking">检测中/); assert.doesNotMatch(checking, /agent-pick-meta/);
+});
+test('#39 list time: 刚刚, HH:mm today, 昨天, MM-DD this year, the year before that', () => {
+  const at = (...parts) => new Date(...parts).toISOString(), now = new Date(2026, 10, 18, 9, 5).getTime();
+  assert.equal(m.formatListTime(at(2026, 10, 18, 9, 4, 30), now), '刚刚');
+  assert.equal(m.formatListTime(at(2026, 10, 18, 0, 3), now), '00:03');
+  assert.equal(m.formatListTime(at(2026, 10, 17, 23, 29), now), '昨天');
+  assert.equal(m.formatListTime(at(2026, 10, 17, 0, 0), now), '昨天');
+  assert.equal(m.formatListTime(at(2026, 10, 16, 23, 59), now), '11-16');
+  assert.equal(m.formatListTime(at(2026, 0, 2, 8, 0), now), '01-02');
+  assert.equal(m.formatListTime(at(2025, 11, 31, 8, 0), now), '2025-12-31');
+  assert.equal(m.formatListTime('', now), ''); assert.equal(m.formatListTime('bad', now), '');
+});
+test('#39 session row: one-line title, muted time line, where it is open', () => {
+  const now = new Date(2026, 10, 18, 9, 5).getTime();
+  const row = session => m.renderToStaticMarkup(m.createElement(m.AgentSessionRow, { session: { id: 's', directory: '/w', updatedAt: new Date(2026, 10, 18, 8, 7).toISOString(), ...session }, now, onOpen() {} }));
+  const html = row({ title: '  第一行\n\n第二行\t很长 ', desktopOpen: true });
+  assert.match(html, /^<button type="button" class="agent-session-row agent-session-item"><span class="agent-session-title">第一行 第二行 很长<\/span><span class="agent-session-meta"><time dateTime="[^"]+">08:07<\/time><span class="desktop">电脑上开着<\/span><\/span><\/button>$/);
+  assert.match(row({ title: ' \n ' }), /agent-session-title">未命名会话</);
+  assert.doesNotMatch(row({ title: 'x' }), /<strong>|电脑上开着/);
+  const css = readFileSync('apps/mobile/src/styles.css', 'utf8');
+  assert.match(css, /\.agent-session-title \{[^}]*overflow: hidden; text-overflow: ellipsis; white-space: nowrap;[^}]*font-weight: 500;/);
+  assert.match(css, /\.agent-session-meta \{[^}]*color: var\(--muted\); font-size: var\(--font-size-12\)/);
+  const workspace = readFileSync('apps/mobile/src/features/agents/AgentWorkspace.tsx', 'utf8');
+  assert.match(workspace, /\{session => <AgentSessionRow key=\{session.id\} session=\{session\}/, 'every Agent list uses the same row');
+  assert.doesNotMatch(workspace, /toLocaleString\(\)/);
 });
 test('picker lists Codex and other Agents through the same navigation callback', () => {
   assert.match(source, /const available = \[codexAgent, \.\.\.availableAgents\(data.agents\)\]/);

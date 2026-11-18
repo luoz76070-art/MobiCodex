@@ -100,6 +100,7 @@ export function syntheticApiResponse(url, method) {
   assert.equal(method, 'GET', `Unexpected write: ${method} ${route}`);
   if (['/api/threads', '/api/live/threads'].includes(route)) return { threads, nextOffset: threads.length, hasMore: false };
   if (route === '/api/connection') return { ok: true };
+  if (route === '/api/diagnostics') return { ok: true };
   if (route === '/api/live/turns') return { turns: [] };
   if (route === '/api/desktop/active') return { thread, source: 'ipc-stream' };
   if (route === '/api/gateway') return { gateway: { kind: 'mobile-codex-gateway', desktopTransport: 'native', tunnel: { enabled: true, state: 'connected' } } };
