@@ -3,17 +3,14 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read = file => readFile(new URL(`../${file}`, import.meta.url), 'utf8');
-const dart = await read('apps/kelivo/lib/theme/palettes.dart');
+// The A1 reference colours, exported once from the archived Kelivo palettes (see the fixture's `source`).
+const palettes = JSON.parse(await read('scripts/fixtures/a1-palettes.json'));
 const css = await read('apps/mobile/src/styles.css');
 const fixture = JSON.parse((await read('scripts/fixtures/product-host.js')).match(/const palettes = (.*);/u)[1]);
 function palette(name, mode) {
-  const block = dart.match(new RegExp(`static const ThemePalette ${name} = ThemePalette\\(([\\s\\S]*?)\\n  \\);`, 'u'))?.[1];
-  assert.ok(block, name);
-  const scheme = block.match(new RegExp(`${mode}: ColorScheme\\(([\\s\\S]*?)\\n    \\)`, 'u'))?.[1];
-  assert.ok(scheme, mode);
-  const entries = [...scheme.matchAll(/(\w+): Color\(0x([\dA-F]{8})\)/gu)].map(([, k, v]) => [k, `#${v.slice(2).toLowerCase()}`]);
-  assert.equal(entries.length, new Set(entries.map(([k]) => k)).size, 'no duplicate ColorScheme fields');
-  return Object.fromEntries(entries);
+  const scheme = palettes[name]?.[mode];
+  assert.ok(scheme, `${name} ${mode}`);
+  return scheme;
 }
 function variables(mode) {
   const pattern = mode === 'light' ? /:root \{([^}]+)\}/u : /:root\[data-theme="dark"\] \{([^}]+)\}/u;
@@ -34,17 +31,15 @@ function contrast(a, b) {
 }
 
 test('A1 default and Classic retain stable palette identities', () => {
-  assert.match(dart, /defaultId = 'default'/u);
-  assert.match(dart, /classicId = 'classic'/u);
-  assert.match(dart, /all = <ThemePalette>\[\s*defaultPalette,\s*classic,/u);
-  for (const id of ['blue', 'green', 'purple', 'yellow', 'smoky_rose', 'terracotta', 'monochrome', 'doc_theme']) assert.ok(dart.includes(`= '${id}'`));
+  assert.deepEqual(palettes.ids.slice(0, 2), ['default', 'classic']);
+  for (const id of ['blue', 'green', 'purple', 'yellow', 'smoky_rose', 'terracotta', 'monochrome', 'doc_theme']) assert.ok(palettes.ids.includes(id), id);
   assert.equal(palette('classic', 'light').primary, '#4d5c92');
   assert.equal(palette('classic', 'dark').primary, '#b6c4ff');
   assert.equal(palette('defaultPalette', 'light').surface, '#f6f4ef');
   assert.equal(palette('defaultPalette', 'dark').surface, '#111317');
 });
 
-test('Flutter, standalone CSS and host fixture agree on A1 color roles', () => {
+test('A1 palette, standalone CSS and host fixture agree on color roles', () => {
   const mapping = { surface: ['--bg-0', 'background'], onSurface: ['--text', 'text'], onSurfaceVariant: ['--muted', 'muted'], primary: ['--accent', 'primary'], onPrimary: ['--on-accent', 'onPrimary'], primaryContainer: ['--accent-soft', 'primaryContainer'], secondaryContainer: ['--navigation-indicator', 'navigationIndicator'], tertiary: ['--signal', 'signal'], error: ['--danger', 'error'] };
   for (const mode of ['light', 'dark']) {
     const scheme = palette('defaultPalette', mode), vars = variables(mode);
