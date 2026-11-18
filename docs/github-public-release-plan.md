@@ -7,7 +7,6 @@
 - `apps/mobile` Android 客户端源码。
 - `apps/relay` Relay、Broker 和隧道源码。
 - `scripts` 构建、Helper 和通用发布脚本。
-- `generated-protocol` 项目运行需要的协议类型。
 - `docs`、`README.md`、`SECURITY.md`、`LICENSE`。
 - `pnpm-lock.yaml` 和 workspace 配置。
 

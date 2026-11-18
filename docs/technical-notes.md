@@ -26,11 +26,13 @@ codex.exe app-server --analytics-default-enabled
   - `capability-token`
   - `signed-bearer-token`
 
-本机 `codex app-server generate-ts --experimental` 已生成 TypeScript 协议到：
+需要对照 Codex app-server 协议时，用本机 Codex CLI 生成 TypeScript 类型（结果不进仓库，代码也不 import 它）：
 
-```text
-<PROJECT_ROOT>\generated-protocol
+```sh
+codex app-server generate-ts --out <目录>
 ```
+
+2026-11 之前的快照在归档 tag `archive/pre-cleanup-2026-11` 的 `generated-protocol/` 里。
 
 ## 关键协议接口
 

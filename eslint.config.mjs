@@ -2,7 +2,7 @@ import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
 
 export default [
-  { ignores: ['**/node_modules/**', '**/dist/**', '**/build/**', 'dist-*/**', 'output/**', '.tools/**', 'generated-protocol/**', 'apps/mobile/android/**', 'codex-to-phone/**', '.trellis/**', '.agents/**', '.codex/**'] },
+  { ignores: ['**/node_modules/**', '**/dist/**', '**/build/**', 'dist-*/**', 'output/**', '.tools/**', 'apps/mobile/android/**', 'codex-to-phone/**', '.trellis/**', '.agents/**', '.codex/**'] },
   {
     files: ['apps/*/src/**/*.{ts,tsx}', 'apps/*/*.ts', 'apps/*/scripts/**/*.mjs', 'apps/relay/tests/**/*.mjs', 'scripts/**/*.mjs', 'eslint.config.mjs'],
     linterOptions: { reportUnusedDisableDirectives: 'off' },

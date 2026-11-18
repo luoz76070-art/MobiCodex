@@ -29,7 +29,7 @@ Codex Desktop 是 Electron 客户端，窗口 UI 本身不是合适的扩展面�
 - 本机可用 `codex` 命令版本：`codex-cli 0.128.0`。这里的作用是协议/调试工具，不是目标工作入口。
 - Desktop 进程存在：`Codex.exe`
 - Desktop 后端进程存在：`codex.exe app-server --analytics-default-enabled`
-- 已生成协议类型到 `generated-protocol`
+- 已用 `codex app-server generate-ts` 生成协议类型对照（快照已移出仓库，见归档 tag `archive/pre-cleanup-2026-11`）
 
 待验证：
 
