@@ -28,7 +28,7 @@ git commit -m "fix(mobicodex): <独立修复说明>"
 
 不暂存.env、网关/设备/模型凭证、录音、上传附件、日志、构建缓存、APK/ZIP。沿用`.gitignore`，提交前额外检查新增文件和已有跟踪文件；忽略规则不会让已经跟踪的密钥自动消失。测试中的合成凭证需能与真实配置区分。APK及插件包仍走已有发布/交付目录。
 
-2026-11-07用户明确要求源码及对应APK提交到现有GitHub。本次例外仅允许版本化的 `releases/android/kelivo-preview/<版本>/`：审核过的APK、对应源码/网关归档、元数据与SHA256；其他APK及缓存仍忽略。提交前校验包内身份、签名、源码匹配与敏感内容，不含私钥或个人配置。GitHub交付与自托管更新源/在线网关部署分开，不自动创建GitHub Release。
+2026-11-07用户明确要求源码及对应APK提交到现有GitHub。本次例外仅允许版本化的 `releases/android/kelivo-preview/<版本>/`（2026-11-18 起这个目录已移出仓库，各版本文件改在 GitHub Releases，原目录见归档 tag `archive/pre-cleanup-2026-11`）：审核过的APK、对应源码/网关归档、元数据与SHA256；其他APK及缓存仍忽略。提交前校验包内身份、签名、源码匹配与敏感内容，不含私钥或个人配置。GitHub交付与自托管更新源/在线网关部署分开，不自动创建GitHub Release。
 
 用户已要求整合预览支持 App 内更新。后续整合 APK 交付须同时完成 GitHub 版本目录与独立 `kelivo-preview` 更新源，不能把源码/APK推送成功当作手机已可更新；源码归档先于 APK 清单发布。复用原子上传，保留当前版 previous，核对包名/签名/递增版本、APK/对应源码完整公网回下载及原四通道不变，最后写清「设置 → 应用更新」操作。无法发布更新源时明确报告未完成。该要求不自动授权在线网关切换；手机安装成功仍需实际证据。2026-11-07 code7 补发证据见[发布审计](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-07/app-update.md)。
 
