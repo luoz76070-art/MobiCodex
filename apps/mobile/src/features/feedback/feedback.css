@@ -1,7 +1,12 @@
 .feedback-scrim { z-index: 215; }
 .feedback-sheet { overflow-wrap: anywhere; }
-.feedback-sheet input[type="file"] { max-width: 100%; }
+.feedback-sheet select { max-width: 100%; }
 .feedback-context { margin: var(--space-8) 0; font-size: var(--font-size-13); }
 .feedback-context > div { display: grid; grid-template-columns: 7em minmax(0, 1fr); gap: var(--space-8); margin-block: var(--space-4); }
 .feedback-context dt { color: var(--muted); }
 .feedback-context dd { margin: 0; }
+.feedback-preview { display: grid; gap: var(--space-8); margin-block: var(--space-8); }
+.feedback-preview h3, .feedback-preview p { margin: 0; }
+.feedback-preview pre { margin: 0; max-height: 40vh; overflow: auto; padding: var(--space-8); border: 1px solid var(--hairline); border-radius: var(--radius-8);
+  background: var(--panel-soft); white-space: pre-wrap; font-size: var(--font-size-13); }
+.feedback-preview-actions { display: flex; justify-content: flex-end; gap: var(--space-8); }

@@ -5,6 +5,7 @@ import { claudeConfigSchema, type ClaudeConfig } from "./agents/claudeProtocol.j
 import { deepSeekConfigSchema, type DeepSeekConfig } from "./agents/deepSeekProtocol.js";
 import type { CcDeskConfig } from "./agents/ccDeskProtocol.js";
 import type { ClaudeCliConfig } from "./agents/claudeCliAdapter.js";
+import type { FeedbackConfig } from "./feedback/github.js";
 
 export type RelayConfig = {
   host: string;
@@ -21,6 +22,9 @@ export type RelayConfig = {
   ccdesk?: CcDeskConfig;
   claudeCli?: ClaudeCliConfig;
   keepAwake?: boolean;
+  feedback?: FeedbackConfig;
+  /** Extra literals (secrets, server hosts) hidden from feedback filed on GitHub. */
+  feedbackHide?: string[];
   /** Days a done/returned capture card keeps its images; 0 keeps them forever. */
   retentionDays?: number;
 };

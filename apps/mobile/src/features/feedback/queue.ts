@@ -10,7 +10,7 @@ export function assertFeedbackQueueCapacity(entries: QueuedFeedback[], record: Q
   if (entries.some(entry => entry.input.clientId === record.input.clientId)) return;
   if (entries.length >= feedbackQueueLimits.count || entries.reduce((size, entry) => size + JSON.stringify(entry.input).length, JSON.stringify(record.input).length) > feedbackQueueLimits.bytes) throw new Error('待发反馈已满，请先连接电脑补发。');
 }
-/** IndexedDB avoids the small localStorage quota for an optional 5MiB screenshot. Never stores credentials. */
+/** IndexedDB keeps unsent feedback across restarts (older builds also queued screenshots of up to 5MiB). Never stores credentials. */
 export function feedbackQueueStorage(): FeedbackQueueStorage {
   let opened: Promise<IDBDatabase> | undefined;
   const db = () => opened ??= new Promise((resolve, reject) => {

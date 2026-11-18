@@ -14,7 +14,7 @@ test.after(() => fs.rm(dir, { recursive: true, force: true }));
 await build({ stdin: { contents: "export * from './apps/mobile/src/features/feedback/model'; export * from './apps/mobile/src/features/feedback/lastError'; export * from './apps/mobile/src/features/feedback/queue'; export * from './apps/mobile/src/features/intake/feedback'; export { shareText } from './apps/mobile/src/features/intake/plugin'; export { Capacitor } from '@capacitor/core';", resolveDir: process.cwd(), loader: 'ts' },
   bundle: true, platform: 'node', format: 'esm', outfile: path.join(dir,'model.mjs'), nodePaths: [path.resolve('apps/mobile/node_modules')], define: { 'import.meta.env': '{}' } });
 const model = await import(pathToFileURL(path.join(dir,'model.mjs')).href);
-const { collectFeedbackContext, parseFeedbackUserAgent, feedbackStatusText, redactFeedbackError, recordFeedbackError, lastFeedbackError, observeFeedbackErrors, createFeedbackSender, assertFeedbackQueueCapacity, feedbackScreenshot, validateFeedbackInput, openFeedback } = model;
+const { collectFeedbackContext, parseFeedbackUserAgent, feedbackStatusText, redactFeedbackError, recordFeedbackError, lastFeedbackError, observeFeedbackErrors, createFeedbackSender, assertFeedbackQueueCapacity, validateFeedbackInput, openFeedback, chooseFeedbackTarget, feedbackIssueUrl } = model;
 const context = collectFeedbackContext({ version: '0.3.1', versionCode: 42, page: '会话', agentId: 'ccdesk', sessionId: 'synthetic-session', lastError: '请求超时' }, 'Android 16; TestPhone Build/TEST; wv)');
 const input = (extra = {}) => ({ clientId: randomUUID(), text: '返回后看不到会话', context, ...extra });
 function memoryQueue() {
@@ -92,25 +92,27 @@ test('queue is bounded and a full queue rejects the new item without deleting pr
 test('feedback status labels reflect human triage without losing issue/version/reason',()=>{
   assert.equal(feedbackStatusText({state:'received'}),'已收到');assert.equal(feedbackStatusText({state:'filed',issue:12}),'已提交 #12');
   assert.equal(feedbackStatusText({state:'fixed',version:'0.3.2'}),'已修复，在 0.3.2');assert.equal(feedbackStatusText({state:'dismissed',reason:'已有相同反馈'}),'未采纳：已有相同反馈');
+  assert.equal(feedbackStatusText({state:'received'},'mobicodex'),'正在提交到 GitHub');
+  assert.equal(feedbackStatusText({state:'retrying',reason:'电脑连不上 GitHub'},'mobicodex'),'还没提交上，电脑会自动重试：电脑连不上 GitHub');
+  assert.equal(feedbackIssueUrl({state:'filed',issue:12,repo:'example-owner/example-repo'}),'https://github.com/example-owner/example-repo/issues/12');
+  for (const status of [{state:'filed',issue:12},{state:'filed',issue:12,repo:'javascript:alert(1)//x'},{state:'received'}]) assert.equal(feedbackIssueUrl(status),'');
 });
-test('screenshot MIME comes from the header, not the chosen name/type, with a 5MiB ceiling',async t=>{
-  const old=globalThis.FileReader;t.after(()=>{if(old===undefined)delete globalThis.FileReader;else globalThis.FileReader=old;});
-  globalThis.FileReader=class{async readAsDataURL(file){this.result=`data:application/octet-stream;base64,${Buffer.from(await file.arrayBuffer()).toString('base64')}`;this.onload();}};
-  const png=new File([new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,0])],'misleading.txt',{type:'text/plain'});
-  assert.equal((await feedbackScreenshot(png)).mimeType,'image/png');
-  await assert.rejects(feedbackScreenshot(new File(['<svg/>'],'fake.png',{type:'image/png'})),/有效/);
-  await assert.rejects(feedbackScreenshot({size:5*1024*1024+1}),/5MiB/);
+test('target choice: a remembered repo wins while offered, an explicit "computer only" sticks, otherwise the first repo', () => {
+  const targets = [{ id: 'a', label: 'A', repo: 'o/a', public: true }, { id: 'b', label: 'B', repo: 'o/b', public: false }];
+  assert.equal(chooseFeedbackTarget(targets, null), 'a'); assert.equal(chooseFeedbackTarget(targets, 'b'), 'b');
+  assert.equal(chooseFeedbackTarget(targets, 'gone'), 'a'); assert.equal(chooseFeedbackTarget(targets, ''), ''); assert.equal(chooseFeedbackTarget([], null), '');
+  assert.throws(() => validateFeedbackInput(input({ target: 'Not Valid' })), /仓库无效/); validateFeedbackInput(input({ target: 'mobicodex' }));
 });
 
 const uiSource=await fs.readFile('apps/mobile/src/features/feedback/FeedbackHost.tsx','utf8');
 const ast=ts.createSourceFile('feedback.tsx',uiSource,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
 const body=ast.statements.filter(node=>!ts.isImportDeclaration(node)).map(node=>node.getText(ast)).join('\n').replaceAll('export function','function');
-const ui=ts.transpileModule(body,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext,jsx:ts.JsxEmit.React,jsxFactory:'h'}}).outputText;
+const ui=ts.transpileModule(body,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext,jsx:ts.JsxEmit.React,jsxFactory:'h',jsxFragmentFactory:'Fragment'}}).outputText;
 async function componentSource(file) {
   const source = await fs.readFile(file, 'utf8');
   const ast = ts.createSourceFile('component.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const body = ast.statements.filter(node => !ts.isImportDeclaration(node)).map(node => node.getText(ast)).join('\n').replaceAll('export function', 'function').replaceAll('export type', 'type');
-  return ts.transpileModule(body, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.React, jsxFactory: 'h' } }).outputText;
+  return ts.transpileModule(body, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.React, jsxFactory: 'h', jsxFragmentFactory: 'Fragment' } }).outputText;
 }
 function uiDriver(name,props,overrides={},source=ui) {
   const slots=[],effects=[],events=new EventTarget();let cursor=0,dirty=true,tree;const layers=[],timers=new Map();let nextTimer=0;
@@ -118,7 +120,7 @@ function uiDriver(name,props,overrides={},source=ui) {
     document:{hidden:false,activeElement:null,addEventListener(){},removeEventListener(){}},navigator:{onLine:true,userAgent:'Android 16; TestPhone Build/TEST; wv)'},HTMLElement:class{},
     appVersionName:'0.3.1',appVersionCode:42,
     observeFeedbackErrors:()=>()=>{},relayAuthorization:()=>({isRevoked:()=>false,subscribe:()=>()=>{}}),buildUrl:(_endpoint,route)=>route,
-    useCaptureVoice:()=>({}),VoiceInput:'VoiceInput',X:'X',createPortal:child=>child,useBackLayer:(open,close,priority)=>{layers.push({open,close,priority});},
+    useCaptureVoice:()=>({}),VoiceInput:'VoiceInput',X:'X',Fragment:'Fragment',createPortal:child=>child,useBackLayer:(open,close,priority)=>{layers.push({open,close,priority});},
     useState(value){const i=cursor++;slots[i]??={value:typeof value==='function'?value():value};return[slots[i].value,next=>{const value=typeof next==='function'?next(slots[i].value):next;dirty||=value!==slots[i].value;slots[i].value=value;}];},
     useRef(value){return slots[cursor++]??={current:value};},useMemo(action,dependencies){const i=cursor++,old=slots[i];if(!old||dependencies.some((value,j)=>value!==old.dependencies[j]))slots[i]={value:action(),dependencies};return slots[i].value;},
     useEffect(setup,dependencies){const i=cursor++,old=slots[i];if(!old||dependencies.some((value,j)=>value!==old.dependencies[j]))effects.push(()=>{old?.cleanup?.();slots[i]={dependencies,cleanup:setup()};});},
@@ -136,13 +138,13 @@ test('settings exposes a reusable openFeedback and the App mounts it alongside t
   try{const host=findElement(f.render(),'FeedbackHost');assert.equal(host.props.navigation.agentId,'ccdesk');assert.equal(host.props.navigation.sessionId,'synthetic-session');assert.equal(host.props.scope,f.scope);}finally{f.stop();}
   const settings=await fs.readFile('apps/mobile/src/app/GlobalSettings.tsx','utf8');assert.match(settings,/onClick={\(\) => openFeedback\(\)}>反馈问题/);
 });
-test('global opening freezes current context and optional text/screenshot without changing Agent navigation',async t=>{
+test('global opening freezes current context and optional text without changing Agent navigation',async t=>{
   const storage=memoryQueue(),navigation=navigationModel.agentSession('ccdesk','synthetic-session');
   recordFeedbackError('scope-a','最近的会话错误');
   const f=uiDriver('FeedbackHost',{scope:'scope-a',endpoint:'',token:'',navigation,page:'设置'},{feedbackQueueStorage:()=>storage});t.after(()=>f.stop());
   const old=globalThis.window;globalThis.window=f.events;t.after(()=>{if(old===undefined)delete globalThis.window;else globalThis.window=old;});
-  const screenshot=new File(['image'],'capture.png');openFeedback({text:'预填描述',screenshot});
-  const sheet=f.render();assert.equal(sheet.props.options.text,'预填描述');assert.equal(sheet.props.options.screenshot,screenshot);assert.equal(sheet.props.context.agentId,'ccdesk');assert.equal(sheet.props.context.page,'设置');assert.equal(sheet.props.context.lastError,'最近的会话错误');
+  openFeedback({text:'预填描述'});
+  const sheet=f.render();assert.equal(sheet.props.options.text,'预填描述');assert.equal(sheet.props.context.agentId,'ccdesk');assert.equal(sheet.props.context.page,'设置');assert.equal(sheet.props.context.lastError,'最近的会话错误');
   assert.deepEqual(navigation,navigationModel.agentSession('ccdesk','synthetic-session'));await f.settle();
 });
 test('feedback sheet uses raw voice input, keeps form on persistence failure and single-flights submission',async t=>{
@@ -164,7 +166,7 @@ test('offline feedback is persisted and retried on resume using the same UUID; c
   f.stop();assert.equal(f.timers.size,0);f.events.dispatchEvent(new Event('online'));await f.settle();assert.equal(calls,1);
 });
 
-test('an invalid queued screenshot remains saved but does not block a later valid feedback',async()=>{
+test('a queued entry the computer rejects stays saved but does not block a later valid feedback',async()=>{
   const storage=memoryQueue(),bad=input(),good=input();await queue(storage,'scope-a',bad);await queue(storage,'scope-a',good);
   const sender=createFeedbackSender({scope:'scope-a',storage,active:()=>true,changed:()=>{},post:async value=>{if(value.clientId===bad.clientId)throw Object.assign(new Error('invalid image'),{status:422});return receipt(value);}});
   await assert.rejects(sender.flush(),/invalid image/);assert.deepEqual((await storage.list('scope-a')).map(entry=>entry.input.clientId),[bad.clientId]);
@@ -264,63 +266,63 @@ function shareFilePorts(t, bytes) {
 }
 const pngBytes = new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,0]);
 
-test('share text includes subject once, stays editable and reserves room for the multi-image count within 2000 characters', async () => {
-  const signal = new AbortController().signal;
-  const textOnly = await model.shareFeedbackOptions(sharePayload({ text: '字'.repeat(2100), subject: null }), signal);
-  assert.equal(textOnly.text.length, 2000); assert.equal(textOnly.screenshot, undefined);
-  const short = await model.shareFeedbackOptions(sharePayload(), signal); assert.equal(short.text, '分享标题\n分享正文');
-  const invalid = shareImage({ mimeType: 'image/gif' });
-  const many = await model.shareFeedbackOptions(sharePayload({ text: '字'.repeat(2100), images: [invalid,invalid,invalid] }), signal);
-  assert.equal(many.text.length, 2000); assert.ok(many.text.endsWith('另有 3 张图未附上')); assert.match(many.notice, /仅支持/);
+test('share prefills text only; shared images are left out with a visible note and never read', async t => {
+  const requests = shareFilePorts(t, pngBytes);
+  const textOnly = model.shareFeedbackOptions(sharePayload({ text: '字'.repeat(2100), subject: null }));
+  assert.equal(textOnly.text.length, 2000); assert.equal(textOnly.notice, undefined);
+  assert.equal(model.shareFeedbackOptions(sharePayload()).text, '分享标题\n分享正文');
+  const withImages = model.shareFeedbackOptions(sharePayload({ images: [shareImage(), shareImage({ mimeType: 'image/gif' })] }));
+  assert.equal(withImages.text, '分享标题\n分享正文'); assert.match(withImages.notice, /2 张图没有附上/); assert.equal('screenshot' in withImages, false);
+  assert.equal(requests.length, 0);
+  const f = uiDriver('FeedbackSheet', { scope: 'entry-scope', endpoint: '', token: '', options: withImages, context, queued: [], revision: 0, storageError: '', close() {}, submit: async () => assert.fail('must not submit') });
+  t.after(() => f.stop()); assert.ok(f.text().includes(withImages.notice)); assert.equal(f.find(node => node.type === 'textarea').props.value, withImages.text);
 });
 
-test('share accepts one PNG/JPEG/WebP, reads only the first image, reports omitted images and checks actual file bytes', async t => {
-  const requests = shareFilePorts(t, pngBytes), signal = new AbortController().signal;
-  for (const [mimeType, bytes] of [['image/png',pngBytes],['image/jpeg',new Uint8Array([255,216,255,0])],['image/webp',new TextEncoder().encode('RIFF0000WEBP')]]) {
-    globalThis.fetch = async (_url, init) => { requests.push(init); return new Response(bytes); };
-    const options = await model.shareFeedbackOptions(sharePayload({ images: [shareImage({ mimeType })] }), signal);
-    assert.ok(options.screenshot instanceof File); assert.equal(options.notice, undefined); assert.equal(options.text, '分享标题\n分享正文');
-    assert.equal((await feedbackScreenshot(options.screenshot)).mimeType, mimeType);
-  }
-  const before = requests.length;
-  const options = await model.shareFeedbackOptions(sharePayload({ text: '字'.repeat(2200), images: [shareImage(),shareImage(),shareImage()] }), signal);
-  assert.equal(requests.length - before, 1); assert.equal(requests.at(-1).signal, signal);
-  assert.equal(options.text.length, 2000); assert.ok(options.text.endsWith('另有 2 张图未附上'));
-  const boundary = new Uint8Array(5*1024*1024); boundary.set(pngBytes);
-  globalThis.fetch = async () => new Response(boundary);
-  const exact = await model.shareFeedbackOptions(sharePayload({ images: [shareImage({ size: boundary.length })] }), signal);
-  assert.equal(exact.screenshot.size, 5*1024*1024); assert.equal(exact.notice, undefined);
-});
 
-test('share rejects unsupported, oversized, empty, corrupt and unreadable screenshots with a visible sheet explanation', async t => {
-  const requests = shareFilePorts(t, pngBytes), signal = new AbortController().signal;
-  for (const [image, reason] of [[shareImage({ mimeType: 'image/gif' }), /仅支持/], [shareImage({ size: 5*1024*1024+1 }), /5MiB/]]) {
-    const before = requests.length;
-    const options = await model.shareFeedbackOptions(sharePayload({ images: [image] }), signal);
-    assert.equal(options.screenshot, undefined); assert.match(options.notice, reason); assert.equal(requests.length, before);
-    const f = uiDriver('FeedbackSheet', { scope: 'entry-scope', endpoint: '', token: '', options, context, queued: [], revision: 0, storageError: '', close() {}, submit: async () => assert.fail('must not submit') });
-    t.after(() => f.stop()); assert.ok(f.text().includes(options.notice)); assert.equal(f.find(node => node.type === 'textarea').props.value, options.text);
-  }
-  for (const bytes of [new Uint8Array(0), new TextEncoder().encode('<svg/>'), new Uint8Array(5*1024*1024+1)]) {
-    globalThis.fetch = async () => new Response(bytes);
-    const options = await model.shareFeedbackOptions(sharePayload({ images: [shareImage()] }), signal);
-    assert.equal(options.screenshot, undefined); assert.match(options.notice, /无法读取.*5MiB/);
-  }
-  globalThis.fetch = async () => new Response('', { status: 404 });
-  const options = await model.shareFeedbackOptions(sharePayload({ images: [shareImage()] }), signal);
-  assert.equal(options.screenshot, undefined); assert.match(options.notice, /无法读取/);
-});
 
-test('share sheet closes before opening feedback, never routes to chat and ignores cancelled preparation', async t => {
+test('share sheet closes before opening feedback and never routes to chat', async t => {
   const source = await componentSource('apps/mobile/src/features/intake/ShareSheet.tsx');
-  let resolve, signal; const events = [], options = { text: '分享预填', notice: '分享图片未附上：截图最多 5MiB。' };
+  const events = [], options = { text: '分享预填', notice: '反馈不带图片，分享的 1 张图没有附上，请用文字写清看到的情况。' };
+  let shared;
   const f = uiDriver('ShareSheet', { payload: sharePayload(), currentTitle: '当前', onCancel: () => events.push('closed'), onChoose: async () => assert.fail('no chat action') }, {
-    shareText: model.shareText, Capacitor: model.Capacitor, shareFeedbackOptions: async (_payload, value) => { signal = value; return new Promise(done => { resolve = done; }); },
+    shareText: model.shareText, Capacitor: model.Capacitor, shareFeedbackOptions: value => { shared = value; return options; },
     openFeedback: value => events.push(value),
   }, source); t.after(() => f.stop());
-  f.button('反馈问题').props.onClick(); assert.equal(f.button('反馈问题').props.disabled, true);
-  resolve(options); await f.settle(); assert.deepEqual(events, ['closed', options]);
-  events.length = 0; f.button('反馈问题').props.onClick();
-  f.button('取消').props.onClick(); assert.equal(signal.aborted, true);
-  resolve(options); await f.settle(); assert.deepEqual(events, ['closed']);
+  f.button('反馈问题').props.onClick(); await f.settle();
+  assert.deepEqual(events, ['closed', options]); assert.deepEqual(shared, sharePayload());
+});
+
+const repo = 'example-owner/example-repo', targets = [{ id: 'mobicodex', label: 'MobiCodex', repo, public: true }];
+const targetRoutes = (items = []) => async route => route === '/api/feedback/targets' ? { targets } : { items };
+test('a GitHub target needs a preview first; confirming sends the previewed text with the target, going back keeps the text', async t => {
+  const posts = [], sent = [], preview = { target: targets[0], title: '手机反馈：返回后看不到会话', body: '返回后看不到会话\n\n| 项目 | 内容 |' };
+  const filed = { ...receipt(input()), id: 'filed-receipt', target: 'mobicodex', status: { state: 'filed', issue: 5, repo } };
+  const props = { scope: 'scope-a', endpoint: 'synthetic', token: 'synthetic', options: { text: '返回后看不到会话' }, context, queued: [], revision: 0, storageError: '', close() {}, submit: async value => { sent.push(value); } };
+  const f = uiDriver('FeedbackSheet', props, { apiGet: targetRoutes([filed]), apiPost: async (route, _token, value) => { posts.push([route, value]); return preview; } });
+  t.after(() => f.stop()); await f.settle();
+  assert.equal(f.find(node => node.type === 'select').props.value, 'mobicodex'); assert.ok(f.text().includes('只存到电脑')); assert.match(f.text(), /会先预览/);
+  assert.equal(f.button('提交反馈'), undefined);
+  const link = f.find(node => node.type === 'a'); assert.equal(link.props.href, `https://github.com/${repo}/issues/5`); assert.equal(link.props.children.join(''), '已提交 #5');
+  f.button('预览').props.onClick(); await f.settle();
+  assert.deepEqual(posts, [['/api/feedback/preview', { text: '返回后看不到会话', context, target: 'mobicodex' }]]); assert.equal(sent.length, 0);
+  for (const shown of [`将公开发布到 ${repo}`, preview.title, '| 项目 | 内容 |']) assert.ok(f.text().includes(shown), shown);
+  assert.equal(f.find(node => node.type === 'textarea'), undefined);
+  f.button('返回修改').props.onClick(); f.render();
+  assert.equal(f.find(node => node.type === 'textarea').props.value, '返回后看不到会话');
+  f.button('预览').props.onClick(); await f.settle(); f.button('确认提交').props.onClick(); await f.settle();
+  assert.equal(sent.length, 1); assert.equal(sent[0].target, 'mobicodex'); assert.equal(sent[0].text, '返回后看不到会话');
+  assert.match(f.text(), new RegExp(`已交给电脑提交到 ${repo}`)); assert.equal(f.find(node => node.type === 'textarea').props.value, '');
+});
+test('"computer only" skips the preview, an older computer without targets keeps the old flow, and preview needs a connection', async t => {
+  const sent = [], props = { scope: 'scope-a', endpoint: 'synthetic', token: 'synthetic', options: { text: '描述' }, context, queued: [], revision: 0, storageError: '', close() {}, submit: async value => { sent.push(value); } };
+  const f = uiDriver('FeedbackSheet', props, { apiGet: targetRoutes(), apiPost: async () => assert.fail('no preview') }); t.after(() => f.stop());
+  await f.settle(); f.find(node => node.type === 'select').props.onChange({ target: { value: '' } }); f.render();
+  f.button('提交反馈').props.onClick(); await f.settle();
+  assert.equal(sent.length, 1); assert.equal('target' in sent[0], false);
+  const old = uiDriver('FeedbackSheet', props, { apiGet: async route => { if (route === '/api/feedback/targets') throw Object.assign(new Error('not found'), { status: 404 }); return { items: [] }; } });
+  t.after(() => old.stop()); await old.settle();
+  assert.equal(old.find(node => node.type === 'select'), undefined); assert.match(old.text(), /不会直接发布到 GitHub/); assert.ok(old.button('提交反馈'));
+  const offline = uiDriver('FeedbackSheet', props, { apiGet: targetRoutes(), apiPost: async () => assert.fail('offline') }); t.after(() => offline.stop());
+  await offline.settle(); offline.deps.navigator.onLine = false; offline.button('预览').props.onClick(); await offline.settle();
+  assert.match(offline.text(), /预览要连着电脑/); assert.equal(sent.length, 1); assert.ok(offline.find(node => node.type === 'textarea'));
 });

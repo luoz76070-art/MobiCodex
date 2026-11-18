@@ -8,6 +8,7 @@ import { claudeConfigSchema } from "../agents/claudeProtocol.js";
 import { deepSeekConfigSchema } from "../agents/deepSeekProtocol.js";
 import { ccDeskConfigSchema } from "../agents/ccDeskProtocol.js";
 import { claudeCliConfigSchema } from "../agents/claudeCliAdapter.js";
+import { feedbackConfigSchema } from "../feedback/github.js";
 
 const absolutePath = z.string().refine(value => path.isAbsolute(value));
 const secret = z.string().min(32).max(512);
@@ -22,6 +23,7 @@ const schema = z.object({
   ccdesk: ccDeskConfigSchema.optional(),
   claudeCli: claudeCliConfigSchema.optional(),
   keepAwake: z.boolean().default(true),
+  feedback: feedbackConfigSchema.optional(),
 }).strict();
 export type ManagedConfig = z.infer<typeof schema>;
 
