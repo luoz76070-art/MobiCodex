@@ -1,6 +1,0 @@
-# Android icons are VectorDrawables; use prepare_mobicodex_branding.py instead.
-# Keep this compatibility configuration from regenerating legacy launcher names.
-flutter_launcher_icons:
-  android: false
-  ios: false
-  image_path: assets/app_icon.png

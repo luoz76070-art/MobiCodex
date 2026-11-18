@@ -118,7 +118,6 @@ flowchart LR
 | `apps/mobile` | MobiCodex Android App：React 页面 + Capacitor 原生壳（录音、更新、凭据、系统栏与取色） |
 | `apps/relay` | Fastify API、Codex Desktop IPC、Broker 与 Tunnel |
 | `plugins` | 电脑网关及其他 Agent 的接入包 |
-| `apps/kelivo`、`integrations/kelivo`、`releases/android/kelivo-preview` | 已停止的 Kelivo 整合版（0.1.x）源码、构建契约与历史发布 |
 
 Node.js 22+、pnpm 10.20.0；Android 构建需要 Android SDK 35 与 JDK 21+（lint 用 JDK 17）。
 
@@ -136,4 +135,4 @@ gradle --project-dir apps/mobile/android :app:assembleRelease
 
 MobiCodex App 与电脑网关源自 Codex To Phone，按 [MIT 许可](LICENSE) 发行。App 内置 `@material/material-color-utilities` 的一小部分（Apache-2.0，见 `apps/mobile/src/vendor/material-color-utilities`），用于和系统动态取色保持一致。各依赖沿用其原许可。
 
-0.1.x 整合版的 AI 部分来自 [Chevey339/Kelivo](https://github.com/Chevey339/kelivo)（固定 v1.3.4 / `4a7da9b6`），按随附 [GNU AGPL v3](apps/kelivo/LICENSE) 发行；这些历史版本的源码归档、来源与修改清单见 [integrations/kelivo](integrations/kelivo/README.md)。感谢 Kelivo 及其贡献者。
+0.1.x 整合版的 AI 部分来自 [Chevey339/Kelivo](https://github.com/Chevey339/kelivo)（固定 v1.3.4 / `4a7da9b6`），按随附 [GNU AGPL v3](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/apps/kelivo/LICENSE) 发行；这些历史版本的源码、来源与修改清单保存在归档 tag [`archive/pre-cleanup-2026-11`](https://github.com/luoz76070-art/MobiCodex/tree/archive/pre-cleanup-2026-11/integrations/kelivo)，各版本的 GitHub Release 也附有对应源码包。感谢 Kelivo 及其贡献者。

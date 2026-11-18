@@ -31,11 +31,9 @@
 
 成功后解析 `apps/mobile/android/app/build/reports/lint-results-debug.xml`，输出Error/Fatal/Warning计数；有Error/Fatal仍判失败。Warning保留并报告，不添加baseline或关闭规则掩盖。
 
-## Kelivo整合原生检查
+## Kelivo整合版（已归档）
 
-整合宿主独立使用 `node scripts/verify-kelivo.mjs`；加 `--preview` 生成并校验签名预览，`--repeat-tests` 强制复跑原生 Test。它运行完整宿主/远控 `lintRelease` 与原生全量测试；原 `verify:android` / `verify:all` 继续检查原独立远控Android，不自动包含Flutter工程。
-
-固定Flutter、锁文件、JDK测试环境、镜像参数及产物路径见[integrations/kelivo](../integrations/kelivo/README.md)，其中包含独立模拟器instrumentation命令；adb外层退出0不能代替report通过。Flutter重大整合仍须独立执行分析/全量及markstream检查；同根多套Flutter测试顺序运行。本轮交接回归在`test:mobile`中，实际发送函数与主题effect均覆盖；原生界面、真实服务与59组完整对照分开验收，证据见[交接审计](audits/2026-11-06/kelivo-handoff.md)及[证据账本](audits/2026-11-06/kelivo-parity-evidence.md)。
+0.1.x Kelivo 整合版已停止维护，源码、`verify-kelivo.mjs` 和构建说明在归档 tag [`archive/pre-cleanup-2026-11`](https://github.com/luoz76070-art/MobiCodex/tree/archive/pre-cleanup-2026-11/integrations/kelivo) 里。
 
 ## JS/TS lint边界
 

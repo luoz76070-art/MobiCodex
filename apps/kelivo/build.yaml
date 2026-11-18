@@ -1,8 +1,0 @@
-targets:
-  $default:
-    builders:
-      drift_dev:
-        options:
-          sqlite_modules:
-            - fts5
-            - json1
