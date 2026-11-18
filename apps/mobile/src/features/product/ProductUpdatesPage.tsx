@@ -7,11 +7,7 @@ import { apkBusy, apkCanContinue, readAndroidUpdateManifest } from "../updates/a
 import { ApkUpdateProgress } from "../updates/ApkUpdateProgress";
 import { useApkUpdate } from "../updates/useApkUpdate";
 import { useHotUpdate } from "../updates/hotUpdate";
-import { isKelivoHost, productBeforeNavigate } from "./host";
-import { productDisplayName, productVersionCode as kelivoVersionCode, productVersionLabel as kelivoVersionLabel } from "./identity";
-
-const productVersionCode = isKelivoHost ? kelivoVersionCode : appVersionCode;
-const productVersionLabel = isKelivoHost ? kelivoVersionLabel : appVersionLabel;
+import { productBeforeNavigate } from "./host";
 
 export function ProductUpdatesPage({ onBack }: { onBack: () => void }) {
   const apk = useApkUpdate();
@@ -21,7 +17,7 @@ export function ProductUpdatesPage({ onBack }: { onBack: () => void }) {
   const request = useRef<AbortController | null>(null);
   const busy = apk.pending || apkBusy(apk.status);
   const ready = apkCanContinue(apk.status);
-  const available = Boolean(manifest && manifest.versionCode > (apk.status?.nativeVersionCode ?? productVersionCode));
+  const available = Boolean(manifest && manifest.versionCode > (apk.status?.nativeVersionCode ?? appVersionCode));
 
   const check = useCallback(async () => {
     if (request.current) return;
@@ -62,8 +58,8 @@ export function ProductUpdatesPage({ onBack }: { onBack: () => void }) {
     <div className="product-updates-body">
       <section className="product-update-card" aria-label="应用版本">
         <span className="product-update-icon"><Download size={28} /></span>
-        <h2>{productDisplayName}</h2>
-        <p>当前版本 {productVersionLabel}</p>
+        <h2>MobiCodex</h2>
+        <p>当前版本 {appVersionLabel}</p>
         <p className="product-update-summary" role="status">{checking ? "正在检查新版本…" : error ? "暂时无法检查更新" : available ? `发现新版本 v${manifest?.versionName}` : checked ? "当前已是最新版本" : "尚未检查更新"}</p>
       </section>
       {manifest?.notes && <section className="product-update-card"><h2>版本说明</h2><p className="product-update-notes">{manifest.notes}</p></section>}
@@ -78,7 +74,7 @@ export function ProductUpdatesPage({ onBack }: { onBack: () => void }) {
           {busy ? <Loader2 size={18} className="spin" /> : <Download size={18} />}<span>{apk.status?.phase === "permission_required" ? "允许安装并继续" : ready ? "继续安装" : "下载并安装"}</span>
         </button>
       </div>
-      {!isKelivoHost && <HotUpdateCard nativeVersionCode={apk.status?.nativeVersionCode ?? productVersionCode} />}
+      <HotUpdateCard nativeVersionCode={apk.status?.nativeVersionCode ?? appVersionCode} />
       <p className="product-update-help">更新会保留应用内的设置和数据。下载完成后，由 Android 系统确认安装；首次更新可能需要允许安装此应用的更新。</p>
       {!apk.supported && <p className="update-note" role="alert">请在 Android App 内使用下载与安装功能。</p>}
     </div>

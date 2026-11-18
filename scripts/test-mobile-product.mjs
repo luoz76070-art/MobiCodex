@@ -9,14 +9,6 @@ import ts from 'typescript';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const agentSource = await readFile(path.join(root, 'apps/mobile/src/features/agents/AgentWorkspace.tsx'), 'utf8');
 const agentAst = ts.createSourceFile('AgentWorkspace.tsx', agentSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-const productSource = await readFile(path.join(root, 'apps/mobile/src/features/product/ProductRemoteShell.tsx'), 'utf8');
-const productAst = ts.createSourceFile('ProductRemoteShell.tsx', productSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-let productLifecycle;
-function visitProduct(node) {
-  if (ts.isCallExpression(node) && node.expression.getText(productAst) === 'useEffect' && node.arguments[0]?.getText(productAst).includes('ProductHost.getState')) productLifecycle = node.arguments[0].getText(productAst);
-  ts.forEachChild(node, visitProduct);
-}
-visitProduct(productAst); assert.ok(productLifecycle);
 let agentDraftLifecycle;
 function visit(node) {
   if (ts.isCallExpression(node) && node.expression.getText(agentAst) === 'useEffect') {
@@ -33,16 +25,14 @@ await writeFile(shim, 'export const registerPlugin = () => new Proxy({}, {get: (
 await build({ stdin: { contents: `
 import { saveAgentDrafts } from './apps/mobile/src/features/agents/runtime';
 import { productBeforeNavigate } from './apps/mobile/src/features/product/host';
-import { applyProductAppearance, isKelivoHost, ProductHost, productAppearanceChanged, setProductSettingsLaunch, type ProductAppearance } from './apps/mobile/src/features/product/host';
 export * from './apps/mobile/src/features/product/host';
 export * from './apps/mobile/src/shared/format';
 export * from './apps/mobile/src/features/chat/readingPositions';
 export * from './apps/mobile/src/features/chat/runtime';
 export * from './apps/mobile/src/features/agents/runtime';
 export function bindAgentDraftLifecycle(scope, draftsRef, setError = () => {}) { return (${agentDraftLifecycle})(); }
-export function bindProductLifecycle(onComputerSettings, onHandoff, setReady, setError, setUpdates = () => {}) { return (${productLifecycle})(); }
 `, resolveDir: root, loader: 'ts' }, bundle: true, format: 'esm', platform: 'node', outfile: path.join(temp, 'product.mjs'),
-  alias: { '@capacitor/core': shim }, define: { 'import.meta.env': '{"VITE_KELIVO_HOST":"android"}' } });
+  alias: { '@capacitor/core': shim } });
 const m = await import(pathToFileURL(path.join(temp, 'product.mjs')));
 test.after(() => rm(temp, { recursive: true, force: true }));
 function fixture(t) {
@@ -53,16 +43,7 @@ function fixture(t) {
   t.after(() => { Object.assign(globalThis, saved); delete globalThis.__productHost; });
   return values;
 }
-test('navigation flushes before the native switch; failed input saving cancels it', async t => {
-  fixture(t); const order = [];
-  globalThis.__productHost = { navigate: async value => order.push(value.tab) };
-  window.addEventListener(m.productBeforeNavigate, () => order.push('saved'));
-  await m.navigateProduct('settings'); assert.deepEqual(order, ['saved', 'settings']);
-  window.addEventListener(m.productBeforeNavigate, event => event.preventDefault());
-  await assert.rejects(m.navigateProduct('ai'), /输入保存/);
-  assert.deepEqual(order, ['saved', 'settings', 'saved']);
-});
-test('appearance uses the Flutter brightness and valid palette, including system mode', t => {
+test('appearance uses the reported brightness and valid palette, including system mode', t => {
   fixture(t); const values = new Map();
   globalThis.document = { documentElement: { dataset: {}, style: { setProperty: (k,v) => values.set(k,v), removeProperty: k => values.delete(k) } } };
   const appearance = { mode: 'system', dark: false, colors: { primary: '#123456', background: 'url(unsafe)' } };
@@ -94,28 +75,6 @@ test('message timestamps show local date and seconds without throwing on absent 
   assert.equal(m.formatMessageTime('2026-11-06T13:57:10'), '2026-11-06 13:57:10');
   assert.equal(m.formatMessageTime(''), '');
   assert.equal(m.formatMessageTime('invalid'), '');
-});
-test('actual product effect receives Flutter updates, ignores stale startup palette and removes its listener', async t => {
-  fixture(t); let release; const ready = [], errors = [];
-  globalThis.document = { documentElement: { dataset: {}, style: {setProperty() {}, removeProperty() {}} } };
-  globalThis.__productHost = { getState: () => new Promise(resolve => { release = resolve; }) };
-  const cleanup = m.bindProductLifecycle(() => {}, () => {}, value => ready.push(value), value => errors.push(value));
-  const changed = dark => window.dispatchEvent(Object.assign(new Event(m.productAppearanceChanged), {detail:{mode:'system',dark}}));
-  changed(true); assert.equal(document.documentElement.dataset.theme, 'dark');
-  release({revision:1,appearance:{mode:'system',dark:false}}); await new Promise(resolve => setImmediate(resolve));
-  assert.equal(document.documentElement.dataset.theme, 'dark'); assert.deepEqual(ready, [true]); assert.deepEqual(errors, []);
-  changed(false); assert.equal(document.documentElement.dataset.theme, 'light');
-  cleanup(); changed(true); assert.equal(document.documentElement.dataset.theme, 'light');
-});
-test('native app-update launch selects the update page before computer settings or handoff can mount', async t => {
-  fixture(t); const selected = [], computer = [], ready = [];
-  globalThis.document = { documentElement: { dataset: {}, style: {setProperty() {}, removeProperty() {}} } };
-  globalThis.__productHost = { getState: async () => ({revision:1,openUpdates:true,appearance:{dark:false}}) };
-  const cleanup = m.bindProductLifecycle(() => computer.push(true), () => {}, value => ready.push(value), () => {}, value => selected.push(value));
-  await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(selected, [true]); assert.deepEqual(computer, []); assert.deepEqual(ready, [true]);
-  assert.equal(m.takeProductSettingsLaunch(), false);
-  cleanup();
 });
 test('recreated remote restores independent drafts, attachment metadata and pending delivery without control tokens', t => {
   const values = fixture(t);
@@ -158,20 +117,19 @@ test('Agent draft persistence reports storage failure before leaving the activit
   assert.equal(m.saveAgentDrafts('profile', drafts, { setItem() { throw new Error('synthetic quota'); } }), false);
 });
 test('actual Agent lifecycle flushes the current draft and blocks navigation on failure', async t => {
-  fixture(t); const navigations = [];
-  globalThis.__productHost = { navigate: async value => navigations.push(value.tab) };
+  fixture(t);
+  const leave = () => window.dispatchEvent(new Event(m.productBeforeNavigate, { cancelable: true }));
   const errors = [], draftsRef = { current: {} }, release = m.bindAgentDraftLifecycle('profile', draftsRef, value => errors.push(value));
   try {
     draftsRef.current = { 'deepseek:12345678-1234-1234-1234-123456789abc': '刚输入的草稿' };
-    await m.navigateProduct('ai');
+    assert.equal(leave(), true);
     assert.deepEqual(m.loadAgentDrafts('profile'), draftsRef.current);
     localStorage.setItem = () => { throw new Error('synthetic quota'); };
-    await assert.rejects(m.navigateProduct('settings'), /输入保存/);
+    assert.equal(leave(), false, 'a failed save keeps the user on the page');
     assert.match(errors.at(-1), /草稿保存失败/);
-    assert.deepEqual(navigations, ['ai']);
   } finally { release(); }
 });
-test('computer rendering honors Kelivo font and tool preferences and resets old snapshots', t => {
+test('computer rendering honors font and tool preferences and resets old snapshots', t => {
   fixture(t); const values = new Map();
   globalThis.document = { documentElement: { dataset: {}, style: { setProperty: (k, v) => values.set(k, v), removeProperty: k => values.delete(k) } } };
   m.applyProductAppearance({ display: { chatFontScale: 1.5, showToolCards: false, showToolResultSummary: true } });

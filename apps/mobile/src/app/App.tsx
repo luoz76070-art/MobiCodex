@@ -19,8 +19,6 @@ import { CapturePanel } from '../features/capture/CapturePanel';
 import { Intake, intakeAvailable, shareFiles, shareText, type SharePayload, type ShortcutPayload } from '../features/intake/plugin';
 import { useIntake } from '../features/intake/useIntake';
 import { ShareSheet, type ShareAction } from '../features/intake/ShareSheet';
-import { migrateHandoff } from '../features/product/handoffMigration';
-import { HandoffMigrationNotice } from '../features/product/HandoffMigrationNotice';
 import { useDeviceRevoked } from "../features/connection/useDeviceRevoked";
 import { deviceRevokedMessage } from "../features/connection/authorization";
 import { ComposerSessionStatus } from "../features/chat/SessionStatus";
@@ -28,15 +26,12 @@ import { codexSessionStatus, readActivityEvidence, resultStatus } from "../featu
 import { createPortal } from "react-dom";
 import { ProductRemoteShell } from "../features/product/ProductRemoteShell";
 import { attentionAfterSend, codexAttentionKey, parseAttentionKey, setAttentionViewing, useAttention, type AttentionTarget } from "../features/notify/attention";
-import { isKelivoHost, productBeforeNavigate, takeProductSettingsLaunch, ProductHost } from "../features/product/host";
-import { productVersionCode } from "../features/product/identity";
-import { HandoffCard } from '../features/product/HandoffCard';
-import { handoffReceiptAcceptance, type ProductHandoff } from '../features/product/handoff';
+import { productBeforeNavigate } from "../features/product/host";
 import { loadReadingPositions, saveReadingPositions } from "../features/chat/readingPositions";
 import { loadWorkspaceCache, saveWorkspaceCache } from "../features/threads/cache";
 import React, { useState, useRef, useMemo, useEffect, useCallback } from "react";
 import { type ConnectionProfile, type SplitMode, type ApprovalPolicy, type SandboxMode, type ThreadSummary, type ThreadRuntime, type RelayStatus, type LoadThreadsOptions, type DesktopActiveResponse, type CodexMessage, type LiveTurnSnapshot, type SendRoute, type PendingAttachment, type DesktopControlResponse, type UploadResponse, type DesktopStreamSnapshot, type LiveApproval, type LiveApprovalDecision, type UserInputRequest } from "./types";
-import { defaultProfileId, defaultSplitMode, defaultApprovalPolicy, defaultSandboxMode, defaultSidePaneSize, defaultTopPaneSize, newThreadId, appVersionCode as standaloneVersionCode, desktopPollActiveMs, desktopPollIdleMs, liveSnapshotThrottleMs, livePollFallbackMs, statusKeepaliveMs } from "./config";
+import { defaultProfileId, defaultSplitMode, defaultApprovalPolicy, defaultSandboxMode, defaultSidePaneSize, defaultTopPaneSize, newThreadId, appVersionCode, desktopPollActiveMs, desktopPollIdleMs, liveSnapshotThrottleMs, livePollFallbackMs, statusKeepaliveMs } from "./config";
 import { loadThreadRuntimeCache, readThreadMessageCacheForDiagnostics, defaultRuntime, getRuntime, saveThreadRuntimeCache, turnProgressPatch, desktopSendControl, desktopRejectedSendPatch, desktopControlOfflinePatch, desktopControlResponsePatch, desktopMessageReceived, desktopInterruptResponsePatch, approvalResponsePatch, threadCacheSaveNotice, type ThreadCacheSaveResult } from "../features/chat/runtime";
 import { makeMessageDiagnostics, readDiagnosticDom } from "../features/chat/messageDiagnostics";
 import { readDiagnosticEnvironment, makeDiagnosticsExport, saveDiagnosticFile } from "../features/chat/diagnosticExport";
@@ -72,14 +67,12 @@ import { VoiceInput } from "../features/voice/VoiceInput";
 
 import { createSnapshotReducer } from "../features/connection/snapshotPatch";
 import { releasedStreamState, subscribeEvents, type SubscriptionState } from "../features/connection/subscription";
-const appVersionCode = isKelivoHost ? productVersionCode : standaloneVersionCode;
 const AgentWorkspace = React.lazy(() => import("../features/agents/AgentWorkspace"));
 
 type SessionEntryRequest = { target: OpenSessionTarget } & (
   | { kind: "notification" | "target" }
   | { kind: "share"; payload: SharePayload }
   | { kind: "shortcut"; payload: ShortcutPayload }
-  | { kind: "handoff"; payload: ProductHandoff }
 );
 type SessionEntry = SessionEntryRequest & { id: number; scope: string; ready?: boolean };
 type IntakeShortcut = { id: number; payload: ShortcutPayload };
@@ -105,7 +98,6 @@ export function App() {
   const [entries, setEntries] = useState<SessionEntry[]>([]);
   const entrySequence = useRef(0);
   const seenShares = useRef(new Set<string>());
-  const receivedHandoffs = useRef(new Map<string, ProductHandoff>());
   const [entryNotice, setEntryNotice] = useState<{ scope: string; id: number; text: string } | null>(null);
   const [entryRetry, setEntryRetry] = useState(0);
   const [initialDraft, setInitialDraft] = useState<CaptureInitialDraft | undefined>();
@@ -141,7 +133,6 @@ export function App() {
     return true;
   }, [scope]);
   useEffect(() => saveNavigation(scope, navigation), [scope, navigation]);
-  const [handoff, setHandoff] = useState<ProductHandoff | null>(null);
   const enqueue = useCallback((value: SessionEntryRequest) => {
     const entry = { ...value, id: ++entrySequence.current, scope };
     setEntries(current => [...current, entry]);
@@ -167,7 +158,6 @@ export function App() {
       if (!navigate(next, true)) return;
       setSettingsOpen(false); setCaptureOpen(false); setItemsOpen(false); setEntryNotice(null);
       setOpenedTarget(entry.target.sessionId !== null && entry.target.sessionId !== newThreadId ? { scope, target: entry.target } : null);
-      if (entry.kind === "handoff") setHandoff(receivedHandoffs.current.get(scope) ?? entry.payload);
       setEntries(current => entry.kind === "share" || entry.kind === "shortcut"
         ? current.map(value => value.id === entry.id ? { ...value, ready: true } : value)
         : current.filter(value => value.id !== entry.id));
@@ -184,25 +174,7 @@ export function App() {
     void openSessionTarget(pendingEntry, controller.signal);
     return () => controller.abort();
   }, [pendingEntry, openSessionTarget, entryRetry]);
-  const receiveHandoff = useCallback((value: ProductHandoff | null) => {
-    const previous = receivedHandoffs.current.get(scope);
-    if (!value) {
-      receivedHandoffs.current.delete(scope); setHandoff(null);
-      setEntries(current => current.filter(entry => entry.scope !== scope || entry.kind !== "handoff"));
-      return;
-    }
-    receivedHandoffs.current.set(scope, value);
-    if (previous?.id === value.id) {
-      setHandoff(current => current?.id === value.id ? value : current);
-      return; // Host state refreshes update the card, never replay navigation or submission.
-    }
-    setEntries(current => current.filter(entry => entry.scope !== scope || entry.kind !== "handoff"));
-    enqueue({ kind: "handoff", target: { agentId: "codex", sessionId: null }, payload: value });
-  }, [scope, enqueue]);
-  const openComputerSettings = useCallback(() => {
-    takeProductSettingsLaunch();
-    setSettingsOpen(true);
-  }, []);
+  const openComputerSettings = useCallback(() => setSettingsOpen(true), []);
   useEffect(() => {
     const back = (event: Event) => {
       if (event.defaultPrevented) return;
@@ -239,7 +211,7 @@ export function App() {
   function openHandoffTarget(target: HandoffTarget) {
     enqueue({ kind: "target", target });
   }
-  return <BackLayersContext.Provider value={backLayers}><ProductRemoteShell onComputerSettings={openComputerSettings} onHandoff={receiveHandoff} notice={entryNotice?.scope === scope && <SystemNotice error>{entryNotice.text}
+  return <BackLayersContext.Provider value={backLayers}><ProductRemoteShell notice={entryNotice?.scope === scope && <SystemNotice error>{entryNotice.text}
       {pendingEntry?.id === entryNotice.id && !pendingEntry.ready && <button type="button" className="text-action" onClick={() => setEntryRetry(value => value + 1)}>重试打开</button>}
       {(pendingEntry?.id !== entryNotice.id || pendingEntry.kind !== "share") && <button type="button" className="text-action" onClick={() => {
         setEntries(current => current.filter(entry => entry.id !== entryNotice.id)); setEntryNotice(null);
@@ -251,7 +223,7 @@ export function App() {
       ? <AgentPicker key={scope} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} onSelect={id => navigate(agentList(id))} onOpenItems={() => setItemsOpen(true)} onOpenSettings={openComputerSettings} />
       : navigation.agentId !== "codex"
         ? <React.Suspense fallback={<main className="agent-workspace"><p className="inline-loading">正在打开 Agent…</p></main>}><AgentWorkspace navigation={navigation} onNavigate={navigate} onBack={requestNavigationBack} onOpenAgents={() => navigate(agentPicker())} onOpenSettings={openComputerSettings} handoffTarget={handoffTarget} onTargetOpened={targetOpened} onCapture={() => setItemsOpen(true)} voiceRecovery={recoveredVoice.recovery} key={`${scope}:${navigation.agentId}`} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} scope={scope} /></React.Suspense>
-        : <Workspace navigation={navigation} onSelectSession={(id, internal) => navigate(id ? agentSession("codex", id) : agentList("codex"), internal)} settingsOpen={settingsOpen} preferences={preferences} onOpenSettings={openComputerSettings} onSettingsTools={setCodexSettings} intakeShare={intakeShare} onShareDone={finishIntakeShare} onCaptureIntake={captureIntake} intakeShortcut={intakeShortcut} onShortcutOpened={shortcutOpened} handoffTarget={handoffTarget} onTargetOpened={targetOpened} onCapture={() => setItemsOpen(true)} voiceRecovery={recoveredVoice.recovery} key={scope} connection={connection} scope={scope} onOpenAgents={() => navigate(agentPicker())} handoff={handoff} onHandoff={setHandoff} />}
+        : <Workspace navigation={navigation} onSelectSession={(id, internal) => navigate(id ? agentSession("codex", id) : agentList("codex"), internal)} settingsOpen={settingsOpen} preferences={preferences} onOpenSettings={openComputerSettings} onSettingsTools={setCodexSettings} intakeShare={intakeShare} onShareDone={finishIntakeShare} onCaptureIntake={captureIntake} intakeShortcut={intakeShortcut} onShortcutOpened={shortcutOpened} handoffTarget={handoffTarget} onTargetOpened={targetOpened} onCapture={() => setItemsOpen(true)} voiceRecovery={recoveredVoice.recovery} key={scope} connection={connection} scope={scope} onOpenAgents={() => navigate(agentPicker())} />}
     <FeedbackHost key={`feedback:${scope}`} scope={scope} endpoint={normalizeEndpoint(connection.endpoint)} token={connection.token} navigation={navigation} page={settingsOpen ? "设置" : navigation.level === "picker" ? "选择 Agent" : navigation.level === "session" ? "会话" : "会话列表"} />
     <BackLayer open={settingsOpen} close={() => setSettingsOpen(false)} priority={50}><GlobalSettings key={`settings:${scope}`} connection={connection} settingsOpen={settingsOpen} onClose={() => setSettingsOpen(false)} onApply={profile => { if (window.dispatchEvent(new Event(productBeforeNavigate, { cancelable: true }))) setConnection(profile); }} preferences={preferences} codex={navigation.agentId === "codex" ? codexSettings : null} /></BackLayer>
     <BackLayer open={Boolean(recoveredVoice.notice)} close={recoveredVoice.dismiss} priority={100}>{recoveredVoice.notice && createPortal(<div className="voice-scrim"><section className="voice-sheet" role="dialog" aria-modal="true" aria-label="语音结果已取回">
@@ -262,7 +234,7 @@ export function App() {
       </section></div>, document.body)}</BackLayer></ProductRemoteShell></BackLayersContext.Provider>;
 }
 
-function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onOpenSettings, onSettingsTools, intakeShare, onShareDone, onCaptureIntake, intakeShortcut, onShortcutOpened, handoffTarget, onTargetOpened, onCapture, voiceRecovery, connection, scope, onOpenAgents, handoff, onHandoff }: { navigation: Navigation; onSelectSession: (id: string | null, internal?: boolean) => boolean; settingsOpen: boolean; preferences: CodexPreferences; onOpenSettings: () => void; onSettingsTools: (tools: CodexSettingsTools | null) => void; intakeShare: SharePayload | null; onShareDone: (id: string) => void; onCaptureIntake: (draft: CaptureInitialDraft) => void; intakeShortcut: IntakeShortcut | null; onShortcutOpened: (id: number) => void; handoffTarget: SessionTarget | null; onTargetOpened: () => void; onCapture: () => void; voiceRecovery: VoiceRecoveryPort; connection: ConnectionProfile; scope: string; onOpenAgents: () => void; handoff: ProductHandoff | null; onHandoff: (value: ProductHandoff | null) => void }) {
+function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onOpenSettings, onSettingsTools, intakeShare, onShareDone, onCaptureIntake, intakeShortcut, onShortcutOpened, handoffTarget, onTargetOpened, onCapture, voiceRecovery, connection, scope, onOpenAgents }: { navigation: Navigation; onSelectSession: (id: string | null, internal?: boolean) => boolean; settingsOpen: boolean; preferences: CodexPreferences; onOpenSettings: () => void; onSettingsTools: (tools: CodexSettingsTools | null) => void; intakeShare: SharePayload | null; onShareDone: (id: string) => void; onCaptureIntake: (draft: CaptureInitialDraft) => void; intakeShortcut: IntakeShortcut | null; onShortcutOpened: (id: number) => void; handoffTarget: SessionTarget | null; onTargetOpened: () => void; onCapture: () => void; voiceRecovery: VoiceRecoveryPort; connection: ConnectionProfile; scope: string; onOpenAgents: () => void }) {
   const scopeAbortRef = useRef(new AbortController());
   const diagnosticJournalRef = useRef(createConnectionJournal());
   const diagnosticEpochRef = useRef(0);
@@ -424,17 +396,8 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
   const sessionStatus = codexSessionStatus(activeRuntime, connectionState === "ok");
   const canControlSelected = Boolean(isNewThread || selected);
   const hasMessageContent = Boolean(draft.trim() || attachments.length > 0);
-  const canSubmitMessage = hasMessageContent && canControlSelected && !submittingMessage && !(activeRuntime.pendingMessageSource === 'handoff' && activeRuntime.pendingMessageId) && (!sending || isLiveTurnActive) && (!(selected && isDesktopSource(selected)) || desktopSend.ready);
+  const canSubmitMessage = hasMessageContent && canControlSelected && !submittingMessage && (!sending || isLiveTurnActive) && (!(selected && isDesktopSource(selected)) || desktopSend.ready);
   const canSend = canSubmitMessage && !(isLiveTurnActive && nativeDesktop && !canQueue);
-  const handoffAcceptance = handoff ? handoffReceiptAcceptance(handoff, scope, selected?.id, desktopCapability) : null;
-  useEffect(() => {
-    if (!handoff || !handoffAcceptance) return;
-    let active = true;
-    ProductHost.handoff({ action: 'confirm', id: handoff.id, clientMessageId: handoff.id, acceptance: handoffAcceptance })
-      .then(result => { if (active && result.handoff) onHandoff(result.handoff); })
-      .catch(() => { /* Retain the durable unknown lock until confirmation can be saved. */ });
-    return () => { active = false; };
-  }, [handoff, handoffAcceptance, onHandoff]);
   const controlText = canUseDesktopIpc
     ? activeRuntime.sending
       ? nativeDesktop ? "运行中，可选择引导或排队" : "运行中，可继续引导或打断"
@@ -718,17 +681,13 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
   async function submitMessage(delivery?: "steer" | "queue") {
     const threadKey = activeThreadKey;
     const runtime = getRuntime(threadState, threadKey);
-    if (runtime.pendingMessageSource === 'handoff' && runtime.pendingMessageId) {
-      setStatus('交接结果待确认，请先查看交接任务卡。');
-      return;
-    }
     const userText = runtime.draft.trim();
     const pendingAttachments = runtime.attachments;
     const message = composeMessageWithAttachments(userText, pendingAttachments);
     if (!threadKey || !message) return;
     if (!selected && !runtime.newThreadCwd) { void startNewThread(); return; }
     const clientMessageId = runtime.pendingMessageText === message && runtime.pendingMessageId ? runtime.pendingMessageId : crypto.randomUUID();
-    patchRuntime(threadKey, { pendingMessageId: clientMessageId, pendingMessageText: message, pendingMessageSource: undefined });
+    patchRuntime(threadKey, { pendingMessageId: clientMessageId, pendingMessageText: message });
     const control = desktopSendControl(runtime, relayStatus?.desktopControl?.mode);
     const mode = control.native ? delivery ?? (control.guard?.expectedTurnId ? "queue" : "start") : "auto";
     const sendRoute = await resolveSendRoute();
@@ -1031,35 +990,6 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
       const queued = activeRuntimeRef.current.desktopControl?.queue?.items.some(item => item.clientMessageId === clientMessageId);
       return outcome(received ? queued ? 'queued' : 'confirmed' : rejected ? 'rejected' : 'uncertain');
     }
-  }
-
-  async function migrateLegacyHandoff() {
-    const result = await migrateHandoff({ endpoint, token, scope, host: isKelivoHost ? ProductHost : undefined, signal: scopeAbortRef.current.signal });
-    onHandoff(result.handoff);
-    setStatus(`已迁移 ${result.count} 条交接为事项。${result.draftChanged ? '迁移期间的新编辑已保留在本地。' : ''}`);
-  }
-
-  async function sendHandoffMessage(message: string, id: string, expectedThreadId: string): Promise<'confirmed' | 'queued' | 'uncertain' | 'rejected'> {
-    const target = selectedRef.current;
-    const runtime = activeRuntimeRef.current;
-    const control = desktopSendControl(runtime, relayStatus?.desktopControl?.mode);
-    if (sendLockRef.current || scopeAbortRef.current.signal.aborted || !target || target.id !== expectedThreadId || !isDesktopSource(target) || !control.native || !control.ready ||
-      (runtime.pendingMessageId && runtime.pendingMessageId !== id)) return 'rejected';
-    sendLockRef.current = true; setSubmittingMessage(true);
-    try {
-      patchRuntime(target.id, { pendingMessageId: id, pendingMessageText: message, pendingMessageSource: 'handoff' });
-      const result = await sendDesktopMessage(target.id, message, runtime.draft, [], id,
-        control.guard?.expectedTurnId ? 'queue' : 'start', control.guard, true);
-      return result === 'confirmed' || result === 'queued' || result === 'uncertain' ? result : 'rejected';
-    } finally { sendLockRef.current = false; setSubmittingMessage(false); }
-  }
-
-  async function uploadHandoffFile(file: File): Promise<PendingAttachment> {
-    if (!token.trim() || file.size > 25 * 1024 * 1024) throw new Error('请先连接电脑并选择25MB以内的附件。');
-    const response = await apiPost<UploadResponse>(buildUrl(endpoint, '/api/uploads'), token, { fileName: file.name, dataBase64: await fileToBase64(file) });
-    return { id: crypto.randomUUID(), fileName: response.upload.originalName || response.upload.fileName || file.name,
-      path: response.upload.path, relativePath: response.upload.relativePath, size: response.upload.size,
-      createdAt: response.upload.createdAt, mimeType: file.type || mimeTypeFromName(file.name), previewUrl: null };
   }
 
   async function cancelQueuedMessage(clientMessageId: string) {
@@ -1733,7 +1663,7 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
     const readyTimer = window.setTimeout(() => {
       if (!failed && Capacitor.isNativePlatform()) void NativeHotUpdate.markReady().catch(() => undefined);
     }, 5000);
-    const stageTimer = isKelivoHost ? 0 : window.setTimeout(() => void stageHotUpdate(appVersionCode), 8000);
+    const stageTimer = window.setTimeout(() => void stageHotUpdate(appVersionCode), 8000);
     return () => {
       window.clearTimeout(readyTimer);
       window.clearTimeout(stageTimer);
@@ -1748,10 +1678,6 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
       {projectPicker !== null && createPortal(<NewThreadProjectPicker endpoint={endpoint} token={token} initialCwd={projectPicker} notice={isNewThread ? activeRuntime.lastTurnError : undefined}
         onChoose={cwd => chooseNewThreadProject(cwd)} onCancel={() => chooseNewThreadProject(null)} />, document.body)}
       {intakeShare && createPortal(<ShareSheet key={intakeShare.id} payload={intakeShare} currentTitle={selected ? selected.threadName || "线程" : null} onChoose={chooseIntakeShare} onCancel={cancelIntakeShare} />, document.body)}
-      {handoff && <HandoffCard key={handoff.id} handoff={handoff} scope={scope} threads={threads} selectedId={selected?.id}
-        ready={Boolean(nativeDesktop && desktopSend.ready && !submittingMessage && !uploading && !activeRuntime.pendingMessageId && (!isLiveTurnActive || canQueue))}
-        queue={isLiveTurnActive} changed={onHandoff} select={thread => void openThread(thread)}
-        migrate={migrateLegacyHandoff} refresh={() => { setThreadRange('all'); void loadThreads({ range: 'all', append: threadRange === 'all' && threadPage.hasMore }); }} upload={uploadHandoffFile} send={sendHandoffMessage} />}
       <WorkspaceHeader agentId="codex" title={workspaceTitle} subtitle={connection.name} project={workspaceProject}
         connection={{ label: workspaceConnectionLabel, state: connectionState }} leading="menu" leadingLabel="打开线程列表"
         onLeading={() => setSidebarOpen(true)} onSwitchAgent={onOpenAgents} onOpenItems={onCapture} onOpenSettings={onOpenSettings} />
@@ -1890,7 +1816,6 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
             </button>
           )}
 
-            {!handoff && <HandoffMigrationNotice migrate={migrateLegacyHandoff} />}
             {activeRuntime.desktopSubmission && <SystemNotice>提交结果待确认，草稿已保留；请勿重复发送。</SystemNotice>}
             {activeRuntime.desktopInterrupt && <SystemNotice>打断结果待确认，正在同步会话。</SystemNotice>}
             {(deviceRevoked || streamState === "recovering" || streamState === "unauthorized" || connectionState === "error") && <SystemNotice error={deviceRevoked || streamState === "unauthorized" || connectionState === "error"}>{deviceRevoked || streamState === "unauthorized" ? deviceRevokedMessage : streamState === "recovering" ? "正在恢复连接，消息与草稿已保留" : "连接暂时不可用，正在检查"}</SystemNotice>}

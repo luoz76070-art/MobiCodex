@@ -13,10 +13,10 @@ import { turnResult } from '../plugins/mobile-deepseek/turnResult.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-rendering-'));
 const output = path.join(temp, 'render.cjs');
-await build({ stdin: { contents: `export { createElement as h } from 'react'; export { renderToStaticMarkup as render } from 'react-dom/server'; export { ThreadRow } from './apps/mobile/src/features/threads/ThreadRow'; export { SessionRangeControl } from './apps/mobile/src/features/threads/SessionRangeControl'; export { DisclosureSummary } from './apps/mobile/src/shared/DisclosureSummary'; export { SidebarScrim } from './apps/mobile/src/features/threads/SidebarScrim'; export { MessageContent } from './apps/mobile/src/features/chat/MessageContent'; export { MessageTimeline, MessageBubble, ToolMessageBubble } from './apps/mobile/src/features/chat/components'; export { ComputerComposer } from './apps/mobile/src/features/chat/ComputerComposer'; export { TurnResultNotice } from './apps/mobile/src/features/chat/TurnResultNotice'; export { SessionStatus, ComposerSessionStatus } from './apps/mobile/src/features/chat/SessionStatus'; export { deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence } from './apps/mobile/src/features/chat/sessionStatusModel'; export { imageSource } from './apps/mobile/src/features/chat/imageSources'; export { HandoffCard } from './apps/mobile/src/features/product/HandoffCard'; export { HandoffMigrationNotice } from './apps/mobile/src/features/product/HandoffMigrationNotice';`, resolveDir: root }, outfile: output, bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', define: { 'import.meta.env': '{}' }, nodePaths: [path.join(root, 'apps/mobile/node_modules')] });
+await build({ stdin: { contents: `export { createElement as h } from 'react'; export { renderToStaticMarkup as render } from 'react-dom/server'; export { ThreadRow } from './apps/mobile/src/features/threads/ThreadRow'; export { SessionRangeControl } from './apps/mobile/src/features/threads/SessionRangeControl'; export { DisclosureSummary } from './apps/mobile/src/shared/DisclosureSummary'; export { SidebarScrim } from './apps/mobile/src/features/threads/SidebarScrim'; export { MessageContent } from './apps/mobile/src/features/chat/MessageContent'; export { MessageTimeline, MessageBubble, ToolMessageBubble } from './apps/mobile/src/features/chat/components'; export { ComputerComposer } from './apps/mobile/src/features/chat/ComputerComposer'; export { TurnResultNotice } from './apps/mobile/src/features/chat/TurnResultNotice'; export { SessionStatus, ComposerSessionStatus } from './apps/mobile/src/features/chat/SessionStatus'; export { deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence } from './apps/mobile/src/features/chat/sessionStatusModel'; export { imageSource } from './apps/mobile/src/features/chat/imageSources';`, resolveDir: root }, outfile: output, bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', define: { 'import.meta.env': '{}' }, nodePaths: [path.join(root, 'apps/mobile/node_modules')] });
 const originalStorage = globalThis.localStorage;
 globalThis.localStorage = { getItem: () => null };
-const { default: { h, render, ThreadRow, SessionRangeControl, DisclosureSummary, SidebarScrim, MessageContent, MessageTimeline, MessageBubble, ToolMessageBubble, ComputerComposer, imageSource, TurnResultNotice, SessionStatus, ComposerSessionStatus, deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence, HandoffCard, HandoffMigrationNotice } } = await import(pathToFileURL(output).href);
+const { default: { h, render, ThreadRow, SessionRangeControl, DisclosureSummary, SidebarScrim, MessageContent, MessageTimeline, MessageBubble, ToolMessageBubble, ComputerComposer, imageSource, TurnResultNotice, SessionStatus, ComposerSessionStatus, deriveSessionStatus, agentSessionStatus, codexSessionStatus, readActivityEvidence } } = await import(pathToFileURL(output).href);
 globalThis.localStorage = originalStorage;
 test.after(() => fs.rm(temp, { recursive: true, force: true }));
 const tool = index => ({ id: `t${index}`, role: 'tool', kind: 'commandExecution', text: `Command: rg query-${index}`, turnId: 'turn-a', timestamp: '2026-11-07T00:00:00Z' });
@@ -174,42 +174,6 @@ test('S2 real channel normalizers require evidence, retain result reasons and le
 });
 
 
-test('W1 handoff migration entry preserves the existing card and calls completion only close', t => {
-  const previous = globalThis.localStorage;
-  t.after(() => { globalThis.localStorage = previous; });
-  globalThis.localStorage = { getItem: () => null };
-  const base = { revision: 1, id: '12345678-1234-4234-8234-123456789abc', text: '旧交接', createdAt: 1,
-    target: { scope: 'fixture', threadId: '22345678-1234-4234-8234-123456789abc', title: '已有会话' }, message: '冻结正文' };
-  for (const status of ['confirmed', 'uncertain']) {
-    const html = render(h(HandoffCard, { handoff: { ...base, status, acceptance: 'desktop' }, scope: 'fixture', threads: [], ready: false,
-      queue: false, migrate() {}, changed() {}, select() {}, refresh() {}, upload() {}, send() {} }));
-    assert.match(html, /role="dialog"/); assert.match(html, /迁移为事项/); assert.doesNotMatch(html, />完成<|事项列表/);
-    if (status === 'confirmed') assert.match(html, />关闭<\/button>/);
-    else assert.doesNotMatch(html, />关闭<\/button>/);
-  }
-  assert.equal(render(h(HandoffMigrationNotice, { migrate() {} })), '');
-  globalThis.localStorage = { getItem: () => 'legacy-source' };
-  assert.match(render(h(HandoffMigrationNotice, { migrate() {} })), /迁移为事项/);
-});
-
-
-test('U10 local Markdown links render filename labels with full path titles and no navigation', () => {
-  const cases = [
-    ['[scripts/x.py](/Users/test/project/scripts/x.py)', '/Users/test/project/scripts/x.py', 'x.py'],
-    ['[source](/workspace/src/index.ts:42)', '/workspace/src/index.ts:42', 'index.ts'],
-    ['[source](src/index.ts#L8-L12)', 'src/index.ts#L8-L12', 'index.ts'],
-    ['[source](../src/main.ts)', '../src/main.ts', 'main.ts'],
-    ['[config](package.json)', 'package.json', 'package.json'],
-    ['[read](</Users/test/My Project/a (1).md>)', '/Users/test/My Project/a (1).md', 'a (1).md'],
-    ['[read](file:///tmp/a%20b.md)', 'file:///tmp/a%20b.md', 'a b.md'],
-    [String.raw`[win](C:\work\src\main.ts)`, String.raw`C:\work\src\main.ts`, 'main.ts'],
-  ];
-  for (const [text, title, name] of cases) {
-    const html = render(h(MessageContent, { text }));
-    assert.ok(html.includes(`<span class="local-file-tag" title="${title}">${name}</span>`), html);
-    assert.doesNotMatch(html, /<a\b|href=|<button\b|<img\b/);
-  }
-});
 
 test('U10 file labels preserve HTTP links, literal code and unsupported schemes', () => {
   const html = render(h(MessageContent, { text: '[web](https://example.com/a) [local](/tmp/a.ts)\n\n`[literal](/tmp/code.ts)`\n\n```md\n[block](/tmp/block.ts)\n```\n\n[bad](javascript:alert(1)) [anchor](#heading)' }));

@@ -1,9 +1,9 @@
 import { openFeedback } from '../features/feedback/model';
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Activity, AlertCircle, Bell, CheckCircle2, Clipboard, Copy, Download, ExternalLink, Eye, EyeOff, KeyRound, Loader2, Monitor, Moon, RefreshCcw, Server, Settings, Sparkles, Sun, Terminal, Wifi, X } from "lucide-react";
+import { Activity, AlertCircle, Bell, CheckCircle2, Clipboard, Copy, Download, ExternalLink, Eye, EyeOff, KeyRound, Loader2, Monitor, Moon, RefreshCcw, Server, Sparkles, Sun, Terminal, Wifi, X } from "lucide-react";
 import type { ApprovalPolicy, ConnectionProfile, DiagnosticStep, RelayStatus, SandboxMode, SplitMode, ThemeMode } from "./types";
-import { appVersionLabel as standaloneVersionLabel } from "./config";
+import { appVersionLabel } from "./config";
 import { ConnectionCard } from "../features/connection/ConnectionCard";
 import { PairingPanel } from "../features/connection/PairingPanel";
 import { VoiceSettings } from "../features/voice/VoiceSettings";
@@ -11,8 +11,7 @@ import { QuickCommandSettings } from "../features/quickCommands/QuickCommandSett
 import { DisclosureSummary } from "../shared/DisclosureSummary";
 import { hapticsEnabled, setHapticsEnabled } from "../shared/haptics";
 import { useNotifySettings } from "../features/notify/attention";
-import { isKelivoHost, navigateProduct, productOpenUpdates } from "../features/product/host";
-import { productVersionLabel } from "../features/product/identity";
+import { productOpenUpdates } from "../features/product/host";
 import { cachedSystemPalette, chatFontScales, loadProductDisplay, loadThemeMode, saveProductDisplay, saveThemeMode, type ProductDisplay } from "../features/product/standalone";
 import { loadConnectionProfiles, saveConnectionSettings, profileNameFromEndpoint, upsertConnectionProfile, saveConnectionProfiles } from "../features/connection/profiles";
 import { assertSecureEndpoint, toFriendlyFetchError, apiGet as requestGet, buildUrl, normalizeEndpoint } from "../features/connection/http";
@@ -37,7 +36,6 @@ export function GlobalSettings({ connection, settingsOpen, onClose, onApply, pre
 }) {
   const endpoint = normalizeEndpoint(connection.endpoint), token = connection.token;
   const { splitMode, setSplitMode, approvalPolicy, setApprovalPolicy, sandboxMode, setSandboxMode } = preferences;
-  const appVersionLabel = isKelivoHost ? productVersionLabel : standaloneVersionLabel;
   const codexRef = useRef(codex);
   codexRef.current = codex;
   const abortRef = useRef(new AbortController());
@@ -63,7 +61,7 @@ export function GlobalSettings({ connection, settingsOpen, onClose, onApply, pre
   const [connectionState, setConnectionState] = useState<"idle" | "testing" | "ok" | "error">("idle");
   const [relayStatus, setRelayStatus] = useState<RelayStatus | null>(null);
   const notify = useNotifySettings();
-  useEffect(() => { if (!isKelivoHost) saveThemeMode(theme); }, [theme]);
+  useEffect(() => { saveThemeMode(theme); }, [theme]);
   useEffect(() => { localStorage.setItem("approvalPolicy", approvalPolicy); }, [approvalPolicy]);
   useEffect(() => { localStorage.setItem("sandboxMode", sandboxMode); }, [sandboxMode]);
   useEffect(() => { localStorage.setItem("splitMode", splitMode); }, [splitMode]);
@@ -370,7 +368,7 @@ export function GlobalSettings({ connection, settingsOpen, onClose, onApply, pre
 
         <section className="settings-section">
           <h3>外观与触感</h3>
-          {isKelivoHost ? <button className="action-button" onClick={() => void navigateProduct("settings").catch(() => setStatus("请等待草稿保存后再切换设置。"))}><Settings size={16} />统一外观设置</button> : <div className="segmented">
+          <div className="segmented">
             <button className={theme === "system" ? "active" : ""} onClick={() => setTheme("system")}>
               <Monitor size={15} />
               <span>系统</span>
@@ -383,8 +381,8 @@ export function GlobalSettings({ connection, settingsOpen, onClose, onApply, pre
               <Moon size={15} />
               <span>深色</span>
             </button>
-          </div>}
-          {!isKelivoHost && <>
+          </div>
+          <>
             {cachedSystemPalette() && <label className="haptics-setting">跟随系统取色
               <button type="button" className="action-button" role="switch" aria-label="跟随系统取色" aria-checked={display.dynamicColor} onClick={() => changeDisplay({ dynamicColor: !display.dynamicColor })}>{display.dynamicColor ? "已开启" : "已关闭"}</button>
             </label>}
@@ -395,7 +393,7 @@ export function GlobalSettings({ connection, settingsOpen, onClose, onApply, pre
             <label className="haptics-setting">显示工具结果摘要
               <button type="button" className="action-button" role="switch" aria-label="显示工具结果摘要" aria-checked={display.showToolResultSummary} onClick={() => changeDisplay({ showToolResultSummary: !display.showToolResultSummary })}>{display.showToolResultSummary ? "已开启" : "已关闭"}</button>
             </label>
-          </>}
+          </>
           <label className="haptics-setting">发送和审批时轻微震动
             <button type="button" className="action-button" role="switch" aria-label="发送和审批时轻微震动" aria-checked={haptics}
               onClick={() => { setHapticsEnabled(!haptics); setHaptics(!haptics); }}>{haptics ? "已开启" : "已关闭"}</button>

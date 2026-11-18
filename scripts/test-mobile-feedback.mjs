@@ -116,7 +116,7 @@ function uiDriver(name,props,overrides={},source=ui) {
   const slots=[],effects=[],events=new EventTarget();let cursor=0,dirty=true,tree;const layers=[],timers=new Map();let nextTimer=0;
   const deps={...model,crypto:globalThis.crypto,window:Object.assign(events,{setInterval:fn=>{timers.set(++nextTimer,fn);return nextTimer;}}),clearInterval:id=>timers.delete(id),
     document:{hidden:false,activeElement:null,addEventListener(){},removeEventListener(){}},navigator:{onLine:true,userAgent:'Android 16; TestPhone Build/TEST; wv)'},HTMLElement:class{},
-    appVersionName:'0.3.1',appVersionCode:42,isKelivoHost:false,productVersionLabel:'v0.1.11',productVersionCode:13,
+    appVersionName:'0.3.1',appVersionCode:42,
     observeFeedbackErrors:()=>()=>{},relayAuthorization:()=>({isRevoked:()=>false,subscribe:()=>()=>{}}),buildUrl:(_endpoint,route)=>route,
     useCaptureVoice:()=>({}),VoiceInput:'VoiceInput',X:'X',createPortal:child=>child,useBackLayer:(open,close,priority)=>{layers.push({open,close,priority});},
     useState(value){const i=cursor++;slots[i]??={value:typeof value==='function'?value():value};return[slots[i].value,next=>{const value=typeof next==='function'?next(slots[i].value):next;dirty||=value!==slots[i].value;slots[i].value=value;}];},

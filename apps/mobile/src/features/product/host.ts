@@ -1,16 +1,7 @@
-import { registerPlugin } from "@capacitor/core";
-import type { ProductHandoff, HandoffHost } from './handoff';
-export const isKelivoHost = import.meta.env.VITE_KELIVO_HOST === "android";
+/** Cancelable event fired before leaving a page, so drafts and uploads can finish or block the move. */
 export const productBeforeNavigate = "product-before-navigate";
-export const productAppearanceChanged = "product-appearance-changed";
+/** Opens the app update page from settings. */
 export const productOpenUpdates = "product-open-updates";
-export const ProductHost = registerPlugin<HandoffHost & {
-  getState(): Promise<{ revision: number; openSettings?: boolean; openUpdates?: boolean; appearance: ProductAppearance; handoff?: ProductHandoff | null; handoffMigration?: { version: 1; id: string; digest: string } }>;
-  navigate(options: { tab: "ai" | "settings" }): Promise<void>;
-}>("ProductHost");
-let openSettings = false;
-export function setProductSettingsLaunch(value: boolean) { openSettings = value; }
-export function takeProductSettingsLaunch() { const value = openSettings; openSettings = false; return value; }
 export type ProductAppearance = { mode?: "system" | "light" | "dark"; dark?: boolean; colors?: Record<string, string>; display?: { chatFontScale?: number; showToolCards?: boolean; showToolResultSummary?: boolean } };
 const colors: Record<string, string[]> = {
   background: ["--bg-0"], panel: ["--bg-1", "--panel", "--panel-solid", "--panel-strong"],
@@ -37,8 +28,4 @@ export function applyProductAppearance(appearance: ProductAppearance) {
     if (dark === appearance.dark && typeof value === "string" && /^#[\da-f]{6}$/iu.test(value)) document.documentElement.style.setProperty(property, value);
     else document.documentElement.style.removeProperty(property);
   }
-}
-export async function navigateProduct(tab: "ai" | "settings") {
-  if (!window.dispatchEvent(new Event(productBeforeNavigate, { cancelable: true }))) throw new Error("请先等待当前输入保存或操作完成，再切换入口。");
-  await ProductHost.navigate({ tab });
 }
