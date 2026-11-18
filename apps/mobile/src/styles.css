@@ -2058,7 +2058,7 @@ textarea {
 
 
 /* Existing component layout: A1 tokens are defined at the top of this file.
-   Reference and component mapping: docs/audits/2026-11-04/kelivo-style.md. */
+   Reference and component mapping: the Kelivo style audit of 2026-11-04 (docs/history.md; original at tag archive/pre-cleanup-2026-11). */
 button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: var(--space-4); }
 .codex-shell { gap: var(--space-8); }
 .glass-surface { background: var(--panel-solid); }

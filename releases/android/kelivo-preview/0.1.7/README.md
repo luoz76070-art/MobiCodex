@@ -31,4 +31,4 @@ DeepSeek沿原Harness profile链接/加载0.2.6，实际鉴权`/info`须出现to
 
 完整verify手机169/后端414/入口8全部通过；原生340项、完整lint0错误（宿主56/远控1既有警告）；5个Web文件匹配成品，原生7插件和arm64 AOT保留。四通道/未来通道隔离浏览器检查、DeepSeek官方rc.2隔离检查及Claude官方严格validate和8项沙箱测试通过；未发真实模型任务。未改Flutter业务，不重复其全量；59组完整Kelivo及原Desktop新建继续待验。
 
-对应源码含全部锁、构建脚本、AGPL与原MIT及第三方声明；不含缓存/配置/凭证/签名私钥。构建入口和来源见[整合说明](../../../../integrations/kelivo/README.md)。自身签名不能承诺同签名覆盖或APK逐字节复现。Git预览标签`codex-to-phone-v0.1.7-native-preview`，检查及双源回执见[本轮审计](../../../../docs/audits/2026-11-07/agent-parity.md)。
+对应源码含全部锁、构建脚本、AGPL与原MIT及第三方声明；不含缓存/配置/凭证/签名私钥。构建入口和来源见[整合说明](../../../../integrations/kelivo/README.md)。自身签名不能承诺同签名覆盖或APK逐字节复现。Git预览标签`codex-to-phone-v0.1.7-native-preview`，检查及双源回执见[本轮审计](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-07/agent-parity.md)。

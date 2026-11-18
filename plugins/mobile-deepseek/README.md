@@ -64,7 +64,7 @@ GUI进程通常不会继承终端export。先备份`~/.dsh/profiles/desktop/cord
     configFile: /absolute/private/deepseek-mobile.json
 ```
 
-官方桌面版允许自带CLI管理`desktop`的插件，但禁止通过普通`dsh --profile desktop`或`--dump-config`启动/检查这个保留profile。桌面HMR会监视profile manifest和patch；新插件可动态加载到原进程。检查桌面“插件”页启用状态及鉴权`/info`、`/sessions`的实际响应，不把安装命令成功当作已经加载。若宿主报告需要重启，等待原任务安全结束后正常重启，不为接入强停任务。2026-10-21本机动态加载及公网只读复核见[实际接入记录](../../docs/audits/2026-10-21/deepseek-desktop-connect.md)。
+官方桌面版允许自带CLI管理`desktop`的插件，但禁止通过普通`dsh --profile desktop`或`--dump-config`启动/检查这个保留profile。桌面HMR会监视profile manifest和patch；新插件可动态加载到原进程。检查桌面“插件”页启用状态及鉴权`/info`、`/sessions`的实际响应，不把安装命令成功当作已经加载。若宿主报告需要重启，等待原任务安全结束后正常重启，不为接入强停任务。2026-10-21本机动态加载及公网只读复核见[实际接入记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/deepseek-desktop-connect.md)。
 
 网关的私有 `gateway.json` 加入：
 
@@ -95,8 +95,8 @@ GUI进程通常不会继承终端export。先备份`~/.dsh/profiles/desktop/cord
 
 插件从宿主共享的`@deepseek-ai/dsh-llm/package.json`读取实际版本，经精确白名单校验后用于`/info.harnessVersion`。缺失/未知版本拒绝启动，不能硬编码rc.2让新版宿主伪装通过。对应网关也必须接受rc.3；只改插件或只改网关均不完整。APK36沿用，无需为本次桥接兼容重新安装。
 
-本次两版官方隔离检查各通过13项运行时、8项问答审批和4项历史；只登记本地确定性adapter，不读取用户profile或调用外部模型。部署和原手机结果另记[rc.3验收记录](../../docs/audits/2026-10-30/deepseek-rc3-compat.md)。
+本次两版官方隔离检查各通过13项运行时、8项问答审批和4项历史；只登记本地确定性adapter，不读取用户profile或调用外部模型。部署和原手机结果另记[rc.3验收记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-30/deepseek-rc3-compat.md)。
 
 ## rc.5升级边界
 
-原宿主重开后已升级rc.5，0.2.2及未安装的0.2.3候选均被官方版本门拒绝。0.2.4在保留失败提示的同时精确接纳rc.5，配套网关的deepSeekInfo也需更新；未知rc.4/rc.6仍拒绝。当前官方rc.5的10个关键生产入口与rc.3字节相同，运行时13项、审批8项、历史4项隔离检查通过，审批方法指纹保持严格。真实手机和模型服务恢复另见[本轮验收记录](../../docs/audits/2026-10-30/deepseek-control-acceptance.md)。
+原宿主重开后已升级rc.5，0.2.2及未安装的0.2.3候选均被官方版本门拒绝。0.2.4在保留失败提示的同时精确接纳rc.5，配套网关的deepSeekInfo也需更新；未知rc.4/rc.6仍拒绝。当前官方rc.5的10个关键生产入口与rc.3字节相同，运行时13项、审批8项、历史4项隔离检查通过，审批方法指纹保持严格。真实手机和模型服务恢复另见[本轮验收记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-30/deepseek-control-acceptance.md)。

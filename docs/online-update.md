@@ -1,12 +1,12 @@
 # Android 双通道更新
 
-项目从 `1.1.14-update-channels` 开始支持两种自托管更新方式。当前已发布的 `1.2.2-update-restore` / versionCode18恢复了APK16/17构建遗漏的更新源，详见[恢复记录](audits/2026-10-20/update-restore.md)。手机入口为“设置 → 版本与更新”；原APK16/17需用手机浏览器覆盖安装一次修复包，保留原连接与会话，不要先卸载。
+项目从 `1.1.14-update-channels` 开始支持两种自托管更新方式。当前已发布的 `1.2.2-update-restore` / versionCode18恢复了APK16/17构建遗漏的更新源，详见[恢复记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-20/update-restore.md)。手机入口为“设置 → 版本与更新”；原APK16/17需用手机浏览器覆盖安装一次修复包，保留原连接与会话，不要先卸载。
 
-源码当前为 `1.3.9-process-collapse-preview` / versionCode30，同签名独立preview已发布并完成公开下载核验，配套固定网关及DeepSeek插件0.2.1已更新，详见[过程折叠完整交付及备用安装链接](audits/2026-10-23/process-collapse.md)。APK24起原生支持App内下载、进度、大小/SHA/应用身份/版本/签名校验、首次安装来源授权返回接续及系统覆盖安装确认；取消安装后可继续，失败可手动重试。**23及更早需要先浏览器覆盖安装带插件的新包一次，不要卸载**，原生插件和权限不能由HTML热更新添加。用户已确认24→25 App内升级成功且原连接保留；APK30安装、拒绝授权、取消后继续等真机分支尚待单独验收。
+源码当前为 `1.3.9-process-collapse-preview` / versionCode30，同签名独立preview已发布并完成公开下载核验，配套固定网关及DeepSeek插件0.2.1已更新，详见[过程折叠完整交付及备用安装链接](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-23/process-collapse.md)。APK24起原生支持App内下载、进度、大小/SHA/应用身份/版本/签名校验、首次安装来源授权返回接续及系统覆盖安装确认；取消安装后可继续，失败可手动重试。**23及更早需要先浏览器覆盖安装带插件的新包一次，不要卸载**，原生插件和权限不能由HTML热更新添加。用户已确认24→25 App内升级成功且原连接保留；APK30安装、拒绝授权、取消后继续等真机分支尚待单独验收。
 
 APK24起的现有预览包实际检查preview清单，当前preview latest30、previous29；正式Android latest仍18、hot仍1.2.2-web.1且hash保持。预览源已写入被忽略的mobile生产配置，后续具名构建会继续使用它；正式发版前须显式切回正式源并核对成品，不能根据版本名推断通道。现有24至29可在App内更新到30，装完30显示“已是最新”正常。26增加原生麦克风权限/录音插件，不能仅用HTML热更新启用；安装后在设置填写百炼和DeepSeek Key。APK30完整Android lint为0错误/5警告，保持minSdk23。本轮不单独推送HTML热更新。
 
-上一项交付为 `1.3.2-project-groups-preview` / versionCode23，与22/21同签名，已发布独立预览并完整下载核对字节/SHA/大小/CORS。新版把近期范围扩展到Codex，并支持Codex/DeepSeek按项目分组、展开/折叠及偏好恢复，保留DeepSeek历史窗口；需通过[本轮交付中的APK23链接](audits/2026-10-22/project-groups.md#apk23独立预览)覆盖安装，保留数据。手机安装23仍待确认。用户前轮确认已安装21及能看到DeepSeek正文/完整权限卡。正式更新仍18，hot清单未改，普通正式检查更新不会提供23；预览previous保留22，23未单独发布HTML热更新。下方示例仍对应19的历史三类候选；**19的HTML仅兼容19，21的HTML仅兼容21，不能用于22/23/24或推送给18/20。** 预览20/21/22的历史说明分别见[409排查](audits/2026-10-21/phone-send-409.md)、[重复修复](audits/2026-10-21/deepseek-dedup.md)及[DeepSeek历史](audits/2026-10-22/deepseek-history.md)。
+上一项交付为 `1.3.2-project-groups-preview` / versionCode23，与22/21同签名，已发布独立预览并完整下载核对字节/SHA/大小/CORS。新版把近期范围扩展到Codex，并支持Codex/DeepSeek按项目分组、展开/折叠及偏好恢复，保留DeepSeek历史窗口；需通过[本轮交付中的APK23链接](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-22/project-groups.md#apk23独立预览)覆盖安装，保留数据。手机安装23仍待确认。用户前轮确认已安装21及能看到DeepSeek正文/完整权限卡。正式更新仍18，hot清单未改，普通正式检查更新不会提供23；预览previous保留22，23未单独发布HTML热更新。下方示例仍对应19的历史三类候选；**19的HTML仅兼容19，21的HTML仅兼容21，不能用于22/23/24或推送给18/20。** 预览20/21/22的历史说明分别见[409排查](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/phone-send-409.md)、[重复修复](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/deepseek-dedup.md)及[DeepSeek历史](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-22/deepseek-history.md)。
 
 | 通道 | 适用改动 | 用户动作 | 回滚 |
 | --- | --- | --- | --- |
@@ -130,8 +130,8 @@ APK 更新仍需要用户确认安装；侧载来源第一次更新时还需要�
 
 ## 发布原子性与回退
 
-两个发布入口共用 `scripts/upload-release-atomically.sh`，先上传临时文件，远端校验 SHA-256/大小、取得发布锁后再原子切换 `latest.json`，保留 `previous.json`。产物名带 hash，已存在的同名产物必须匹配 hash。发布端指针回退和已安装版本回滚是两种操作，步骤与限制见 [优化交付](audits/2026-10-20/delivery.md#发布与回滚)。2026-10-20 更新恢复已通过原通道发布 APK 18 与仅兼容原生 18 的 HTML；下载 SHA、大小和 CORS 验证见 [恢复记录](audits/2026-10-20/update-restore.md)。生产回滚演练与真机安装仍待验收。
+两个发布入口共用 `scripts/upload-release-atomically.sh`，先上传临时文件，远端校验 SHA-256/大小、取得发布锁后再原子切换 `latest.json`，保留 `previous.json`。产物名带 hash，已存在的同名产物必须匹配 hash。发布端指针回退和已安装版本回滚是两种操作，步骤与限制见 [优化交付](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-20/delivery.md#发布与回滚)。2026-10-20 更新恢复已通过原通道发布 APK 18 与仅兼容原生 18 的 HTML；下载 SHA、大小和 CORS 验证见 [恢复记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-20/update-restore.md)。生产回滚演练与真机安装仍待验收。
 
 ## 2026-10-23 APK27预览
 
-历史APK27为 `1.3.6-voice-url-preview`，该轮previous26，正式18/hot保持；支持第三方DeepSeek语音整理地址/模型与原始助手身份合并。完整发布、同签名核验和待验项见[专项记录](audits/2026-10-23/voice-url-dedup.md)。当前preview以文首APK30为准。
+历史APK27为 `1.3.6-voice-url-preview`，该轮previous26，正式18/hot保持；支持第三方DeepSeek语音整理地址/模型与原始助手身份合并。完整发布、同签名核验和待验项见[专项记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-23/voice-url-dedup.md)。当前preview以文首APK30为准。

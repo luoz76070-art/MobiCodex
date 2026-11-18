@@ -28,7 +28,7 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
 - 本仓库根目录就是 MobiCodex 项目边界；保留用户既有暂存项并停止自动提交。推送前核对全部未推送提交范围；不force、不自动merge/rebase、不改remote/上游，不自动建分支、仓库、PR或GitHub Release。Trellis自动提交继续关闭，提交由上述显式流程执行。
 - 保留工作区既有修改；结构迁移保留启动、构建和打包入口。
 - `apps/mobile` 是 React/Capacitor 前端；`apps/relay` 是 Fastify 服务与 Broker/Tunnel；不把两种运行时的代码混入共享大包。
-- 优化顺序以 `docs/audits/2026-10-20/README.md` 为准。UI 参考 Codex 手机版，实施前建立真实参考基线。
+- 当前优先级以 GitHub issue 和 `docs/plans/` 里进行中的计划为准；早期审计结论见 `docs/history.md`（原文在归档 tag `archive/pre-cleanup-2026-11`）。UI 参考 Codex 手机版，实施前建立真实参考基线。
 - 单元/隔离测试不得读取真实 Codex 会话、提交模型任务或自动部署；真实控制验收单独记录。
 
 ## 进度提示语

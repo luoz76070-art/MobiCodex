@@ -1,6 +1,6 @@
 # Kelivo 整合预览：原生验收与完整功能接续
 
-状态：用户“继续下一轮”已启动，2026-11-06交接接线、隔离检查及Android36模拟器离线流程已推进；结果见[本轮审计](../audits/2026-11-06/kelivo-handoff.md)。承接[产品接线审计](../audits/2026-11-05/kelivo-product.md)。完整目标与真机验收继续保留。
+状态：用户“继续下一轮”已启动，2026-11-06交接接线、隔离检查及Android36模拟器离线流程已推进；结果见[本轮审计](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-06/kelivo-handoff.md)。承接[产品接线审计](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-05/kelivo-product.md)。完整目标与真机验收继续保留。
 
 ## 目标与顺序
 
@@ -32,7 +32,7 @@
 
 证据：固定 v1.3.4 的5052个来源文件无缺失，业务和测试已引入；源码保留不等于全功能可用。[原矩阵](2026-11-03-kelivo-parity-matrix.md)继续作为最终范围。
 
-已建立[59组证据账本](../audits/2026-11-06/kelivo-parity-evidence.md)，分别列源码、隔离、设备与外部服务，当前整组完成0/59。后续优先覆盖新包身份、Android24兼容分支、OAuth、备份恢复、工具/工作区/PRoot、语音/文件/分享与后台。没有对应账号、权限或设备证据的项保持未验证。最终声明必须明确适用平台与固定上游版本。
+已建立[59组证据账本](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-06/kelivo-parity-evidence.md)，分别列源码、隔离、设备与外部服务，当前整组完成0/59。后续优先覆盖新包身份、Android24兼容分支、OAuth、备份恢复、工具/工作区/PRoot、语音/文件/分享与后台。没有对应账号、权限或设备证据的项保持未验证。最终声明必须明确适用平台与固定上游版本。
 
 验收：59组每项均有可复现步骤、结果和限制；不能以编译成功或测试数量代替逐项验收。测试稳定性历史和失败日志继续保留。
 

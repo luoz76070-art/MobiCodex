@@ -4,21 +4,21 @@
 
 ## 当前网关优化的统一验收顺序
 
-2026-10-22最新[Android兼容性与手机验收](audits/2026-10-22/android-compat.md)：APK25独立preview已发布，用户确认24→25 App内升级成功且原连接保留；DeepSeek空闲原会话手机发送、电脑一次接收、手机完整回复结束且无重复通过。完整Android lint0错误/5警告、后端321/321、手机46/46和两Agent短时公网只读重连通过。正式仍18；下文旧版本记录保留，当前版本/验收范围以此为准。实际授权拒绝/取消后继续、Codex普通控制本轮新增证据、两Agent追加/中断/审批及Android前后台/切网/电脑睡眠仍待验，长期测试继续暂缓。
+2026-10-22最新[Android兼容性与手机验收](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-22/android-compat.md)：APK25独立preview已发布，用户确认24→25 App内升级成功且原连接保留；DeepSeek空闲原会话手机发送、电脑一次接收、手机完整回复结束且无重复通过。完整Android lint0错误/5警告、后端321/321、手机46/46和两Agent短时公网只读重连通过。正式仍18；下文旧版本记录保留，当前版本/验收范围以此为准。实际授权拒绝/取消后继续、Codex普通控制本轮新增证据、两Agent追加/中断/审批及Android前后台/切网/电脑睡眠仍待验，长期测试继续暂缓。
 
-最新[当前会话手机验收](audits/2026-10-21/current-session-phone-acceptance.md)：用户报告`v1.3.0-deepseek-dedup-preview`，明确使用当前开发会话，已取代此前等待版本和空白会话的条件。第一张异步选择卡已由用户确认手机显示/提交，原题回复与公网权威移除通过；重新订阅未重新出现，后台/切网卡仍待用户结果。原会话指定不等于授权助手代答、自动审批或中断自己的开发任务。
+最新[当前会话手机验收](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/current-session-phone-acceptance.md)：用户报告`v1.3.0-deepseek-dedup-preview`，明确使用当前开发会话，已取代此前等待版本和空白会话的条件。第一张异步选择卡已由用户确认手机显示/提交，原题回复与公网权威移除通过；重新订阅未重新出现，后台/切网卡仍待用户结果。原会话指定不等于授权助手代答、自动审批或中断自己的开发任务。
 
-最新[固定运行包兼容更新](audits/2026-10-21/agent-compat-runtime-upgrade.md)已按用户既有授权切换，备份/正常回退/二次切换、10项本地公网状态检查与配置保持通过。实际手机v1协议17.34秒的完整/增量快照、心跳及当前手机解码器还原通过，只证明真实只读传输；Android渲染、原请求写入、宿主插件安装与后台托管仍未验收，不把下文历史“未切换”继续当作当前状态。
+最新[固定运行包兼容更新](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/agent-compat-runtime-upgrade.md)已按用户既有授权切换，备份/正常回退/二次切换、10项本地公网状态检查与配置保持通过。实际手机v1协议17.34秒的完整/增量快照、心跳及当前手机解码器还原通过，只证明真实只读传输；Android渲染、原请求写入、宿主插件安装与后台托管仍未验收，不把下文历史“未切换”继续当作当前状态。
 
 此节用于v1.2.2之后的开发版本，优先于下方早期烟测示例。源码/隔离回归和浏览器合成验收已通过，真实原会话、插件安装和Android仍待办；不把独立CLI/SDK新建或resume/fork的会话当成Desktop原会话验证。生产APK仍1.2.2/versionCode18。按照用户安排，全部开发准备完成后统一实测，长期连接测试暂不开。
 
-2026-10-21 用户已授权空白工程、手机安装和网关切换：当前APK21独立预览与Mac网关升级已经交付，公网下载与连接健康核对通过，详见[最新交接](audits/2026-10-21/deepseek-dedup.md)。[DeepSeek官方运行时复核](audits/2026-10-21/deepseek-official-runtime.md)进一步以真实Loader/内存Session/事件总线和生产AgentLoop验证13项，模型响应仅由本地fixture提供。逐帧revision缺陷已修复为独立插件0.1.1，22项回归通过；用户原dsh与真实provider仍待验。手机版本与测试会话现按本节最新确认执行；长期连接继续暂缓。
+2026-10-21 用户已授权空白工程、手机安装和网关切换：当前APK21独立预览与Mac网关升级已经交付，公网下载与连接健康核对通过，详见[最新交接](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/deepseek-dedup.md)。[DeepSeek官方运行时复核](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/deepseek-official-runtime.md)进一步以真实Loader/内存Session/事件总线和生产AgentLoop验证13项，模型响应仅由本地fixture提供。逐帧revision缺陷已修复为独立插件0.1.1，22项回归通过；用户原dsh与真实provider仍待验。手机版本与测试会话现按本节最新确认执行；长期连接继续暂缓。
 
-后续[Claude官方运行时复核](audits/2026-10-21/claude-official-runtime.md)补齐兼容版本严格校验与7项无模型测试，修复helper命名导致的沙箱加载错误，独立插件0.1.1及31项合成回归通过。未升级用户旧CLI，Classic原面板问答/审批、真实取消/两端先答和Android仍须单列实测，不能将静态识别或沙箱API应答替代原会话验收。
+后续[Claude官方运行时复核](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/claude-official-runtime.md)补齐兼容版本严格校验与7项无模型测试，修复helper命名导致的沙箱加载错误，独立插件0.1.1及31项合成回归通过。未升级用户旧CLI，Classic原面板问答/审批、真实取消/两端先答和Android仍须单列实测，不能将静态识别或沙箱API应答替代原会话验收。
 
-后续[OpenCode官方服务复核](audits/2026-10-21/opencode-official-runtime.md)以本机2.0.16、自建HOME/XDG/数据库及simulation验证12项，生产适配器原字段问答、owner先答、空闲中断与15秒心跳通过；修复官方nullable cursor后合成34/34。脚本只创建自身空白fixture、不提交prompt，不计用户原会话发送/真实输出/审批、Android或长期连接验收。
+后续[OpenCode官方服务复核](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/opencode-official-runtime.md)以本机2.0.16、自建HOME/XDG/数据库及simulation验证12项，生产适配器原字段问答、owner先答、空闲中断与15秒心跳通过；修复官方nullable cursor后合成34/34。脚本只创建自身空白fixture、不提交prompt，不计用户原会话发送/真实输出/审批、Android或长期连接验收。
 
-原生网关[可选macOS后台托管](audits/2026-10-21/gateway-service.md)已有插件0.2.0本地候选，26项隔离检查及真实plutil解析通过；没有真实bootstrap/bootout。用户明确启用后另验登录启动、异常恢复、正常stop保持停止/start恢复、卸载保留配置/设备及公网健康，不能把loaded=true当作Tunnel在线。
+原生网关[可选macOS后台托管](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/gateway-service.md)已有插件0.2.0本地候选，26项隔离检查及真实plutil解析通过；没有真实bootstrap/bootout。用户明确启用后另验登录启动、异常恢复、正常stop保持停止/start恢复、卸载保留配置/设备及公网健康，不能把loaded=true当作Tunnel在线。
 
 1. 固定候选包与回退点。保留`codex-to-phone-v1.2.2`及本地备份；记录候选Git状态、构建资源hash和宿主版本。现有两个Mac App与辅助功能授权保留，单实例网关迁移按[插件说明](../plugins/mobile-codex/README.md)安排，避免端口冲突。安装/停旧服务/部署另行执行，隔离检查不代替迁移。
 2. 先验原宿主。Codex必须是目标原会话与原任务；OpenCode使用已存在的v2.0.16 `/api/`服务，先核验info版本；普通question表单与暂不支持的复杂表单分别验收；Claude宿主需满足2.1.x且patch>=287，并对照固定2.1.277生成API声明通过兼容宿主的官方plugin validate。本机2.1.220不满足，不自动升级或绕过版本门；未加载插件的进程不称已接管。
@@ -35,7 +35,7 @@
 | 网关管理 | 只有一个Relay/Tunnel；配对一次有效、撤销立即生效；状态查询不启动模型 | 临时目录/端口隔离通过；Mac固定网关迁移/升级及配置保持已核对，宿主插件实际安装仍待验 |
 | 升级与公网 | 旧版覆盖升级保留配置，两个更新通道可用；外网连接、切网和后台恢复无重复输入 | APK25已发布；用户确认24→25 App内升级及原连接保留，短时公网只读重连通过；切网/后台等分支待验，正式仍18 |
 
-任何原会话误路由、未知结果被重发、卡片错代次、权限范围缺失或升级丢档案都停止该候选交付，保留证据并回到修复；不以切换UI输入/新CLI会话掩盖失败。完成记录区分源码/合成、真实只读、真实写入、Android及部署五种证据。阶段进度见[Agent网关](agent-gateway.md)，既有优化真机流程见[交付记录](audits/2026-10-20/delivery.md)。
+任何原会话误路由、未知结果被重发、卡片错代次、权限范围缺失或升级丢档案都停止该候选交付，保留证据并回到修复；不以切换UI输入/新CLI会话掩盖失败。完成记录区分源码/合成、真实只读、真实写入、Android及部署五种证据。阶段进度见[Agent网关](agent-gateway.md)，既有优化真机流程见[交付记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-20/delivery.md)。
 
 ## 基本原则
 

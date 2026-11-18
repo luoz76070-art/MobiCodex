@@ -1,13 +1,13 @@
 # code9 电脑通道手机交互验收接续计划
 
-状态：待用户决定启动。本轮网关/DeepSeek 原桥接切换与只读手机确认已完成，证据见[运行审计](../audits/2026-11-07/agent-parity-runtime.md)。目标是在真实手机上核验 code9 共用交互与新宿主控制，记录每项结果；不在本计划内继续扩展界面或新增通道。
+状态：待用户决定启动。本轮网关/DeepSeek 原桥接切换与只读手机确认已完成，证据见[运行审计](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-07/agent-parity-runtime.md)。目标是在真实手机上核验 code9 共用交互与新宿主控制，记录每项结果；不在本计划内继续扩展界面或新增通道。
 
 ## 已有基线
 
 - code9 源码、APK 与独立 App 更新源已交付；用户确认已升级，DeepSeek 原会话和正文正常。
 - 固定网关与 DeepSeek 0.2.7 原 profile 在线，本地/公网 77 项通过，后端 419、新旧官方共 60 项检查通过。
 - code7 图片/大图与 code8 说明常显已经过用户真机确认；不能替代 code9 DeepSeek 的对应实测。
-- 2026-11-07 code9 的 Codex 原会话项目外图片修复已上线，本地/公网69项检查通过，用户确认「图片已显示，大图和返回正常」，见[图片修复审计](../audits/2026-11-07/image-reference-fix.md)。本计划第2项的DeepSeek手机图片、切会话隔离仍需分别验收。
+- 2026-11-07 code9 的 Codex 原会话项目外图片修复已上线，本地/公网69项检查通过，用户确认「图片已显示，大图和返回正常」，见[图片修复审计](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-07/image-reference-fix.md)。本计划第2项的DeepSeek手机图片、切会话隔离仍需分别验收。
 - Claude/OpenCode 尚未配置原宿主，其真实验收需单独选定并配置；本轮不自动安装、启动或发起这些通道的模型任务。
 
 ## 顺序与通过标准

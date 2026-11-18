@@ -28,7 +28,7 @@ APK32紧凑footer需比较同viewport、同运行/草稿状态的前后高度；
 
 运行中发送回归须覆盖按钮直接提交steer/queue、箭头与快捷键默认queue、有待发时的新引导不改旧队列、提交锁、仅确认后清空匹配完整草稿/附件、发送期间新编辑、ACK/未知保留与禁重发、先SSE确认后HTTP报错，以及旧回执不清其他提交。fixture可设置native的admissionDelay/replyDelay、ack/confirm-http-error/http-error/reject-refresh及queue=0；它们只操作合成会话。实际Android和原任务是否采纳引导仍须单独验收。
 
-语音运行`corepack pnpm test:voice`和`test:mobile`；`serve-ui-fixture`的`?voiceFixture=1`合成录音，`/fixture/voice`控制denied/failRefine/delay。检查只回填、草稿冲突、取消/切会话迟到、原文编辑废止旧整理稿、失败仍可采用原文、保存后Key清空。不能把fixture当真实麦克风/ASR/意图保真或费用时延验收；APK需完整lint及权限/原生插件核验。见[语音候选](../../../../docs/audits/2026-10-22/voice-input.md)。
+语音运行`corepack pnpm test:voice`和`test:mobile`；`serve-ui-fixture`的`?voiceFixture=1`合成录音，`/fixture/voice`控制denied/failRefine/delay。检查只回填、草稿冲突、取消/切会话迟到、原文编辑废止旧整理稿、失败仍可采用原文、保存后Key清空。不能把fixture当真实麦克风/ASR/意图保真或费用时延验收；APK需完整lint及权限/原生插件核验。见[语音候选](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-22/voice-input.md)。
 
 `corepack pnpm --filter @mobile-codex/mobile typecheck`、`corepack pnpm --filter @mobile-codex/mobile build`、`corepack pnpm test:messages`。结构迁移后比较原函数体与构建 gzip；不改变视觉要求来掩盖行为回归。
 

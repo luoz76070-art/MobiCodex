@@ -24,7 +24,7 @@ code6 可直接在「设置 → 应用更新 → 检查更新」下载此版本�
 
 ## 升级电脑网关
 
-code7 已另行同步自托管 APK 更新源，公网回下载记录见[App 内更新补发](../../../../docs/audits/2026-11-07/app-update.md)。电脑服务仍需独立升级；旧网关缺少图片接口，单装新APK不能让它读取本地图片。
+code7 已另行同步自托管 APK 更新源，公网回下载记录见[App 内更新补发](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-07/app-update.md)。电脑服务仍需独立升级；旧网关缺少图片接口，单装新APK不能让它读取本地图片。
 
 将网关归档解压到你选定的长期保存目录。以下 `/permanent/path/mobile-codex` 代表解压后的文件夹；已有自定义配置时，每条命令都附上同一 `--config /absolute/path/gateway.json`。
 

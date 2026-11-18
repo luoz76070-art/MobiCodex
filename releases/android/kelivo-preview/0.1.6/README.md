@@ -23,4 +23,4 @@ code6/7从「设置 → 应用更新 → 检查更新」下载，再按Android�
 
 源码附依赖锁、构建脚本、来源和每文件SHA、AGPL及原MIT/第三方声明，不含SDK/缓存、个人配置或签名私钥。正式构建入口 `node scripts/verify-kelivo.mjs --preview --repeat-tests`，环境见[构建说明](../../../../integrations/kelivo/README.md)。整合程序遵循[AGPL v3](../../../../apps/kelivo/LICENSE)，原远控源码保留[MIT](../../../../LICENSE)。
 
-Git标签：`codex-to-phone-v0.1.6-native-preview`。检查与双通道交付回执见[本轮审计](../../../../docs/audits/2026-11-07/execution-notes.md)；该包为预览版，完整整合任务继续进行中。
+Git标签：`codex-to-phone-v0.1.6-native-preview`。检查与双通道交付回执见[本轮审计](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-07/execution-notes.md)；该包为预览版，完整整合任务继续进行中。

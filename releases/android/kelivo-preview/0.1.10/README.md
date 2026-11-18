@@ -30,7 +30,7 @@ GitHub Release 里的 APK 由 GitHub Actions 构建，使用构建机临时生�
 
 ## 电脑端
 
-- DeepSeek Harness 桌面版 2026-11-14 自动升级到 0.2.2-rc.3 后，旧桥接 0.2.7 被版本门拒绝，DeepSeek 通道中断。桥接 0.2.8 兼容 rc.3，三项官方隔离检查共 30 项通过（[记录](../../../../docs/audits/2026-11-14/deepseek-rc3-isolated-checks.json)），已用官方 CLI 装回原 desktop profile 并热加载，`/info` 报告 rc.3。
+- DeepSeek Harness 桌面版 2026-11-14 自动升级到 0.2.2-rc.3 后，旧桥接 0.2.7 被版本门拒绝，DeepSeek 通道中断。桥接 0.2.8 兼容 rc.3，三项官方隔离检查共 30 项通过（[记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-14/deepseek-rc3-isolated-checks.json)），已用官方 CLI 装回原 desktop profile 并热加载，`/info` 报告 rc.3。
 - 电脑网关已切到 `2026-11-14-deepseek-w4b-4179f637ccfc`（握手白名单加入 rc.3，解析回合对应）；旧版与配置备份保留可回退。
 
 ## 验证

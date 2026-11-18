@@ -1,14 +1,14 @@
 # Kelivo 整合：设备与全功能对照接续
 
-状态：2026-11-06 用户“继续下一步”已启动。承接[本轮审计](../audits/2026-11-06/kelivo-handoff.md)与[59组证据账本](../audits/2026-11-06/kelivo-parity-evidence.md)，保留固定v1.3.4/4a7da9b6基线、统一Kelivo风格、双独立功能及可选交接的原始目标。
+状态：2026-11-06 用户“继续下一步”已启动。承接[本轮审计](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-06/kelivo-handoff.md)与[59组证据账本](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-06/kelivo-parity-evidence.md)，保留固定v1.3.4/4a7da9b6基线、统一Kelivo风格、双独立功能及可选交接的原始目标。
 
-2026-11-07检查点：用户已确认App内升级code7/8、图片/大图、字号、原连接/草稿/主题，以及code8执行说明常显、仅命令/输出折叠，见[code8真机回执](../audits/2026-11-07/execution-notes.md)。本轮修正与交付已完成，后续按本计划第1–4节补其余设备/系统能力、授权真实交接、原Desktop新建及59组适用子项，等待用户决定下一轮；不重复要求上述已通过操作。下文code4及未安装等状态保留2026-11-06历史含义，手机安装SHA仍未独立回拉，完整整合任务仍为in_progress。
+2026-11-07检查点：用户已确认App内升级code7/8、图片/大图、字号、原连接/草稿/主题，以及code8执行说明常显、仅命令/输出折叠，见[code8真机回执](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-07/execution-notes.md)。本轮修正与交付已完成，后续按本计划第1–4节补其余设备/系统能力、授权真实交接、原Desktop新建及59组适用子项，等待用户决定下一轮；不重复要求上述已通过操作。下文code4及未安装等状态保留2026-11-06历史含义，手机安装SHA仍未独立回拉，完整整合任务仍为in_progress。
 
-本轮先推进Android36独立模拟器可完成的系统栏、真实系统主题、字体缩放、键盘、返回与页面恢复。当前未连接手机，且只安装Android36镜像；真机/API24设备及真实外部服务保持待验。已修复远控系统栏、电脑前台系统主题同步及150%字体横屏空白页裁切，最终code4的Android36模拟器13项通过；本轮证据见[设备审计](../audits/2026-11-06/kelivo-device.md)。下列真实设备/完整对照范围仍进行中。
+本轮先推进Android36独立模拟器可完成的系统栏、真实系统主题、字体缩放、键盘、返回与页面恢复。当前未连接手机，且只安装Android36镜像；真机/API24设备及真实外部服务保持待验。已修复远控系统栏、电脑前台系统主题同步及150%字体横屏空白页裁切，最终code4的Android36模拟器13项通过；本轮证据见[设备审计](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-06/kelivo-device.md)。下列真实设备/完整对照范围仍进行中。
 
 ## 1. 真机与最低版本
 
-2026-11-06已准备[手机直接安装页](https://zyzlz.xin/mobile-codex/releases/android/kelivo-preview/index.html)，最终code4与前述模拟器版本SHA一致，附对应源码和构建说明；发布与下载证据见[手机交付审计](../audits/2026-11-06/kelivo-phone-download.md)。先让用户实际安装并核对入口，再进行以下真实设备验收；没有把公网下载计作安装通过。
+2026-11-06已准备[手机直接安装页](https://zyzlz.xin/mobile-codex/releases/android/kelivo-preview/index.html)，最终code4与前述模拟器版本SHA一致，附对应源码和构建说明；发布与下载证据见[手机交付审计](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-06/kelivo-phone-download.md)。先让用户实际安装并核对入口，再进行以下真实设备验收；没有把公网下载计作安装通过。
 
 依据：当前仅有Android36隔离模拟器导航/草稿及Android24/36 Robolectric证据，没有手机或Android24设备实测。代码仍保持minSdk24。
 

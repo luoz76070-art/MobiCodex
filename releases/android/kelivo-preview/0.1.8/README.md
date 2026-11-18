@@ -21,6 +21,6 @@ code6/7/8/9 可通过「设置 → 应用更新 → 检查更新」覆盖安装�
 APK SHA256 `55cd1ba56009fde374f2964c560a6f6a0224aba8e0555c79096b3583f7b3c049`。
 源码 SHA256 `ce234665805b9d8502f467542d7ca0d2e7cb18a70a4b1a65dbfad9f1e4de8619`。
 
-双源发布、公开回下载与手机升级状态见[本轮审计](../../../../docs/audits/2026-11-07/mobicodex-branding.md)。手机实际安装、桌面名称/图标和原连接数据仍待用户确认；本轮不扩大为完整59组功能验收。
+双源发布、公开回下载与手机升级状态见[本轮审计](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-07/mobicodex-branding.md)。手机实际安装、桌面名称/图标和原连接数据仍待用户确认；本轮不扩大为完整59组功能验收。
 
 整合发行按随附GNU AGPL v3提供，Kelivo固定v1.3.4（4a7da9b6）及原MIT/第三方声明随源码保留；许可证及内部兼容标识不做品牌替换。

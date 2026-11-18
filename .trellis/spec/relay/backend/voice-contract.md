@@ -73,4 +73,4 @@ V3在同一手机测试入口导入生产纯函数，覆盖各类保留/丢失�
 
 错误：用`/audio/asr/transcription`+input.file_url调用31，再解析output.transcription.text；或仅把M4A的MIME改为AAC。
 
-正确：先核验每个模型的官方非流样例，再选择上述独立协议；原生输出ADTS，网关按字节识别。官方依据与交付见[百炼修正](../../../../docs/audits/2026-10-23/asr-protocol.md)。
+正确：先核验每个模型的官方非流样例，再选择上述独立协议；原生输出ADTS，网关按字节识别。官方依据与交付见[百炼修正](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-23/asr-protocol.md)。

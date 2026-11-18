@@ -75,4 +75,4 @@ Trellis 的任务与会话自动提交已禁用；不建分支、不暂存、不
 4. B/C：持续开销、索引/缓存/分页、后台监督/唤醒、配对、发布和诊断。
 5. D UI：以真实 Codex 手机版画面建立对照，实施衔接连接/缓存边界，保持轻量化。
 
-完整优先级和验收门槛见 [审核计划](audits/2026-10-20/README.md)。真实发送、Android 真机、Windows 全流程及线上/长期运行仍需分别验收。
+完整优先级和验收门槛见 [审核计划](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-20/README.md)。真实发送、Android 真机、Windows 全流程及线上/长期运行仍需分别验收。

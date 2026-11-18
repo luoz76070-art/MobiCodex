@@ -1,11 +1,11 @@
 # 集成预览与真机验收
 
-状态：用户于2026-10-30要求“继续进行下一轮计划”，本轮已完成（DeepSeek兼容按用户选择延期）；执行记录见[本轮交付](../audits/2026-10-30/preview-validation.md)。目标：将可靠性阶段一至五的本地成果交付为可回滚预览，取得原手机版本、诊断与系统文件保存的实际证据。
+状态：用户于2026-10-30要求“继续进行下一轮计划”，本轮已完成（DeepSeek兼容按用户选择延期）；执行记录见[本轮交付](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-30/preview-validation.md)。目标：将可靠性阶段一至五的本地成果交付为可回滚预览，取得原手机版本、诊断与系统文件保存的实际证据。
 
 ## 启动依据
 
-- 阶段一至五源码与隔离验收完成，统一verify:all已通过；见[阶段五交付](../audits/2026-10-30/maintenance-boundaries.md)。本轮尚无新APK或网关部署。
-- 新DiagnosticExport是Android原生插件，只有热更新不能补齐系统保存能力；见[阶段四交付](../audits/2026-10-29/compact-diagnostics.md)。
+- 阶段一至五源码与隔离验收完成，统一verify:all已通过；见[阶段五交付](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-30/maintenance-boundaries.md)。本轮尚无新APK或网关部署。
+- 新DiagnosticExport是Android原生插件，只有热更新不能补齐系统保存能力；见[阶段四交付](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-29/compact-diagnostics.md)。
 - 用户之前的原手机双气泡未完成现场对应，合成测试无法替代该证据；诊断现在有2KiB摘要和64KiB文件上限。
 
 ## 顺序与验收

@@ -1,6 +1,6 @@
 # Kelivo 与 Codex 远控：统一 Kelivo 风格与双独立功能方案
 
-日期：2026-11-04，验收延续至 2026-11-05。状态：远控视觉迁移之后，已正式引入固定Kelivo并接线独立AI／电脑／设置，生成本地签名预览，见[产品接线审计](../audits/2026-11-05/kelivo-product.md)。原生完整行为、交接和59组验收仍未完成；下文各阶段描述保留规划含义，最新接续以[验收计划](2026-11-05-kelivo-product-acceptance.md)为准。早期视觉记录见[首轮审计](../audits/2026-11-04/kelivo-style.md)。
+日期：2026-11-04，验收延续至 2026-11-05。状态：远控视觉迁移之后，已正式引入固定Kelivo并接线独立AI／电脑／设置，生成本地签名预览，见[产品接线审计](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-05/kelivo-product.md)。原生完整行为、交接和59组验收仍未完成；下文各阶段描述保留规划含义，最新接续以[验收计划](2026-11-05-kelivo-product-acceptance.md)为准。早期视觉记录见[首轮审计](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-04/kelivo-style.md)。
 
 ## 1. 为什么调整路线
 
@@ -145,7 +145,7 @@ Android 官方允许一个应用声明多个 Activity 并用显式 Intent 导航
 
 前轮完成：现有 App/Kelivo/Capacitor 固定版本源码检查、Android 官方 Activity/Intent 机制核对、快速路线工作包与用户已确认决定整理，以及内部相对链接、工作区路径和关键发送分支复核。
 
-本轮根据用户纠正及 B 选项修订产品结构、Kelivo 统一界面验收及排期前提，并同步产品需求、UI 规范、旧方案提示及工程索引。随后依用户授权，完成现有远控首轮视觉迁移及浏览器/隔离回归，具体证据见[本轮记录](../audits/2026-11-04/kelivo-style.md)。未安装 Flutter SDK、构建新 APK、连接真机、提交真实模型任务或部署；原生合并仍未验证。
+本轮根据用户纠正及 B 选项修订产品结构、Kelivo 统一界面验收及排期前提，并同步产品需求、UI 规范、旧方案提示及工程索引。随后依用户授权，完成现有远控首轮视觉迁移及浏览器/隔离回归，具体证据见[本轮记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-04/kelivo-style.md)。未安装 Flutter SDK、构建新 APK、连接真机、提交真实模型任务或部署；原生合并仍未验证。
 
 ~~~text
 Android 官方：多 Activity 及显式 Intent

@@ -14,4 +14,4 @@
 
 重建：在元数据指定基线的仓库根目录执行 `gzip -dc releases/android/kelivo-preview/0.1.7/desktop-0.2.7-preview/source.patch.gz | git apply -`（补丁路径可放在仓库外），然后执行 `corepack pnpm install --frozen-lockfile`、`corepack pnpm --filter @mobile-codex/relay build`、`corepack pnpm build:plugin`。构建ID随机，不能承诺bundle逐字节复现。
 
-本项目MIT；此补充不含Kelivo二进制/源码或用户配置、凭证、签名材料。整合App的AGPL/第三方归属见上级版本说明。完整部署与验收见[本轮审计](../../../../../docs/audits/2026-11-07/agent-parity-runtime.md)。
+本项目MIT；此补充不含Kelivo二进制/源码或用户配置、凭证、签名材料。整合App的AGPL/第三方归属见上级版本说明。完整部署与验收见[本轮审计](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-07/agent-parity-runtime.md)。

@@ -2,9 +2,9 @@
 
 本插件在加载它的 Claude Code 原进程中执行。复用 Mobile Codex 的一个 Relay/Broker 和手机 Agent 页面，无额外 Node/MCP 子进程，不启动模型、不恢复或复制会话，不使用 macOS 辅助功能。
 
-2026-11-08已在官方Claude Desktop 4.23118.0的Code引擎2.1.317中加载0.1.2插件；官方8项无模型测试及最终36项本地/公网只读检查通过，用户真机确认手机和桌面同一原会话均显示消息与回复。原生问答/审批/停止/图片尚未另验，详见[接入审计](../../docs/audits/2026-11-08/claude-integration.md)。协议依据 `anthropics/claude-code` 的 `bf2323b3021c9d3db7a31e1e7d61068c3f704497` 中 `mods/types/claude-code.d.ts`（2.1.277），插件入口依据2026-10-21官方 Mods create 文档的 `hooks/hooks.json.modules`。该API仍可能变化，版本门不代替真实兼容性验证。
+2026-11-08已在官方Claude Desktop 4.23118.0的Code引擎2.1.317中加载0.1.2插件；官方8项无模型测试及最终36项本地/公网只读检查通过，用户真机确认手机和桌面同一原会话均显示消息与回复。原生问答/审批/停止/图片尚未另验，详见[接入审计](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-08/claude-integration.md)。协议依据 `anthropics/claude-code` 的 `bf2323b3021c9d3db7a31e1e7d61068c3f704497` 中 `mods/types/claude-code.d.ts`（2.1.277），插件入口依据2026-10-21官方 Mods create 文档的 `hooks/hooks.json.modules`。该API仍可能变化，版本门不代替真实兼容性验证。
 
-桌面模型菜单由第三方推理配置/接口模型发现提供，桥接不生成或保证这些模型可用。当前cc1已[关闭自动发现并限制到规范Sonnet/Opus](../../docs/audits/2026-11-08/claude-model-options.md)；只有默认Sonnet已完成双端收发验收，规范Opus仅短请求200，不据此称全部Code能力可用。
+桌面模型菜单由第三方推理配置/接口模型发现提供，桥接不生成或保证这些模型可用。当前cc1已[关闭自动发现并限制到规范Sonnet/Opus](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-08/claude-model-options.md)；只有默认Sonnet已完成双端收发验收，规范Opus仅短请求200，不据此称全部Code能力可用。
 
 ## 能力
 
@@ -62,6 +62,6 @@
 
 另可显式运行`node scripts/check-claude-runtime.mjs /absolute/isolated/claude`。要求调用者已准备官方2.1.287二进制，检查器不下载/安装依赖；自行创建HOME/CLAUDE_CONFIG_DIR/工作目录，复制插件和仓库外置测试fixture，执行版本门、严格静态校验与官方plugin test，最后清理目录。7项覆盖未配置、旧版本拒绝、登记/无订阅不读正文、按需快照/输入去重、原流透传及推理正文隔离、任务绑定中断、鉴权失败停止轮询。所有HTTP由官方测试hook应答，无模型或用户会话。Classic问答/审批在官方静态校验中被识别，但原面板取消/先答仍需原会话验收。
 
-2026-10-21本轮：官方严格校验、官方7/7、既有Claude31/31、固定声明类型检查、脚本语法与独立0.1.1插件打包通过；产品仅修正helper命名，没有改变原控制协议或运行网关。详见仓库`docs/audits/2026-10-21/claude-official-runtime.md`；以下保留初次交互切片记录。
+2026-10-21本轮：官方严格校验、官方7/7、既有Claude31/31、固定声明类型检查、脚本语法与独立0.1.1插件打包通过；产品仅修正helper命名，没有改变原控制协议或运行网关。详见归档 tag `archive/pre-cleanup-2026-11` 中的`docs/audits/2026-10-21/claude-official-runtime.md`；以下保留初次交互切片记录。
 
 2026-10-21：Claude 31项、合并后端194项及手机37项通过；浏览器检查360/390/430px、浅深色、150%根字号、至少44px按钮、双题提交、单次审批/拒绝和断流清卡片。以上都是源码和合成验证，未安装插件、部署或发布APK；生产仍1.2.2/versionCode18。

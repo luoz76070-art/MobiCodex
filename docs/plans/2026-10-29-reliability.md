@@ -1,6 +1,6 @@
 # 手机同步与输入可靠性优化计划
 
-状态：阶段一至五的源码实施与隔离验证已完成（2026-10-30）；未发布、Android真机待验。来源：[2026-10-29代码复审](../audits/2026-10-29/code-review.md)。证据：[阶段一、二](../audits/2026-10-29/reliability-fix.md)、[阶段三](../audits/2026-10-29/prompt-visibility.md)、[阶段四](../audits/2026-10-29/compact-diagnostics.md)、[阶段五](../audits/2026-10-30/maintenance-boundaries.md)。
+状态：阶段一至五的源码实施与隔离验证已完成（2026-10-30）；未发布、Android真机待验。来源：[2026-10-29代码复审](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-29/code-review.md)。证据：[阶段一、二](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-29/reliability-fix.md)、[阶段三](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-29/prompt-visibility.md)、[阶段四](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-29/compact-diagnostics.md)、[阶段五](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-30/maintenance-boundaries.md)。
 
 ## 目标
 

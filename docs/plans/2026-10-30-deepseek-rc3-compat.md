@@ -1,6 +1,6 @@
 # DeepSeek rc.3兼容与手机复联验收
 
-状态：2026-10-30已完成。两版官方隔离验证与60项DeepSeek回归已通过，原插件与网关均已更新，真实本地/公网通过；用户继续使用APK36，确认“列表、正文和重新打开均正常”。实际交付与验收见[本轮记录](../audits/2026-10-30/deepseek-rc3-compat.md)。
+状态：2026-10-30已完成。两版官方隔离验证与60项DeepSeek回归已通过，原插件与网关均已更新，真实本地/公网通过；用户继续使用APK36，确认“列表、正文和重新打开均正常”。实际交付与验收见[本轮记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-30/deepseek-rc3-compat.md)。
 
 ## 已确认的原因
 
@@ -20,4 +20,4 @@
 
 ## 本轮关联证据
 
-[APK36交付](../audits/2026-10-30/preview-validation.md)、plugins/mobile-deepseek/package.json、plugins/mobile-deepseek/README.md、ignored output/audit/2026-10-30/preview-validation/activity-baseline.json。宿主不兼容文字已通过原桌面插件页直接确认。
+[APK36交付](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-30/preview-validation.md)、plugins/mobile-deepseek/package.json、plugins/mobile-deepseek/README.md、ignored output/audit/2026-10-30/preview-validation/activity-baseline.json。宿主不兼容文字已通过原桌面插件页直接确认。

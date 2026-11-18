@@ -1,10 +1,10 @@
 # code7 / code8 手机与配套网关复测
 
-状态：2026-11-07 本轮已完成。配套图片网关升级及code7图片/大图、字号、连接/草稿/主题已通过；折叠范围修正后，用户进一步确认App内升级0.1.6 / code8成功且显示符合预期。手机安装SHA未由ADB独立核对，下文步骤保留code7初始计划，最终结果见检查点及[code8审计](../audits/2026-11-07/execution-notes.md)。
+状态：2026-11-07 本轮已完成。配套图片网关升级及code7图片/大图、字号、连接/草稿/主题已通过；折叠范围修正后，用户进一步确认App内升级0.1.6 / code8成功且显示符合预期。手机安装SHA未由ADB独立核对，下文步骤保留code7初始计划，最终结果见检查点及[code8审计](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-07/execution-notes.md)。
 
 目标：确认用户手机在配套图片网关上获得图片显示、执行说明常显及仅命令/输出动态折叠的实际效果，修正版为code8。
 
-前提证据：[本轮修复与检查](../audits/2026-11-07/remote-rendering.md)；[code7版本APK/源码/网关](../../releases/android/kelivo-preview/0.1.5/)，包名及证书保持前版。计划启动时旧网关尚未升级，现已完成，见[网关审计](../audits/2026-11-07/device-link.md)。
+前提证据：[本轮修复与检查](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-07/remote-rendering.md)；[code7版本APK/源码/网关](../../releases/android/kelivo-preview/0.1.5/)，包名及证书保持前版。计划启动时旧网关尚未升级，现已完成，见[网关审计](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-07/device-link.md)。
 
 1. 按版本README保存旧网关目录与配置，安排用户同意的服务切换时机；沿原workspace/配置/设备文件启动新网关，核对被动status的running/tunnel。若启用托管，按原service流程更新固定bundle；失败回退旧目录，保留全部用户数据。
 2. code6 手机从「设置 → 应用更新」检查、下载，再通过系统安装器覆盖 code7；code4/5 需先手动覆盖一次。打开设置核对0.1.5/code7，检查AI与电脑原草稿和连接仍可用。
@@ -12,7 +12,7 @@
 4. 查看已有包含多次工具调用的轮次，默认单条摘要、点击展开、字号紧凑，终稿独立。若需验证实时动态执行，先由用户指定任务和会话；审批/提问仍独立可见。
 5. 手机检查浅深、系统字号与Kelivo聊天显示偏好；记录手机型号/Android版本、安装版本、网关构建、结果和截图，失败保留并修正。
 
-验收：真实手机上述项目逐项有证据，图片不需手动复制到手机，旧连接/草稿保留，执行过程不逐行挤占默认聊天视图。该轮不等同59组全功能验收，也不默认启动其他Agent图片或磁盘清理。自托管更新源已另行补发 code7，见[发布记录](../audits/2026-11-07/app-update.md)。
+验收：真实手机上述项目逐项有证据，图片不需手动复制到手机，旧连接/草稿保留，执行过程不逐行挤占默认聊天视图。该轮不等同59组全功能验收，也不默认启动其他Agent图片或磁盘清理。自托管更新源已另行补发 code7，见[发布记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-07/app-update.md)。
 
 ## 2026-11-07 执行检查点
 
@@ -23,6 +23,6 @@
 - [x] 折叠范围修正为执行说明常显、仅命令/输出折叠，交付code8到GitHub和App更新源。
 - [x] 用户手机code8覆盖与新折叠效果通过：针对0.1.6/code8升级及说明常显、仅命令/输出展开的确认问题，回复「已升级，显示符合预期」；code7图片/大图、字号、原连接/草稿/主题已通过。
 
-部署与保存项见[本轮审计](../audits/2026-11-07/device-link.md)。DeepSeek桥接在切换前就已无监听、502，本轮搁置，不因Codex图片验收启动上游桥接修复。
+部署与保存项见[本轮审计](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-07/device-link.md)。DeepSeek桥接在切换前就已无监听、502，本轮搁置，不因Codex图片验收启动上游桥接修复。
 
 本轮到此结束，完整59组验收、其余设备/系统能力及原Desktop新建仍未完成，按[接续计划](2026-11-06-kelivo-device-parity.md)等待用户决定下一轮。

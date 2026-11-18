@@ -1,22 +1,22 @@
 # 插件化网关与多 Agent 接入
 
-更新时间：2026-10-22。当前独立预览为APK22 `1.3.1-deepseek-history-preview`，Mac固定网关及DeepSeek原插件0.2.0已实际更新；正式Android更新清单仍为18，手机覆盖安装和原会话真实控制待分项验收。首次迁移见[网关迁移记录](audits/2026-10-21/gateway-migration.md)，下方各阶段记录保留当时的验证边界。
+更新时间：2026-10-22。当前独立预览为APK22 `1.3.1-deepseek-history-preview`，Mac固定网关及DeepSeek原插件0.2.0已实际更新；正式Android更新清单仍为18，手机覆盖安装和原会话真实控制待分项验收。首次迁移见[网关迁移记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/gateway-migration.md)，下方各阶段记录保留当时的验证边界。
 
-最新[DeepSeek全部线程与按需历史](audits/2026-10-22/deepseek-history.md)：原profile跨工作区普通线程默认近30天，可查看更早，列表前台每30秒及回前台刷新摘要，正文按需分页。240条手机窗口可持续前翻/返回最新；单条文本32768字符，附件/工具过程/推理不投影。只读查看不激活Agent，显式发送才通过官方prompt恢复原sessionId。实际11线程/3工作区及本地公网历史、重连、95项健康断言通过；原进程/凭证/设备/profile保持，原任务已自然完成。后端318/318、手机43/43、官方历史4项/交互8项及类型/构建通过。APK22已发布独立预览，APK21不能获得本轮新UI；手机真实发送和权限决定另验。30天只过滤下发范围，官方摘要仍全量读取并缓存15秒；不后台遍历全部正文。
+最新[DeepSeek全部线程与按需历史](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-22/deepseek-history.md)：原profile跨工作区普通线程默认近30天，可查看更早，列表前台每30秒及回前台刷新摘要，正文按需分页。240条手机窗口可持续前翻/返回最新；单条文本32768字符，附件/工具过程/推理不投影。只读查看不激活Agent，显式发送才通过官方prompt恢复原sessionId。实际11线程/3工作区及本地公网历史、重连、95项健康断言通过；原进程/凭证/设备/profile保持，原任务已自然完成。后端318/318、手机43/43、官方历史4项/交互8项及类型/构建通过。APK22已发布独立预览，APK21不能获得本轮新UI；手机真实发送和权限决定另验。30天只过滤下发范围，官方摘要仍全量读取并缓存15秒；不后台遍历全部正文。
 
-最新[网关退出与重启稳定性](audits/2026-10-22/gateway-shutdown.md)已更新固定运行包：HTTP排空前统一取消Agent订阅，覆盖info/首帧初始化及活动流。全部后端308/308、网关/托管30/30及类型/构建通过；真实活动只读订阅下138ms自然退出、同端口重启和本地/公网/IPC健康通过。旧版切换仍残留，已通过官方界面仅重载手机桥接恢复，失败与恢复分别记录；原Harness任务及进程、配置/设备/profile保持，APK21无需重装，长期测试继续暂缓。
+最新[网关退出与重启稳定性](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-22/gateway-shutdown.md)已更新固定运行包：HTTP排空前统一取消Agent订阅，覆盖info/首帧初始化及活动流。全部后端308/308、网关/托管30/30及类型/构建通过；真实活动只读订阅下138ms自然退出、同端口重启和本地/公网/IPC健康通过。旧版切换仍残留，已通过官方界面仅重载手机桥接恢复，失败与恢复分别记录；原Harness任务及进程、配置/设备/profile保持，APK21无需重装，长期测试继续暂缓。
 
-最新[DeepSeek手机原生卡片与单次审批](audits/2026-10-21/deepseek-interactions.md)已加载原Harness插件0.1.2及对应固定网关。原问题/完整计划、continued与单次允许/拒绝复用现有手机卡片；完整输入缺失则禁用允许，未知跨重连锁定。后端304/304、官方交互8项和公网实际权限卡只读通过，原Harness PID保持；手机实际决定及真实问题仍分别待验，APK21无需重装。首次stop未排空旧SSE的离线/恢复有独立记录，整体任务保持in_progress。
+最新[DeepSeek手机原生卡片与单次审批](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/deepseek-interactions.md)已加载原Harness插件0.1.2及对应固定网关。原问题/完整计划、continued与单次允许/拒绝复用现有手机卡片；完整输入缺失则禁用允许，未知跨重连锁定。后端304/304、官方交互8项和公网实际权限卡只读通过，原Harness PID保持；手机实际决定及真实问题仍分别待验，APK21无需重装。首次stop未排空旧SSE的离线/恢复有独立记录，整体任务保持in_progress。
 
-最新[固定运行包兼容更新](audits/2026-10-21/agent-compat-runtime-upgrade.md)已将核验的0.2.0候选复制到独立固定目录并运行，OpenCode nullable分页修复进入当前网关。私有备份、首轮正常回退/二次切换、本地公网检查及真实手机v1增量流通过；17.34秒样本用当前手机解码器还原120条消息且无序列缺口。未启用后台托管或安装宿主插件，Claude/DeepSeek宿主侧0.1.1仍待安装验收；APK21及三个更新清单未改。下方“运行网关未改”保留对应历史阶段原义。
+最新[固定运行包兼容更新](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/agent-compat-runtime-upgrade.md)已将核验的0.2.0候选复制到独立固定目录并运行，OpenCode nullable分页修复进入当前网关。私有备份、首轮正常回退/二次切换、本地公网检查及真实手机v1增量流通过；17.34秒样本用当前手机解码器还原120条消息且无序列缺口。未启用后台托管或安装宿主插件，Claude/DeepSeek宿主侧0.1.1仍待安装验收；APK21及三个更新清单未改。下方“运行网关未改”保留对应历史阶段原义。
 
-最新新增[官方DeepSeek Harness及手机重复修复](audits/2026-10-21/deepseek-dedup.md)：独立Cordis原进程插件、loopback适配器与手机入口已通过合成检查；[安装说明](../plugins/mobile-deepseek/README.md)。APK21已发布独立预览并完整下载校验，Mac同源固定网关已切换，本地/公网连接和原生IPC健康通过。正式更新仍18，热更新未改；本机无dsh，真实加载及Android覆盖安装仍待验收，三插件未自动安装进宿主。
+最新新增[官方DeepSeek Harness及手机重复修复](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/deepseek-dedup.md)：独立Cordis原进程插件、loopback适配器与手机入口已通过合成检查；[安装说明](../plugins/mobile-deepseek/README.md)。APK21已发布独立预览并完整下载校验，Mac同源固定网关已切换，本地/公网连接和原生IPC健康通过。正式更新仍18，热更新未改；本机无dsh，真实加载及Android覆盖安装仍待验收，三插件未自动安装进宿主。
 
-[官方运行时复核](audits/2026-10-21/deepseek-official-runtime.md)随后补齐13项：9项bundle/Loader/内存Session/事件总线及卸载，加4项官方生产AgentLoop的queue/steer/流去重/keepInbox/旧turn拒绝。发现并修复revision逐帧递增被误当attempt固定的缺陷，独立插件0.1.1及DeepSeek22/22通过；3次本地确定性响应，无外部模型。修复插件本地单独打包，APK21与运行网关未改；用户dsh原会话/真实provider与Android仍需验收。
+[官方运行时复核](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/deepseek-official-runtime.md)随后补齐13项：9项bundle/Loader/内存Session/事件总线及卸载，加4项官方生产AgentLoop的queue/steer/流去重/keepInbox/旧turn拒绝。发现并修复revision逐帧递增被误当attempt固定的缺陷，独立插件0.1.1及DeepSeek22/22通过；3次本地确定性响应，无外部模型。修复插件本地单独打包，APK21与运行网关未改；用户dsh原会话/真实provider与Android仍需验收。
 
-[Claude官方运行时复核](audits/2026-10-21/claude-official-runtime.md)进一步以临时官方2.1.287验证：严格校验识别原8个hook/9个API，官方无模型7/7及Claude31/31通过。HTTP helper同名静态加载错误已修复为独立插件0.1.1；用户旧CLI未升级，修复包未装入用户宿主，真实Classic面板/原会话及Android仍待验收。
+[Claude官方运行时复核](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/claude-official-runtime.md)进一步以临时官方2.1.287验证：严格校验识别原8个hook/9个API，官方无模型7/7及Claude31/31通过。HTTP helper同名静态加载错误已修复为独立插件0.1.1；用户旧CLI未升级，修复包未装入用户宿主，真实Classic面板/原会话及Android仍待验收。
 
-[OpenCode官方服务复核](audits/2026-10-21/opencode-official-runtime.md)完成12项自建数据库检查，并修复分页显式null游标兼容；用户原会话/模型另验收。随后[后台托管候选](audits/2026-10-21/gateway-service.md)为Codex插件0.2.0补齐可选macOS登录启动/异常恢复入口，固定程序不依赖插件缓存。26项隔离/独立网关及plutil检查通过，当前用户登录项未注册，运行网关与APK21不变。
+[OpenCode官方服务复核](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/opencode-official-runtime.md)完成12项自建数据库检查，并修复分页显式null游标兼容；用户原会话/模型另验收。随后[后台托管候选](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/gateway-service.md)为Codex插件0.2.0补齐可选macOS登录启动/异常恢复入口，固定程序不依赖插件缓存。26项隔离/独立网关及plutil检查通过，当前用户登录项未注册，运行网关与APK21不变。
 
 ## 目标与阶段
 
@@ -124,13 +124,13 @@ P0 未替换运行中的输入通道。回退本轮研究只需停止诊断连�
 
 每个表单持有当前连接中生成的随机令牌。提交前校验线程、待答状态、完整问题集合、选项/文字权限，并同步锁定，重复请求返回 409。IPC ACK 只能证明请求已传输；等待后续权威状态移除问题才返回 resolved（表示不再待答，也可能是桌面处理或任务结束，不能单凭此证明本次答案被采纳）。无状态确认则 submitted，超时/断线/不确定回包则 uncertain；两者都禁止自动重放。宿主 steer 接口没有 expectedTurnId 原子条件，Relay 使用最新原会话状态校验和题目 ID 绑定，并保留此并发边界，需实测原会话接受情况。
 
-2026-10-21补齐同进程内的重连保护：已发送的原题按线程/完整签名保留最多128项未确认记录，不保存答案。断线、patch缺口或重新进入会话不会让同一原题恢复可提交；权威移除或内容变化才释放记录，容量满拒绝新写入。新增6项回归，问答27/27、后端207/207及两端类型检查通过。最新真实只读核验能发现owner但未收到选定会话快照，尚不能确认当前宿主问答可用；先解决订阅，再安排真实应答验收，详见[本轮记录](audits/2026-10-21/codex-question-reconnect.md)。
+2026-10-21补齐同进程内的重连保护：已发送的原题按线程/完整签名保留最多128项未确认记录，不保存答案。断线、patch缺口或重新进入会话不会让同一原题恢复可提交；权威移除或内容变化才释放记录，容量满拒绝新写入。新增6项回归，问答27/27、后端207/207及两端类型检查通过。最新真实只读核验能发现owner但未收到选定会话快照，尚不能确认当前宿主问答可用；先解决订阅，再安排真实应答验收，详见[本轮记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/codex-question-reconnect.md)。
 
 隔离验证命令：`corepack pnpm test:user-input`。合成原生 Unix socket + 真实 HTTP/SSE + 配对设备鉴权覆盖请求路由、两端同步、重复发送、过期、错序与断线；测试不连接真实 Codex、不调用模型。人工只读原生快照另存 `output/audit/2026-10-20/desktop-native-stream-shape.json`，提交消息数为 0。
 
 当前尚未执行真实手机应答、真实 Desktop 控制验收、APK 发布或服务升级；生产 v1.2.2 不会自动获得本次功能。普通同会话控制的后续源码进展见下节；原生读取成功不能据此撤掉两个 Mac App 的现有权限。
 
-最新补充：先前未收到快照的问题已定位为16MiB原始帧限制；修复为64MiB有界、一次分配接收后，当前真实只读成功取得v11原会话快照（约620ms、120条消息），不需更改协议版本或owner路由。合并后端210/210、两端类型检查及独立插件构建通过；真实提问提交仍待验收，见[长会话记录](audits/2026-10-21/codex-large-snapshot.md)。
+最新补充：先前未收到快照的问题已定位为16MiB原始帧限制；修复为64MiB有界、一次分配接收后，当前真实只读成功取得v11原会话快照（约620ms、120条消息），不需更改协议版本或owner路由。合并后端210/210、两端类型检查及独立插件构建通过；真实提问提交仍待验收，见[长会话记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/codex-large-snapshot.md)。
 
 ## P1 源码实施：普通原会话控制
 
@@ -225,7 +225,7 @@ Relay复用设备鉴权、撤销、SSE配额和快照增量，新增：
 
 ## 本地候选包（2026-10-21）
 
-已生成1.3.0-agent-gateway-preview/versionCode19 APK、两个插件的ZIP和仅兼容原生19的热更新HTML。APK签名/应用ID/权限/双更新源与18一致，4个dist文件全匹配；真实覆盖安装与配对保留尚未验收。修复热更新仅内联主文件而遗漏Agent懒加载块的问题，合成单HTML运行与构建回归通过。候选目录、hash及检查见[交付记录](audits/2026-10-21/agent-gateway-candidate.md)。
+已生成1.3.0-agent-gateway-preview/versionCode19 APK、两个插件的ZIP和仅兼容原生19的热更新HTML。APK签名/应用ID/权限/双更新源与18一致，4个dist文件全匹配；真实覆盖安装与配对保留尚未验收。修复热更新仅内联主文件而遗漏Agent懒加载块的问题，合成单HTML运行与构建回归通过。候选目录、hash及检查见[交付记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/agent-gateway-candidate.md)。
 
 当前PATH的OpenCode为2.0.16，固定主源与合成契约复核已完成，见下节；Claude仍2.1.220，低于Mods开发契约。PATH Codex0.160.1不替代Desktop内部版本。生产仍18、未安装/部署/真实模型或审批/提交，长期测试暂缓；继续宿主兼容复核和统一真实验收，不标记整个任务完成。
 
@@ -235,6 +235,6 @@ Relay复用设备鉴权、撤销、SSE配额和快照增量，新增：
 
 最终后端201/201（OpenCode32）、手机37/37及消息回归、两端类型/构建、独立插件包通过。新增7项覆盖未核验版本、无标题、交错text ordinal、中断no-op和不可映射表单；原问答、签名、鉴权与资源释放测试切换到真实2.0.16结构。浏览器390px普通双题一次应答、复杂表单说明与禁用提交通过；360/430px无横溢、按钮44px、warn/error为空，资源已清理。证据`output/audit/2026-10-21/opencode-2-*`与`output/ui-review/2026-10-21/opencode-2-*`。
 
-[候选交付](audits/2026-10-21/agent-gateway-candidate.md)已按同一源码重建APK/HTML/插件ZIP并更新hash；只是本地预览，未安装/发布。Claude本机版本仍不满足开发契约，真实宿主和Android待验收；不把固定源码与合成测试当作已接管本机OpenCode。
+[候选交付](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/agent-gateway-candidate.md)已按同一源码重建APK/HTML/插件ZIP并更新hash；只是本地预览，未安装/发布。Claude本机版本仍不满足开发契约，真实宿主和Android待验收；不把固定源码与合成测试当作已接管本机OpenCode。
 
-2026-10-21问答回包复核：同步要求ok=true、异步steer要求原题turnId，额外核对outer method/owner和可选内层method。坏回包保持uncertain及提交锁，同代次权威移除优先，不重放。新增17项后问答44/44、综合后端227/227及两端类型/独立构建通过。只更新插件ZIP，APK/HTML与生产18保持；真实原会话应答及Android仍待验，详见[专项记录](audits/2026-10-21/codex-question-ack.md)。
+2026-10-21问答回包复核：同步要求ok=true、异步steer要求原题turnId，额外核对outer method/owner和可选内层method。坏回包保持uncertain及提交锁，同代次权威移除优先，不重放。新增17项后问答44/44、综合后端227/227及两端类型/独立构建通过。只更新插件ZIP，APK/HTML与生产18保持；真实原会话应答及Android仍待验，详见[专项记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/codex-question-ack.md)。

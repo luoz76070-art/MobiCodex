@@ -2,7 +2,7 @@
 
 ## 依据与目标
 
-[本轮证据](../audits/2026-11-08/claude-model-options.md)确认规范ID claude-opus-5-5短请求200，桌面菜单已精简并保持Sonnet默认；完整Code上下文与手机双端的Opus会话尚未单独验收。目标是在现有桌面桥接上验证Opus真实往返，不扩展其他模型或工具权限。
+[本轮证据](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-08/claude-model-options.md)确认规范ID claude-opus-5-5短请求200，桌面菜单已精简并保持Sonnet默认；完整Code上下文与手机双端的Opus会话尚未单独验收。目标是在现有桌面桥接上验证Opus真实往返，不扩展其他模型或工具权限。
 
 ## 用户启动后执行
 

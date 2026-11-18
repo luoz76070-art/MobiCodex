@@ -1,6 +1,6 @@
 # Kelivo 原生整合下一轮计划
 
-状态：用户2026-11-05“进行下一轮”已启动，原生兼容修复、正式源码、产品身份和统一入口已接线，已生成签名预览；最终检查结果见[产品接线审计](../audits/2026-11-05/kelivo-product.md)。原生完整行为、可选交接、原Desktop新建与59组验收继续由[接续计划](2026-11-05-kelivo-product-acceptance.md)跟踪，本计划不表示全功能已交付。前轮仅构建检查的历史证据见[收尾报告](../audits/2026-11-05/kelivo-native-closeout.md)。
+状态：用户2026-11-05“进行下一轮”已启动，原生兼容修复、正式源码、产品身份和统一入口已接线，已生成签名预览；最终检查结果见[产品接线审计](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-05/kelivo-product.md)。原生完整行为、可选交接、原Desktop新建与59组验收继续由[接续计划](2026-11-05-kelivo-product-acceptance.md)跟踪，本计划不表示全功能已交付。前轮仅构建检查的历史证据见[收尾报告](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-05/kelivo-native-closeout.md)。
 
 ## 目标
 

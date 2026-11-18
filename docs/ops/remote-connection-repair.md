@@ -8,19 +8,19 @@
 
 清理旧App前，核对监听PID的完整路径、bundle SHA和`/api/gateway`的native模式，再确认旧Relay/Input进程和旧`local.mobile-codex.relay`登录服务均未运行。仅对已识别的生成App制作私有压缩归档，逐文件核对内容与权限后移除；保留旧配置、源码及打包入口。不在备份目录留可误启的同名App副本。无法读取完整系统后台项目清单时记为未知，不等同于所有登录项均不存在。
 
-清理后确认同PID/instanceId、本地/公网鉴权及IPC健康，配置和设备文件状态保持。需要回退时先正常停止原生网关并确认端口释放，再恢复归档中的两个App；不能与当前网关同时启动。辅助功能说明仅适用于下述旧UI注入路径，当前native通道无需两个App。实际清理见[2026-10-21记录](../audits/2026-10-21/legacy-mac-app-cleanup.md)。
+清理后确认同PID/instanceId、本地/公网鉴权及IPC健康，配置和设备文件状态保持。需要回退时先正常停止原生网关并确认端口释放，再恢复归档中的两个App；不能与当前网关同时启动。辅助功能说明仅适用于下述旧UI注入路径，当前native通道无需两个App。实际清理见[2026-10-21记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/legacy-mac-app-cleanup.md)。
 
 ## 固定网关更新与退出核验
 
 2026-10-31已再次核验现有预览发布入口：SSH别名`release-host`，显式`IdentityFile ~/.ssh/release_key`，目录`/var/www/mobile-codex/releases/android/preview`。别名本身未配置该IdentityFile，默认SSH会认证失败；脚本设置`MOBILE_CODEX_RELEASE_SSH_KEY`指向既有私钥文件即可，不输出私钥。发布前仍须比较远端四份清单与公网SHA，不能仅依赖历史值。
 
-APK预览发布前，从上一轮发布记录核对实际SSH别名与IdentityFile，并先只读比较远端和公网清单SHA；不能只用公开域名和默认密钥猜测登录。2026-10-23语音发布复用原子脚本，preview26/previous25，详见[发布记录](../audits/2026-10-23/voice-release.md)。
+APK预览发布前，从上一轮发布记录核对实际SSH别名与IdentityFile，并先只读比较远端和公网清单SHA；不能只用公开域名和默认密钥猜测登录。2026-10-23语音发布复用原子脚本，preview26/previous25，详见[发布记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-23/voice-release.md)。
 
 更新前读取实际运行命令、instanceId及唯一监听PID，核对候选bundle SHA/逐文件内容，私有备份配置、设备状态及原固定入口。凭证在脚本进程内读取，只放鉴权header，不打印或放命令参数。通过原instance绑定的管理stop后，分别等待原PID自然退出和监听释放，再启动核验的新固定入口；202或端口空闲不代表退出完成。启动后核对新PID/instance、Tunnel connected、本地/公网200、无凭证401、Android预检、IPC和配置/设备状态。
 
 若旧版释放端口后仍持有到Harness的SSE，保留失败记录，停止重复发stop或并行启动。已授权的恢复可通过官方Harness插件页仅停用再启用`dsh-mobile-codex`，确认原网关自然退出、原宿主PID保持且bridge恢复后启动固定网关；不退出Harness、不处理权限、不停止原任务或全局kill。插件重新加载可能改变会话别名，手机返回列表重新打开。恢复另存记录，不覆盖失败。此操作只用于已确认的旧版残留，不作为新版正常停止步骤。
 
-新版使用`preClose`统一取消适配器，独立daemon隔离回归及真实只读活动流自然退出/重启已通过；一次样本不能替代长期连接验收。回退前先检查配置后续变更，正常停止并确认当前PID/端口都释放，才从备份原入口start；不覆盖新凭证或设备文件。具体固定版本、备份与证据见[2026-10-22退出修复](../audits/2026-10-22/gateway-shutdown.md)。
+新版使用`preClose`统一取消适配器，独立daemon隔离回归及真实只读活动流自然退出/重启已通过；一次样本不能替代长期连接验收。回退前先检查配置后续变更，正常停止并确认当前PID/端口都释放，才从备份原入口start；不覆盖新凭证或设备文件。具体固定版本、备份与证据见[2026-10-22退出修复](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-22/gateway-shutdown.md)。
 
 2026-10-23从项目分组固定网关升级语音时，原版接受stop后仍残留4条DeepSeek连接；按上节仅重载原桥接恢复，原Harness进程保持。本次再次说明关闭顺序修复未覆盖全部长期残留，失败/恢复另存，不应在切换脚本中跳过PID退出检查或自动强退。
 
@@ -32,7 +32,7 @@ APK预览发布前，从上一轮发布记录核对实际SSH别名与IdentityFil
 
 更新网关仍遵循上节原instance stop、PID退出与端口释放的顺序。检查本地/公网recent与all全分页、另一工作区的历史/重连、鉴权/CORS、Codex IPC及两份配置仅scope改变。无实际30天以前数据时以合成验证筛选，不伪称真实时间边界验收；原会话发送与权限决定交给用户。
 
-回退需匹配网关、插件及scope配置，旧网关不直接搭配新历史游标协议。正常stop当前网关，确认PID/监听都释放，在官方UI仅停用手机桥接后恢复已核验旧插件和模式，启用后再start匹配入口。若配置在升级后变过，只撤销本轮scope变更，保留新凭证/设备；不能盲覆盖整个旧配置。固定入口、私有备份及本轮只读/发布证据见[2026-10-22历史交付](../audits/2026-10-22/deepseek-history.md)。该流程未做真实故障回退演练。
+回退需匹配网关、插件及scope配置，旧网关不直接搭配新历史游标协议。正常stop当前网关，确认PID/监听都释放，在官方UI仅停用手机桥接后恢复已核验旧插件和模式，启用后再start匹配入口。若配置在升级后变过，只撤销本轮scope变更，保留新凭证/设备；不能盲覆盖整个旧配置。固定入口、私有备份及本轮只读/发布证据见[2026-10-22历史交付](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-22/deepseek-history.md)。该流程未做真实故障回退演练。
 
 ## 故障定位
 
@@ -95,14 +95,14 @@ APK预览发布前，从上一轮发布记录核对实际SSH别名与IdentityFil
 4. 先给手机提供独立预览下载：复用 APK 发布入口，将 release dir 和 base URL 指向既有静态资源下的 `android/preview` 子目录。只切预览目录自己的 latest，不覆盖正式 Android/hot 清单；从公网完整下载后核对 SHA、大小、CORS 与正式清单未变化。手机覆盖安装保留数据。
 5. 回退先用候选自身 CLI 的 stop，确认实例退出和端口释放，再恢复原运行文件及经核实的原 App 启动链。旧发布 dist 与切换前磁盘 dist 分开备份；恢复范围限于生成文件，不回退用户源码或改变 App 签名/权限。记录“备份已准备”与“真实回退已演练”的差别。
 
-2026-10-21 的实际迁移、同名副本争用修正及剩余验收见[候选迁移记录](../audits/2026-10-21/gateway-migration.md)。此流程不要求重启 Codex，也不通过独立 CLI 会话替代 Desktop 原会话验收。
+2026-10-21 的实际迁移、同名副本争用修正及剩余验收见[候选迁移记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/gateway-migration.md)。此流程不要求重启 Codex，也不通过独立 CLI 会话替代 Desktop 原会话验收。
 
 ## 回退边界
 
-- 2026-10-23语音质量更新再次发生旧网关停止后持有到Harness9876的连接、20秒未退出；官方仅重载原dsh-mobile-codex手机桥接后自然退出，再启动新固定网关，约3分钟离线。84健康/17重连和配置/设备/Key/Harness保持通过，隔离30项通过不能视作此残留已根治；失败/恢复及当前入口见[语音实测](../audits/2026-10-23/voice-live.md)。后续升级先审查此风险，不能强杀宿主或重跑旧state切换。此次ASR上线与第三方DeepSeek生成502分别记录，模型服务故障不通过反复重启网关处理。
+- 2026-10-23语音质量更新再次发生旧网关停止后持有到Harness9876的连接、20秒未退出；官方仅重载原dsh-mobile-codex手机桥接后自然退出，再启动新固定网关，约3分钟离线。84健康/17重连和配置/设备/Key/Harness保持通过，隔离30项通过不能视作此残留已根治；失败/恢复及当前入口见[语音实测](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-23/voice-live.md)。后续升级先审查此风险，不能强杀宿主或重跑旧state切换。此次ASR上线与第三方DeepSeek生成502分别记录，模型服务故障不通过反复重启网关处理。
 
-- 2026-10-22项目分组交付复用上述固定网关/独立预览流程：新bundle`58fef1a52eaf`，仅更新网关程序，DeepSeek插件/profile/配置保持；Codex近期69/全部126及DeepSeek11/3项目只读通过。APK23独立preview，previous22，正式18/hot保持。当前入口、私有备份与待手机验收见[项目分组记录](../audits/2026-10-22/project-groups.md)；回退不恢复上轮旧scope配置，不停止Harness。
-- 更新已运行的原生固定网关时，继续使用已核验ZIP的独立版本目录。先私有备份原固定版本、配置及实际存在的设备文件；按原instanceId正常停止，并分别等待端口释放与旧进程退出，再启动新固定版本。端口释放不等于操作系统已移除旧进程，不能立即据此宣告进程检查失败。失败回退也须先确认候选停止，避免第二个Tunnel。2026-10-21的实际切换/正常回退及鉴权检查见[兼容更新记录](../audits/2026-10-21/agent-compat-runtime-upgrade.md)。此流程不隐式启用service或安装宿主插件。
+- 2026-10-22项目分组交付复用上述固定网关/独立预览流程：新bundle`58fef1a52eaf`，仅更新网关程序，DeepSeek插件/profile/配置保持；Codex近期69/全部126及DeepSeek11/3项目只读通过。APK23独立preview，previous22，正式18/hot保持。当前入口、私有备份与待手机验收见[项目分组记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-22/project-groups.md)；回退不恢复上轮旧scope配置，不停止Harness。
+- 更新已运行的原生固定网关时，继续使用已核验ZIP的独立版本目录。先私有备份原固定版本、配置及实际存在的设备文件；按原instanceId正常停止，并分别等待端口释放与旧进程退出，再启动新固定版本。端口释放不等于操作系统已移除旧进程，不能立即据此宣告进程检查失败。失败回退也须先确认候选停止，避免第二个Tunnel。2026-10-21的实际切换/正常回退及鉴权检查见[兼容更新记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/agent-compat-runtime-upgrade.md)。此流程不隐式启用service或安装宿主插件。
 - Broker 回退前先停止新 Mac Tunnel，恢复原 Broker WorkingDirectory/环境，再启动原 Mac App；旧 Broker 不一定认识新 Tunnel 的 header 握手。
 - 保留已经修好的有效 TLS 和续期安排，不因应用回退重新使用过期证书。
 - 当前发布的 drop-in、环境文件、备份路径及检查结果应写进每次 incident 记录，且只移动本次创建的文件。服务切换可回退不代表已做真实故障回退演练。
