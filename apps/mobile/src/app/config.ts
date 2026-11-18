@@ -51,9 +51,13 @@ export const cachedThreadLimit = 24;
 
 export const cachedMessagesPerThread = 120;
 
-export const appVersionName = "0.4.0";
+// Injected by vite.config.ts from android/app/build.gradle; plain test bundles get the fallbacks.
+declare const __APP_VERSION_NAME__: string;
+declare const __APP_VERSION_CODE__: number;
 
-export const appVersionCode = 43;
+export const appVersionName = typeof __APP_VERSION_NAME__ === "undefined" ? "0.0.0-dev" : __APP_VERSION_NAME__;
+
+export const appVersionCode = typeof __APP_VERSION_CODE__ === "undefined" ? 0 : __APP_VERSION_CODE__;
 
 export const appVersionLabel = `v${appVersionName}`;
 
