@@ -10,7 +10,7 @@
 
 “交给电脑”是可选联动：用户主动选择任务说明及必要附件，在同一张卡中选择项目、新建或已有会话，并在提交前确认一次。确认后在电脑远控中直接与 Codex 沟通，不安排手机模型持续转述。未发起交接时，两项功能互不构成使用前提。
 
-此前保留两套界面的 5–10 个工作日预览目标不再适用。设计、独立使用和交接验收条件见[统一 Kelivo 风格与双独立功能方案](plans/2026-11-04-kelivo-fast-integration.md)。2026-11-05已引入固定Kelivo业务与统一AI／电脑／设置入口；2026-11-06已接单条正文交接卡、已有Desktop会话/附件/一次确认及未知不重发，生成code3签名preview并通过Android36离线局部验收，见[最新记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-06/kelivo-handoff.md)。原Desktop新建仍缺接口，完整原生行为、真实联动与59组功能对照继续待验，不将源码保留或预览构建等同完整可用。
+此前保留两套界面的 5–10 个工作日预览目标不再适用。设计、独立使用和交接验收条件见[统一 Kelivo 风格与双独立功能方案](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/plans/2026-11-04-kelivo-fast-integration.md)。2026-11-05已引入固定Kelivo业务与统一AI／电脑／设置入口；2026-11-06已接单条正文交接卡、已有Desktop会话/附件/一次确认及未知不重发，生成code3签名preview并通过Android36离线局部验收，见[最新记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-06/kelivo-handoff.md)。原Desktop新建仍缺接口，完整原生行为、真实联动与59组功能对照继续待验，不将源码保留或预览构建等同完整可用。
 
 ## 一句话目标
 

@@ -172,3 +172,26 @@
 ### 2026-11-14
 
 - 另有 1 个证据文件（[目录](https://github.com/luoz76070-art/MobiCodex/tree/archive/pre-cleanup-2026-11/docs/audits/2026-11-14)）
+
+## 已归档的计划
+
+下面这些计划已经做完、作废，或者已经并进 #41，原文在归档 tag 里。进行中的计划仍在 [docs/plans](plans/)。
+
+- 2026-10-29：[手机同步与输入可靠性优化计划](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/plans/2026-10-29-reliability.md)
+- 2026-10-30：[DeepSeek 手机真实控制验收候选计划](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/plans/2026-10-30-deepseek-control-acceptance.md)
+- 2026-10-30：[DeepSeek rc.3兼容与手机复联验收](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/plans/2026-10-30-deepseek-rc3-compat.md)
+- 2026-10-30：[集成预览与真机验收](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/plans/2026-10-30-preview-validation.md)
+- 2026-11-03：[Codex同步与发送能力修复候选](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/plans/2026-11-03-codex-connection-recovery.md)
+- 2026-11-03：[Kelivo 全功能集成可行性方案](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/plans/2026-11-03-kelivo-parity-feasibility.md)
+- 2026-11-03：[Kelivo v1.3.4 功能对等矩阵](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/plans/2026-11-03-kelivo-parity-matrix.md)
+- 2026-11-04：[Kelivo 与 Codex 远控：统一 Kelivo 风格与双独立功能方案](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/plans/2026-11-04-kelivo-fast-integration.md)
+- 2026-11-05：[Kelivo 原生整合下一轮计划](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/plans/2026-11-05-kelivo-native-next.md)
+- 2026-11-05：[Kelivo 整合预览：原生验收与完整功能接续](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/plans/2026-11-05-kelivo-product-acceptance.md)
+- 2026-11-06：[Kelivo 整合：设备与全功能对照接续](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/plans/2026-11-06-kelivo-device-parity.md)
+- 2026-11-07：[电脑 Agent 通道统一体验](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/plans/2026-11-07-agent-experience-parity.md)
+- 2026-11-07：[code9 电脑通道手机交互验收接续计划](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/plans/2026-11-07-agent-phone-acceptance.md)
+- 2026-11-07：[MobiCodex 品牌与手机更新](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/plans/2026-11-07-mobicodex-branding.md)
+- 2026-11-07：[code7 / code8 手机与配套网关复测](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/plans/2026-11-07-remote-rendering-device.md)
+- 2026-11-08：[Opus 5.5 完整 Code 会话验收（待启动）](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/plans/2026-11-08-claude-opus-acceptance.md)
+- 2026-11-12：[MobiCodex Kelivo GitHub Release 对齐计划](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/plans/2026-11-12-kelivo-github-release.md)
+- 2026-11-13：[MobiCodex 仓库边界后的发布与本地清理计划](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/plans/2026-11-13-post-boundary-cleanup.md)

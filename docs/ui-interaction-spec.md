@@ -8,7 +8,7 @@
 
 AI 助手沿用 Kelivo 的界面基础；电脑远控采用相同字体、色值、间距、圆角、图标、消息/输入/工具卡片及浅深主题规范，覆盖深层设置。导航与返回行为一致，不能出现两套主导航或通过保留两个原版 App 的界面风格完成整合。底层运行时是否复用分别验证，不决定产品必须保留两套界面。
 
-切换入口保留各自草稿、会话及阅读位置，不发模型请求或提交电脑任务；运行状态按原能力恢复。样稿和验收需覆盖两个功能独立使用、可选交接、设置、主题、键盘及常用屏宽。以下 Codex 手机版方向继续记录既有远控版本的设计背景，新整合候选以本节为准。2026-11-06已接可选交接卡：单条正文、按需重新选附件、项目/已有Desktop会话、一次确认；未接入的原Desktop新建显式禁用。队列与Desktop接收分别显示，未知结果冻结、重开不重发，普通草稿独立保留。电脑实际明暗和配色由Flutter拥有，不能采用Android WebView可能错误的媒体查询值。Android36已验证离线跨Activity草稿、设置返回、页面重建及键盘避让；真机/系统回收、系统栏细节、深历史与完整功能继续待验。详见[交接记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-06/kelivo-handoff.md)和[接续计划](plans/2026-11-06-kelivo-device-parity.md)。
+切换入口保留各自草稿、会话及阅读位置，不发模型请求或提交电脑任务；运行状态按原能力恢复。样稿和验收需覆盖两个功能独立使用、可选交接、设置、主题、键盘及常用屏宽。以下 Codex 手机版方向继续记录既有远控版本的设计背景，新整合候选以本节为准。2026-11-06已接可选交接卡：单条正文、按需重新选附件、项目/已有Desktop会话、一次确认；未接入的原Desktop新建显式禁用。队列与Desktop接收分别显示，未知结果冻结、重开不重发，普通草稿独立保留。电脑实际明暗和配色由Flutter拥有，不能采用Android WebView可能错误的媒体查询值。Android36已验证离线跨Activity草稿、设置返回、页面重建及键盘避让；真机/系统回收、系统栏细节、深历史与完整功能继续待验。详见[交接记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-11-06/kelivo-handoff.md)和[接续计划](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/plans/2026-11-06-kelivo-device-parity.md)。
 
 ## 紧凑运行中输入区（APK32）
 
