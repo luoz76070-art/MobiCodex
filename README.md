@@ -8,7 +8,7 @@
 在手机上跟进、回复、审批电脑上的 Codex、Claude Code、DeepSeek、CC Desk 和 OpenCode 会话。
 
 [![Android](https://img.shields.io/badge/Android-6.0%2B-3DDC84?logo=android&logoColor=white)](#下载)
-[![Version](https://img.shields.io/badge/version-0.4.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.4.1-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/License-MIT-555)](LICENSE)
 
 [下载](#下载) · [三步上手](#三步上手) · [支持的 Agent](#支持的-agent) · [更新说明](CHANGELOG.md) · [反馈问题](#反馈问题)
@@ -33,6 +33,7 @@ Agent 一跑就是几十分钟，中间常常要你点一下审批、回答一�
 - **不用同一个 Wi-Fi**：电脑网关主动连接你自己的 HTTPS Broker，手机在哪都能连，消息不经过第三方服务。
 
 <p align="center">
+  <img src="docs/images/screens/session-list.jpg" width="240" alt="会话列表：按项目分组，标题一行、时间和“电脑上开着”在第二行" />
   <img src="docs/images/screens/work-items.jpg" width="240" alt="事项：进行中、待验证、已完成" />
   <img src="docs/images/screens/codex-session-dark.jpg" width="240" alt="深色模式下的 Codex 会话" />
 </p>
@@ -56,9 +57,9 @@ Agent 一跑就是几十分钟，中间常常要你点一下审批、回答一�
 
 | 文件 | 说明 |
 | --- | --- |
-| [Android APK 0.4.0（下载页）](https://zyzlz.xin/mobile-codex/releases/android/preview/index.html) | Android 6.0+，可直接覆盖安装旧版 |
-| [GitHub Release](https://github.com/luoz76070-art/MobiCodex/releases/tag/mobicodex-v0.4.0) | 同一份源码由 GitHub Actions 构建，附校验值 |
-| [版本说明](releases/android/mobicodex/0.4.0/) | 本版内容、签名说明和安装步骤 |
+| [Android APK 0.4.1（下载页）](https://zyzlz.xin/mobile-codex/releases/android/preview/index.html) | Android 6.0+，可直接覆盖安装旧版 |
+| [GitHub Release](https://github.com/luoz76070-art/MobiCodex/releases/tag/mobicodex-v0.4.1) | 同一份源码由 GitHub Actions 构建，附校验值 |
+| [版本说明](releases/android/mobicodex/0.4.1/) | 本版内容、签名说明和安装步骤 |
 
 装好以后在「设置 → 应用更新」检查更新。只改界面的更新会在后台下载，下次打开时生效，不用重装。
 
@@ -107,7 +108,7 @@ flowchart LR
 
 也可以在 App 的「设置 → 反馈问题」或长按消息选「反馈这条」，反馈会存到你电脑上的网关。
 
-0.4.0 的已知问题：
+0.4.1 的已知问题：
 
 - 「Claude CLI」的审批和提问目前只在模拟环境里验证过，真实会话里遇到问题请反馈。
 

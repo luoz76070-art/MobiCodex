@@ -84,6 +84,34 @@ try {
   await capture(picker, server);
   await picker.context.close();
 
+  // Compact session list (#39): a realistic multi-project list, served only to this page.
+  const base = Date.parse(syntheticData.now), ago = minutes => new Date(base - minutes * 60_000).toISOString();
+  const listSessions = [
+    ['给天气卡片加降雨概率，并补上测试', 'weather-app', 0.2, true], ['核对城市搜索结果', 'weather-app', 25],
+    ['修复登录页在横屏时的布局', 'weather-app', 60 * 20], ['发布前检查清单', 'weather-app', 60 * 30],
+    ['支付回调失败时按指数退避重试', 'shop-api', 60 * 24 * 3], ['补充订单接口的单元测试', 'shop-api', 60 * 24 * 5],
+    ['整理接口文档', 'shop-api', 60 * 24 * 40], ['写本周周报', 'notes', 90],
+    ['整理读书笔记', 'notes', 60 * 24 * 2], ['下周的发布安排', 'notes', 60 * 24 * 8],
+  ].map(([title, project, minutes, desktopOpen], index) => ({
+    id: `50000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`, title, directory: `~/code/${project}`,
+    updatedAt: ago(minutes), ...(desktopOpen ? { desktopOpen } : {}),
+  }));
+  const list = await openScreen(browser, server, 'session-list.jpg');
+  await list.page.route('**/api/agents/ccdesk/sessions*', route => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({ sessions: listSessions, cursor: null }),
+  }));
+  await list.page.getByRole('button', { name: /点按切换 Agent/u }).click();
+  await list.page.locator('.agent-pick-row').filter({ has: list.page.getByText('CC Desk', { exact: true }) }).click();
+  const rows = list.page.locator('.agent-session-list .agent-session-row');
+  await rows.nth(listSessions.length - 1).waitFor({ state: 'attached' });
+  const visibleRows = await rows.evaluateAll(nodes => nodes.filter(node => {
+    const box = node.getBoundingClientRect(); return box.top >= 0 && box.bottom <= innerHeight;
+  }).length);
+  assert.ok(visibleRows >= 8, `Only ${visibleRows} session rows fit on screen`);
+  await list.page.getByText('电脑上开着').first().waitFor();
+  await capture(list, server);
+  await list.context.close();
+
   const permissions = await openScreen(browser, server, 'approval.jpg');
   await permissions.page.getByRole('button', { name: /点按切换 Agent/u }).click();
   await permissions.page.locator('.agent-pick-row').filter({ has: permissions.page.getByText('Claude Code', { exact: true }) }).click();
@@ -116,7 +144,7 @@ try {
   await capture(items, server);
   await items.context.close();
   for (const kind of ['desktop', 'approval', 'work-items']) assert.ok(server.opened.get(kind) > 0, `SSE not exercised: ${kind}`);
-  console.log('All five screenshots captured using synthetic API responses and live local SSE.');
+  console.log('All six screenshots captured using synthetic API responses and live local SSE.');
 } finally {
   try { await browser?.close(); } finally { await server.close(); }
 }
