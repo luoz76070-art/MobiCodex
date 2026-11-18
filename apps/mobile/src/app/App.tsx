@@ -1730,7 +1730,7 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
 
           <PullToRefresh className="thread-list" label="Codex 线程列表" onRefresh={() => loadThreads()}>
             <SessionRangeControl range={threadRange} disabled={loading} onChange={range => { setThreadRange(range); void loadThreads({ range }); }} />
-            <ProjectGroups scope={scope} agentId="codex" groups={groupedFiltered} search={query} onNewThread={cwd => void startNewThread(cwd)}>
+            <ProjectGroups scope={scope} agentId="codex" groups={groupedFiltered} search={query}>
               {thread => <ThreadRow key={thread.id} thread={thread} selected={selected?.id === thread.id}
                 activeDesktop={activeDesktopThreadId === thread.id} sourceFilter={sourceFilter}
                 onOpen={() => void openThread(thread, { closeSidebar: true })} />}
