@@ -4,7 +4,7 @@
 
 ## 当前原生网关与旧 App 清理
 
-当前Mac使用单Node固定网关：`~/Library/Application Support/Mobile Codex Gateway/releases/<固定版本>/mobile-codex/lib/gateway.mjs`。配置为`~/Library/Application Support/Mobile Codex Gateway/gateway.json`，日志为同目录`gateway.log`；固定包内`scripts/mobile-codex.mjs status/start/stop`沿用默认配置。当前未启用LaunchAgent，退出或重启电脑后须显式start；安装插件本身也不会启用自启动。
+当前Mac使用单Node固定网关：`~/Library/Application Support/Mobile Codex Gateway/releases/<固定版本>/mobile-codex/lib/gateway.mjs`（插件 0.3.0 起的构建在 `mobile-codex/skills/mobile-codex/lib/gateway.mjs`）。配置为`~/Library/Application Support/Mobile Codex Gateway/gateway.json`，日志为同目录`gateway.log`；固定包内`scripts/mobile-codex.mjs status/start/stop`沿用默认配置。当前未启用LaunchAgent，退出或重启电脑后须显式start；安装插件本身也不会启用自启动。
 
 清理旧App前，核对监听PID的完整路径、bundle SHA和`/api/gateway`的native模式，再确认旧Relay/Input进程和旧`local.mobile-codex.relay`登录服务均未运行。仅对已识别的生成App制作私有压缩归档，逐文件核对内容与权限后移除；保留旧配置、源码及打包入口。不在备份目录留可误启的同名App副本。无法读取完整系统后台项目清单时记为未知，不等同于所有登录项均不存在。
 

@@ -34,6 +34,7 @@
     "test:desktop-native": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/desktopNativeControl.test.mjs apps/relay/tests/desktopMessageQueue.test.mjs",
     "test:desktop-approvals": "pnpm --filter @mobile-codex/relay build && node --test apps/relay/tests/desktopApprovals.test.mjs",
     "build:plugin": "node scripts/build-plugin.mjs",
+    "test:plugin-package": "pnpm build:plugin && node --test scripts/test-plugin-package.mjs",
     "test:managed-gateway": "pnpm --filter @mobile-codex/relay build && pnpm build:plugin && node --test --test-timeout=15000 apps/relay/tests/managedGateway.test.mjs apps/relay/tests/macGatewayService.test.mjs",
     "test:opencode": "pnpm --filter @mobile-codex/relay build && node --test --test-timeout=12000 apps/relay/tests/openCode.test.mjs",
     "test:claude": "pnpm --filter @mobile-codex/relay build && node --test --test-timeout=12000 apps/relay/tests/claude.test.mjs",

@@ -1,12 +1,3 @@
-import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-
-const entry = fileURLToPath(new URL('../lib/gateway.mjs', import.meta.url));
-if (Number(process.versions.node.split('.')[0]) < 20) {
-  console.error('Mobile Codex requires Node.js >= 20.');
-  process.exitCode = 1;
-} else {
-  const child = spawn(process.execPath, [entry, ...process.argv.slice(2)], { stdio: 'inherit' });
-  child.on('error', () => { console.error('Mobile Codex CLI could not start. Build the complete plugin package first.'); process.exitCode = 1; });
-  child.on('exit', code => { process.exitCode = code ?? 1; });
-}
+// The CLI lives beside the skill so directory bundles that copy only skills/ still run it.
+// This entry keeps existing commands and documentation paths working.
+await import('../skills/mobile-codex/scripts/mobile-codex.mjs');

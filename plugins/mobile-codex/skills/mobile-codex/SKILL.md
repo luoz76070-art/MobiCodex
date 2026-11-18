@@ -3,7 +3,7 @@ name: mobile-codex
 description: 管理 Mobile Codex 本地网关、手机配对和设备撤销；用于连接手机、查看网关状态或迁移旧 Relay，不用于发送模型任务。
 ---
 
-使用本插件自带的 CLI。从当前 SKILL.md 所在目录向上两级得到插件根目录，命令为 `node "<插件根目录>/scripts/mobile-codex.mjs" <命令>`。需要 Node.js 20 或更高版本。若 lib/gateway.mjs 缺失，这是未构建的源码目录，先在工程根目录执行 `corepack pnpm build:plugin`，使用 dist-plugin/mobile-codex 下的完整插件。
+使用本插件自带的 CLI，命令为 `node "<当前 SKILL.md 所在目录>/scripts/mobile-codex.mjs" <命令>`（插件根目录的 `scripts/mobile-codex.mjs` 是同一个入口）。需要 Node.js 20 或更高版本。若当前 SKILL.md 所在目录下没有 `lib/gateway.mjs`，这是未构建的源码目录，先在工程根目录执行 `corepack pnpm build:plugin`，使用 dist-plugin/mobile-codex 下的完整插件。
 
 加载技能不启动服务。根据用户要求调用命令；所有结果为 JSON，失败以非零退出。必要选择直接在聊天正文用编号表达，手机未必能显示宿主选择面板。
 

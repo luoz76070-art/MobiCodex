@@ -248,7 +248,7 @@ test('service CLI rejects malformed arguments and reports only stable errors', a
 
 test('built program survives plugin deletion and exits zero on normal stop; managed start reuses registration', async t => {
   const f = await fixture(t);
-  await fs.copyFile(new URL('../../../dist-plugin/mobile-codex/lib/gateway.mjs', import.meta.url), f.entry);
+  await fs.copyFile(new URL('../../../dist-plugin/mobile-codex/skills/mobile-codex/lib/gateway.mjs', import.meta.url), f.entry);
   let child, childClosed;
   const startOwned = async () => {
     if (child && child.exitCode === null && child.signalCode === null) return;

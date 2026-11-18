@@ -2,13 +2,15 @@
 
 插件提供网关管理技能；不向 Codex 安装目录注入代码，不加载常驻 MCP，不在加载时启动进程。需要本地执行环境、Node.js >=20、正在运行的 Codex Desktop，以及与手机版兼容的 Broker。
 
-在源码工程执行 `corepack pnpm build:plugin`，生成可移走的 `dist-plugin/mobile-codex/`。包内含自包含 Node bundle，不需要 pnpm、工程源码或 node_modules。构建同时生成 `dist-plugin/.agents/plugins/marketplace.json`；该marketplace的根目录是 dist-plugin，插件路径为 `./mobile-codex`。按官方本地 marketplace 流程执行 `codex plugin marketplace add <dist-plugin绝对路径>`，再重启桌面客户端，在插件目录中安装 Mobile Codex。不要用临时CLI新会话替代Desktop原会话控制验收。
+在源码工程执行 `corepack pnpm build:plugin`，生成可移走的 `dist-plugin/mobile-codex/`。包内含自包含 Node bundle，不需要 pnpm、工程源码或 node_modules。CLI 和网关放在技能目录里（`skills/mobile-codex/scripts/mobile-codex.mjs`、`skills/mobile-codex/lib/gateway.mjs`），插件根目录的 `scripts/mobile-codex.mjs` 是同一个入口，所以只复制 `skills/` 的插件目录站（例如 awesome-codex-plugins）装上也能直接运行。构建还会从 `plugin.json` 换算出 Codex 读取的 `.codex-plugin/plugin.json`。每次正式发版，构建好的插件会推到仓库的 `codex-plugin` 分支，那个分支只有一个提交，内容就是这个目录。构建同时生成 `dist-plugin/.agents/plugins/marketplace.json`；该marketplace的根目录是 dist-plugin，插件路径为 `./mobile-codex`。按官方本地 marketplace 流程执行 `codex plugin marketplace add <dist-plugin绝对路径>`，再重启桌面客户端，在插件目录中安装 Mobile Codex。不要用临时CLI新会话替代Desktop原会话控制验收。
 
 插件manifest声明`extensions.com.openai.requires_local_executor=true`，因为管理命令需要在运行网关的电脑执行。当前捆绑Codex CLI有plugin管理命令，没有plugin validate；已核对包元数据、技能入口与独立CLI，尚未在用户Codex配置中实际安装。
 
+隐私说明见 [PRIVACY.md](PRIVACY.md)：没有遥测；数据只发往你配置的 Broker、本机 Agent，以及你自己填了密钥的语音服务。
+
 ## 初始化与迁移
 
-用 `node <插件目录>/scripts/mobile-codex.mjs help` 查看命令。所有命令支持 `--config <文件绝对路径>`。先运行status；首次初始化必须指定workspace绝对路径。macOS配置默认在 `~/Library/Application Support/Mobile Codex Gateway/gateway.json`，权限0600。
+用 `node <插件目录>/scripts/mobile-codex.mjs help` 查看命令（只含技能目录的插件包里用 `<插件目录>/skills/mobile-codex/scripts/mobile-codex.mjs`，两者相同）。所有命令支持 `--config <文件绝对路径>`。先运行status；首次初始化必须指定workspace绝对路径。macOS配置默认在 `~/Library/Application Support/Mobile Codex Gateway/gateway.json`，权限0600。
 
 ```sh
 node <插件目录>/scripts/mobile-codex.mjs init --workspace <原工程绝对路径> --import-legacy <旧Relay配置绝对路径>
