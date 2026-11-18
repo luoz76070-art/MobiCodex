@@ -50,7 +50,7 @@ CODEX_HOME=C:\Users\<YOU>\.codex
 MOBILE_CODEX_DEFAULT_CWD=<PROJECT_ROOT>
 ```
 
-如果没有 `.env.local`，`start-relay.bat` 会使用当前开发默认值：
+如果没有 `.env.local`，`scripts\start-relay.ps1` 会使用当前开发默认值：
 
 ```text
 MOBILE_CODEX_HOST=0.0.0.0
@@ -58,12 +58,12 @@ MOBILE_CODEX_PORT=8787
 MOBILE_CODEX_TOKEN=<启动脚本自动生成的随机 Token>
 ```
 
-## 一键启动 Relay
+## 启动 Relay（Windows）
 
-双击项目根目录：
+在项目根目录的终端里运行（IPv6 模式加 `-Ipv6`）：
 
-```text
-start-relay.bat
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-relay.ps1
 ```
 
 脚本会：
@@ -170,7 +170,7 @@ Endpoint: http://电脑局域网IP:8787
 Token: MOBILE_CODEX_TOKEN
 ```
 
-电脑局域网 IP 以 `start-relay.bat` 打印为准，例如：
+电脑局域网 IP 以 `start-relay.ps1` 打印为准，例如：
 
 ```text
 http://192.168.1.50:8787
@@ -251,13 +251,7 @@ http://192.168.1.50:8787
 
 ## 本地烟测
 
-Relay 启动后，双击：
-
-```text
-smoke-local.bat
-```
-
-或运行：
+Relay 启动后运行：
 
 ```powershell
 .\scripts\smoke-local.ps1
@@ -276,13 +270,7 @@ smoke-local.bat
 
 ## 构建 APK
 
-双击项目根目录：
-
-```text
-build-apk.bat
-```
-
-或运行：
+在项目根目录运行：
 
 ```powershell
 .\scripts\build-debug-apk.ps1
@@ -303,7 +291,7 @@ dist-apk\mobile-codex-debug.apk
 3. 复制本项目目录。
 4. 在项目根目录运行 `pnpm install`。
 5. 新建 `.env.local`，确认 `CODEX_HOME` 指向新电脑用户的 `.codex`。
-6. 双击 `start-relay.bat`。
+6. 按上文“启动 Relay（Windows）”运行 `scripts\start-relay.ps1`。
 7. 手机填写脚本打印的 Endpoint。
 
 ## 当前限制

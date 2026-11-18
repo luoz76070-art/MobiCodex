@@ -37,7 +37,7 @@ Token: .env.local 或脚本里设置的 MOBILE_CODEX_TOKEN
 192.168.1.50
 ```
 
-实际使用时以 `start-relay.bat` 打印出来的 endpoint 为准。
+实际使用时以 `scripts\start-relay.ps1` 打印出来的 endpoint 为准。
 
 ## 本地运行原则
 
@@ -53,7 +53,7 @@ Token: .env.local 或脚本里设置的 MOBILE_CODEX_TOKEN
 
 优先检查：
 
-- `start-relay.bat` 窗口是否还开着。
+- `start-relay.ps1` 的终端窗口是否还开着。
 - 手机和电脑是否在同一网络。
 - 手机填的是不是 `http://电脑IP:8787`。
 - Windows 防火墙是否允许 Node.js 入站。
@@ -292,7 +292,6 @@ Windows Relay
 已完成项目内支持：
 
 - `scripts/start-relay.ps1 -Ipv6` 会让 Relay 监听 `::`。
-- 新增 `start-relay-ipv6.bat`，双击即可用 IPv6 模式启动。
 - 启动脚本会打印当前可用公网 IPv6 和手机端填写格式。
 - 已本地实测：
   - Relay 监听 `::`。
@@ -314,12 +313,6 @@ http://codex.your-domain.com:8787
 ```
 
 4. Relay 用 IPv6 模式启动：
-
-```text
-start-relay-ipv6.bat
-```
-
-或：
 
 ```powershell
 .\scripts\start-relay.ps1 -Ipv6
