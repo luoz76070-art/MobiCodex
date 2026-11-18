@@ -76,13 +76,13 @@ test('top-level new asks for a project, defaults to current session, and sends A
   assert.equal(f.e.created.cwd, '/synthetic/project-a');
 });
 
-test('project-group new selects A directly, keeps an existing draft, and posts A', async () => {
+test('a known project starts directly and keeps the draft; project groups have no new-session buttons of their own', async () => {
   const f = workspace({ draft: 'keep this draft' }); await f.e.startNewThread('/synthetic/project-a');
   assert.equal(f.e.picker, undefined); assert.equal(f.runtime.draft, 'keep this draft');
   await f.send(); assert.equal(f.requests[0].body.cwd, '/synthetic/project-a');
-  const html = m.renderToStaticMarkup(m.createElement(m.ProjectGroups, { scope: 'synthetic', agentId: 'codex', search: '', groups: [{ key: '/synthetic/project-a', label: 'project-a', items: [], detail: '' }], onNewThread() {}, children() {} }));
-  assert.match(html, /在这个项目里新建/);
-  assert.match(app, /onNewThread=\{cwd => void startNewThread\(cwd\)\}/);
+  const html = m.renderToStaticMarkup(m.createElement(m.ProjectGroups, { scope: 'synthetic', agentId: 'codex', search: '', groups: [{ key: '/synthetic/project-a', label: 'project-a', items: [], detail: '' }], children() {} }));
+  assert.doesNotMatch(html, /新建/);
+  assert.doesNotMatch(app, /onNewThread/);
 });
 
 test('blank text and voice transcription drafts require a project before sending', async () => {
@@ -203,31 +203,34 @@ function pickerFixture(initialCwd = '', response = async () => ({ projects: [{ n
   render();
   return { calls, chosen, get cancelled() { return cancelled; },
     async settle() { render(); await tick(); render(); },
-    select() { return nodes(render()).find(node => node.type === 'select'); },
+    projects() { return nodes(render()).filter(node => node.type === 'button' && node.props['data-cwd']); },
     button(label) { return nodes(render()).find(node => node.type === 'button' && text(node) === label); },
     text: () => text(render()), stop() { for (const slot of slots) slot?.cleanup?.(); },
     escape() { render().props.onKeyDown({ key: 'Escape', preventDefault() {}, stopPropagation() {} }); },
   };
 }
 
-test('picker loads the authenticated catalog, selects current A, and never auto-selects another project', async () => {
+test('picker lists the authenticated catalog with the current project first and chooses only on tap', async () => {
+  const catalog = async () => ({ projects: [{ name: 'project-b', cwd: '/synthetic/project-b' }, { name: 'project-a', cwd: '/synthetic/project-a' }] });
   for (const initial of ['/synthetic/project-a', '/synthetic/missing', '']) {
-    const f = pickerFixture(initial); await f.settle();
+    const f = pickerFixture(initial, catalog); await f.settle();
     assert.equal(f.calls[0].url, 'https://synthetic.invalid/api/projects'); assert.equal(f.calls[0].token, 'synthetic');
-    assert.equal(f.select().props.value, initial === '/synthetic/project-a' ? initial : '');
-    assert.equal(f.button('在所选项目里新建').props.disabled, initial !== '/synthetic/project-a');
-    f.select().props.onChange({ target: { value: '/synthetic/project-a' } });
-    f.button('在所选项目里新建').props.onClick(); assert.deepEqual(f.chosen, ['/synthetic/project-a']); f.stop();
+    const rows = f.projects();
+    assert.deepEqual(rows.map(row => row.props['data-cwd']), initial === '/synthetic/project-a' ? ['/synthetic/project-a', '/synthetic/project-b'] : ['/synthetic/project-b', '/synthetic/project-a']);
+    assert.deepEqual(rows.map(row => row.props['aria-current']), initial === '/synthetic/project-a' ? ['true', undefined] : [undefined, undefined]);
+    assert.equal(f.chosen.length, 0, 'nothing is chosen before a tap');
+    rows.find(row => row.props['data-cwd'] === '/synthetic/project-a').props.onClick();
+    assert.deepEqual(f.chosen, ['/synthetic/project-a']); f.stop();
   }
 });
 
 test('picker retries failures and empty catalogs; cancellation and unmount abort stale loads', async () => {
   let attempts = 0;
   const f = pickerFixture('', async () => { if (++attempts === 1) throw new Error('synthetic unavailable'); return { projects: attempts === 2 ? [] : [{ name: 'project-a', cwd: '/synthetic/project-a' }] }; });
-  await f.settle(); assert.match(f.text(), /synthetic unavailable/); assert.equal(f.button('在所选项目里新建').props.disabled, true);
+  await f.settle(); assert.match(f.text(), /synthetic unavailable/); assert.equal(f.projects().length, 0);
   f.button('重新读取项目').props.onClick(); await f.settle();
-  assert.match(f.text(), /电脑上没有可用项目/); assert.equal(f.button('在所选项目里新建').props.disabled, true);
-  f.button('重新读取项目').props.onClick(); await f.settle(); assert.equal(f.select().props.value, '');
+  assert.match(f.text(), /电脑上没有可用项目/); assert.equal(f.projects().length, 0);
+  f.button('重新读取项目').props.onClick(); await f.settle(); assert.equal(f.projects().length, 1); assert.equal(f.chosen.length, 0);
   f.escape(); assert.equal(f.cancelled, 1); f.stop(); assert.ok(f.calls.every(call => call.signal.aborted));
   let finish;
   const late = pickerFixture('', () => new Promise(resolve => { finish = resolve; }));
