@@ -139,6 +139,7 @@ try {
     await items.page.getByRole('button', { name: new RegExp(title, 'u') }).waitFor();
   }
   assert.equal(await items.page.locator('.work-items-row').count(), 2);
+  assert.equal(await items.page.locator('.work-items-scrim').evaluate(element => getComputedStyle(element).position), 'fixed', 'Work items must open as an overlay');
   await assertInFrame(items.page.getByRole('dialog', { name: '事项', exact: true }));
   assert.ok(items.calls.has('POST /api/work-items/stream-token'));
   await capture(items, server);
