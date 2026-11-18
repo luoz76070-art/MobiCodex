@@ -80,6 +80,11 @@ jobs:
           set -o pipefail
           pnpm test:ccdesk 2>&1 | tee ci-artifacts/quality/test-ccdesk.log
 
+      - name: Check the Codex plugin package
+        run: |
+          set -o pipefail
+          pnpm test:plugin-package 2>&1 | tee ci-artifacts/quality/test-plugin-package.log
+
       - name: Upload quality logs and build outputs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

@@ -359,3 +359,21 @@ jobs:
               --title "MobiCodex $VERSION_NAME" \
               --notes-file "$notes_file"
           fi
+
+      - name: Publish the Codex plugin branch
+        if: steps.metadata.outputs.prerelease != 'true'
+        env:
+          RELEASE_TAG: ${{ steps.metadata.outputs.release_tag }}
+          VERSION_NAME: ${{ steps.metadata.outputs.version_name }}
+        run: |
+          set -euo pipefail
+          # Directory catalogs install from this branch: one commit holding only the built plugin.
+          pnpm test:plugin-package
+          export GIT_INDEX_FILE="$RUNNER_TEMP/codex-plugin.index"
+          rm -f "$GIT_INDEX_FILE"
+          git --git-dir="$GITHUB_WORKSPACE/.git" --work-tree="$GITHUB_WORKSPACE/dist-plugin/mobile-codex" add --all --force
+          tree="$(git --git-dir="$GITHUB_WORKSPACE/.git" write-tree)"
+          commit="$(git --git-dir="$GITHUB_WORKSPACE/.git" \
+            -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit-tree "$tree" -m "Mobile Codex plugin from MobiCodex ${VERSION_NAME} (${RELEASE_TAG})")"
+          git push --force origin "${commit}:refs/heads/codex-plugin"
