@@ -131,7 +131,8 @@ export class ClaudeCliAdapter implements AgentAdapter, SessionAdapter {
       await this.checkpoints.get(id);
       const located = await this.locate(id);
       if (located.unsaved && !this.runtime.owns(id)) throw agentError("CLAUDE_CLI_SESSION_NOT_SAVED", 409);
-      if (await this.registered(id) || this.externalWrite(id, located.info)) throw agentError("CLAUDE_CLI_SESSION_BUSY", 409);
+      // A process this gateway retains loads the Claude Code plugin too, so its own registration is not another writer.
+      if (!this.runtime.owns(id) && (await this.registered(id) || this.externalWrite(id, located.info))) throw agentError("CLAUDE_CLI_SESSION_BUSY", 409);
       await this.ready();
       if (this.runtime.owns(id)) this.runtime.send(id, input, input.delivery);
       else {
@@ -255,7 +256,7 @@ export class ClaudeCliAdapter implements AgentAdapter, SessionAdapter {
   }
   private async view({ info, directory }: Located): Promise<AgentSession> {
     return { id: info.sessionId, title: (info.customTitle || info.summary || info.firstPrompt || "Claude CLI 会话").slice(0, 200),
-      directory: path.basename(directory), updatedAt: new Date(info.lastModified).toISOString(), desktopOpen: await this.registered(info.sessionId) };
+      directory: path.basename(directory), updatedAt: new Date(info.lastModified).toISOString(), desktopOpen: !this.runtime?.owns(info.sessionId) && await this.registered(info.sessionId) };
   }
   private page(rows: SessionMessage[], before: number, id: string) {
     const start = Math.max(0, before - pageSize);
