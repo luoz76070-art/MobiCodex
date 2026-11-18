@@ -418,33 +418,19 @@ export function GlobalSettings({ connection, settingsOpen, onClose, onApply, pre
           <p className="update-note">仅在等待任务结果的通知服务运行时检查。手机有网络、电脑网关连续两分钟不可达才提醒；重新连上会自动撤掉提醒。手机没网时只显示静默状态。</p>
         </section>}
 
-        <section className="settings-section">
-          <h3>运行策略（仅 Codex）</h3>
-          <div className="segmented">
-            <button className={approvalPolicy === "never" ? "active" : ""} onClick={() => setApprovalPolicy("never")}>
-              <CheckCircle2 size={15} />
-              <span>直接执行</span>
-            </button>
-            <button className={approvalPolicy === "on-request" ? "active" : ""} onClick={() => setApprovalPolicy("on-request")}>
-              <AlertCircle size={15} />
-              <span>需要审批</span>
-            </button>
-            <button className={sandboxMode === "read-only" ? "active" : ""} onClick={() => setSandboxMode("read-only")}>
-              <Eye size={15} />
-              <span>只读</span>
-            </button>
-          </div>
-          <div className="segmented">
-            <button className={sandboxMode === "workspace-write" ? "active" : ""} onClick={() => setSandboxMode("workspace-write")}>
-              <Terminal size={15} />
-              <span>工程写入</span>
-            </button>
-            <button className={sandboxMode === "danger-full-access" ? "active" : ""} onClick={() => setSandboxMode("danger-full-access")}>
-              <KeyRound size={15} />
-              <span>完整权限</span>
-            </button>
-          </div>
-        </section>
+        <section className="settings-section"><details className="settings-disclosure"><DisclosureSummary>运行策略（仅 Codex）</DisclosureSummary>
+          <p className="update-note">只影响从手机发起的 Codex 任务。默认直接执行、只改工程里的文件。</p>
+          <div className="display-setting"><span>执行前要不要问我</span><div className="segmented two" role="radiogroup" aria-label="执行前要不要问我">
+            <button role="radio" aria-checked={approvalPolicy === "never"} className={approvalPolicy === "never" ? "active" : ""} onClick={() => setApprovalPolicy("never")}><CheckCircle2 size={15} /><span>直接执行</span></button>
+            <button role="radio" aria-checked={approvalPolicy === "on-request"} className={approvalPolicy === "on-request" ? "active" : ""} onClick={() => setApprovalPolicy("on-request")}><AlertCircle size={15} /><span>需要时问我</span></button>
+          </div></div>
+          <div className="display-setting"><span>能改哪些文件</span><div className="segmented" role="radiogroup" aria-label="能改哪些文件">
+            <button role="radio" aria-checked={sandboxMode === "read-only"} className={sandboxMode === "read-only" ? "active" : ""} onClick={() => setSandboxMode("read-only")}><Eye size={15} /><span>只读</span></button>
+            <button role="radio" aria-checked={sandboxMode === "workspace-write"} className={sandboxMode === "workspace-write" ? "active" : ""} onClick={() => setSandboxMode("workspace-write")}><Terminal size={15} /><span>工程内</span></button>
+            <button role="radio" aria-checked={sandboxMode === "danger-full-access"} className={sandboxMode === "danger-full-access" ? "active" : ""} onClick={() => setSandboxMode("danger-full-access")}><KeyRound size={15} /><span>不限</span></button>
+          </div></div>
+          <p className="update-note">“需要时问我”：Codex 要做超出权限的操作时，先在手机上请你审批。“不限”：可以改电脑上任何位置的文件，谨慎使用。</p>
+        </details></section>
 
 
         {(diagnostics.length > 0 || diagnosticText) && (
