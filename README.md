@@ -8,7 +8,7 @@
 在手机上跟进、回复、审批电脑上的 Codex、Claude Code、DeepSeek、CC Desk 和 OpenCode 会话。
 
 [![Android](https://img.shields.io/badge/Android-6.0%2B-3DDC84?logo=android&logoColor=white)](#下载)
-[![Version](https://img.shields.io/badge/version-0.4.2-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.4.3-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/License-MIT-555)](LICENSE)
 
 [下载](#下载) · [三步上手](#三步上手) · [支持的 Agent](#支持的-agent) · [更新说明](CHANGELOG.md) · [反馈问题](#反馈问题)
@@ -57,9 +57,9 @@ Agent 一跑就是几十分钟，中间常常要你点一下审批、回答一�
 
 | 文件 | 说明 |
 | --- | --- |
-| [Android APK 0.4.2（下载页）](https://zyzlz.xin/mobile-codex/releases/android/preview/index.html) | Android 6.0+，可直接覆盖安装旧版 |
-| [GitHub Release](https://github.com/luoz76070-art/MobiCodex/releases/tag/mobicodex-v0.4.2) | 同一份源码由 GitHub Actions 构建，附校验值 |
-| [版本说明](releases/android/mobicodex/0.4.2/) | 本版内容、签名说明和安装步骤 |
+| [Android APK 0.4.3（下载页）](https://zyzlz.xin/mobile-codex/releases/android/preview/index.html) | Android 6.0+，可直接覆盖安装旧版 |
+| [GitHub Release](https://github.com/luoz76070-art/MobiCodex/releases/tag/mobicodex-v0.4.3) | 同一份源码由 GitHub Actions 构建，附校验值 |
+| [版本说明](releases/android/mobicodex/0.4.3/) | 本版内容、签名说明和安装步骤 |
 
 装好以后在「设置 → 应用更新」检查更新。只改界面的更新会在后台下载，下次打开时生效，不用重装。
 
@@ -107,10 +107,6 @@ flowchart LR
 遇到问题请提到 [GitHub Issues](https://github.com/luoz76070-art/MobiCodex/issues)，写清手机型号、App 版本和复现步骤。
 
 也可以在 App 的「设置 → 反馈问题」或长按消息选「反馈这条」，反馈会存到你电脑上的网关。
-
-0.4.2 的已知问题：
-
-- 点「事项」或「新建事项」不显示弹窗（0.4.2 引入）。修复已经合并，会随下一版发布。
 
 ## 开发与构建
 
