@@ -116,8 +116,10 @@ flowchart LR
 | 目录 | 职责 |
 | --- | --- |
 | `apps/mobile` | MobiCodex Android App：React 页面 + Capacitor 原生壳（录音、更新、凭据、系统栏与取色） |
-| `apps/relay` | Fastify API、Codex Desktop IPC、Broker 与 Tunnel |
+| `apps/relay` | Fastify：电脑网关、各 Agent 适配器、Codex Desktop IPC、Broker 与 Tunnel |
 | `plugins` | 电脑网关及其他 Agent 的接入包 |
+| `integrations/cc-desk` | CC Desk 的补丁副本与本机控制 |
+| `docs` | 文档，入口是 [docs/project-index.md](docs/project-index.md)，目录结构见 [docs/project-layout.md](docs/project-layout.md) |
 
 Node.js 22+、pnpm 10.20.0；Android 构建需要 Android SDK 35 与 JDK 21+（lint 用 JDK 17）。
 
