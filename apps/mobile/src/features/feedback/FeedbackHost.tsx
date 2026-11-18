@@ -3,8 +3,6 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import type { Navigation } from '../../app/navigation';
 import { appVersionName, appVersionCode } from '../../app/config';
-import { isKelivoHost } from '../product/host';
-import { productVersionLabel, productVersionCode } from '../product/identity';
 import { useBackLayer } from '../../shared/BackLayers';
 import { apiGet, apiPost, buildUrl } from '../connection/http';
 import { relayAuthorization } from '../connection/authorization';
@@ -24,8 +22,8 @@ export function FeedbackHost({ scope, endpoint, token, navigation, page }: Props
   useEffect(() => {
     const open = (event: Event) => {
       const options = (event as CustomEvent<OpenFeedbackOptions>).detail ?? {};
-      setOpened({ options, context: collectFeedbackContext({ version: isKelivoHost ? productVersionLabel.replace(/^v/, '') : appVersionName,
-        versionCode: isKelivoHost ? productVersionCode : appVersionCode, page, agentId: navigation.agentId ?? '', sessionId: navigation.sessionId ?? '',
+      setOpened({ options, context: collectFeedbackContext({ version: appVersionName,
+        versionCode: appVersionCode, page, agentId: navigation.agentId ?? '', sessionId: navigation.sessionId ?? '',
         lastError: lastFeedbackError(scope), ...options.context }, navigator.userAgent) });
     };
     window.addEventListener(feedbackOpenEvent, open);

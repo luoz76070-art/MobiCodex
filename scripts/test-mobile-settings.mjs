@@ -57,8 +57,6 @@ test('both workspaces open global settings without switching mode or replacing t
     assert.equal(f.storage.get('productRemoteMode'), agentMode ? 'agent' : 'codex');
     assert.equal(find(opened, agentMode ? 'Workspace' : 'AgentWorkspace'), undefined);
     find(opened, 'Settings').props.onClose(); assert.equal(find(f.render(), 'Settings').props.settingsOpen, false);
-    // The host computer-settings entry uses the very same global sheet.
-    find(initial, 'Shell').props.onComputerSettings(); assert.equal(find(f.render(), 'Settings').props.settingsOpen, true);
     assert.equal(f.storage.get('productRemoteMode'), agentMode ? 'agent' : 'codex');
     f.stop();
   }

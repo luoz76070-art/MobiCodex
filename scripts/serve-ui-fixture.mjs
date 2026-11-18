@@ -22,10 +22,7 @@ const diagnosticFixture = { gateway: 'ok', nativeVersionCode: null, activeVersio
 const voiceFixture = { region: 'cn', workspace: '', qwenConfigured: true, deepseekConfigured: true, deepseekBaseUrl: 'https://api.deepseek.com', qwenBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', asrModel: 'qwen-audio-3.1-asr-flash', promptModel: 'deepseek-v4-flash', denied: false, failRefine: false, delay: 0, transcriptions: 0, refinements: 0, cancellations: 0 };
 let offline = false;
 const fixtureAppConfig = await fs.readFile(new URL('../apps/mobile/src/app/config.ts', import.meta.url), 'utf8');
-const fixtureProductConfig = await fs.readFile(new URL('../apps/mobile/src/features/product/identity.ts', import.meta.url), 'utf8');
-const nativeVersionCode = Number(process.env.UI_FIXTURE_PRODUCT === '1'
-  ? fixtureProductConfig.match(/export const productVersionCode = (\d+);/u)?.[1]
-  : fixtureAppConfig.match(/export const appVersionCode = (\d+);/u)?.[1]);
+const nativeVersionCode = Number(fixtureAppConfig.match(/export const appVersionCode = (\d+);/u)?.[1]);
 if (!Number.isSafeInteger(nativeVersionCode) || nativeVersionCode < 1) throw new Error('Fixture app version is missing');
 let apkState = { supported: true, revision: 0, phase: 'idle', receivedBytes: 0, totalBytes: 8388608, versionCode: nativeVersionCode + 1, versionName: `${nativeVersionCode + 1}-ui-fixture`, nativeVersionCode, canInstall: false, error: '' };
 const apkCounters = { downloads: 0, installs: 0 };
@@ -174,10 +171,6 @@ const server = http.createServer(async (req, res) => {
         voiceFixture.refinements++;
         return voiceFixture.failRefine ? json(res, { error: 'voice_refine_unavailable' }, 502) : json(res, { text: '目标：分析手机会话按项目分组的方案。\n范围：Codex 和 DeepSeek，版本 APK26。\n约束：暂时不要执行或发布。' });
       }
-    }
-    if (url.pathname === '/fixture/product-host.js') {
-      res.writeHead(200, { 'content-type': 'text/javascript' });
-      res.end(await fs.readFile(new URL('./fixtures/product-host.js', import.meta.url))); return;
     }
     if (url.pathname === '/fixture/apk-native.js') {
       res.writeHead(200, { 'content-type': 'text/javascript' });
@@ -659,8 +652,7 @@ const server = http.createServer(async (req, res) => {
       content = content.toString().replace('<head>', `<head>${bootstrap}`);
       if (url.searchParams.get('cacheFixture') === '1') content = content.replace('</head>', '<script src="/fixture/cache-storage.js"></script></head>');
       if (url.searchParams.get('diagnosticsFixture') === '1') content = content.replace('</head>', '<meta name="mobile-codex-hot-bundle" content="fixture-loaded-old"></head>');
-      if (url.searchParams.get('apkFixture') === '1' || url.searchParams.get('voiceFixture') === '1' || url.searchParams.get('productFixture') === '1') content = content.replace('</head>', '<script src="/fixture/apk-native.js"></script></head>');
-      if (url.searchParams.get('productFixture') === '1') content = content.replace('</head>', '<script src="/fixture/product-host.js"></script></head>');
+      if (url.searchParams.get('apkFixture') === '1' || url.searchParams.get('voiceFixture') === '1') content = content.replace('</head>', '<script src="/fixture/apk-native.js"></script></head>');
       if (url.searchParams.get('textScale') === '150') content = content.replace('</head>', '<style>html { font-size: 150%; }</style></head>');
     }
     res.writeHead(200, { 'content-type': extension === '.js' ? 'text/javascript' : extension === '.css' ? 'text/css' : 'text/html' });

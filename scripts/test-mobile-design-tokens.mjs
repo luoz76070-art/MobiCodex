@@ -5,8 +5,8 @@ import { readFile } from 'node:fs/promises';
 const read = file => readFile(new URL(`../${file}`, import.meta.url), 'utf8');
 // The A1 reference colours, exported once from the archived Kelivo palettes (see the fixture's `source`).
 const palettes = JSON.parse(await read('scripts/fixtures/a1-palettes.json'));
+const fixture = palettes.computerPage;
 const css = await read('apps/mobile/src/styles.css');
-const fixture = JSON.parse((await read('scripts/fixtures/product-host.js')).match(/const palettes = (.*);/u)[1]);
 function palette(name, mode) {
   const scheme = palettes[name]?.[mode];
   assert.ok(scheme, `${name} ${mode}`);
@@ -39,7 +39,7 @@ test('A1 default and Classic retain stable palette identities', () => {
   assert.equal(palette('defaultPalette', 'dark').surface, '#111317');
 });
 
-test('A1 palette, standalone CSS and host fixture agree on color roles', () => {
+test('A1 palette, standalone CSS and the computer-page palette agree on color roles', () => {
   const mapping = { surface: ['--bg-0', 'background'], onSurface: ['--text', 'text'], onSurfaceVariant: ['--muted', 'muted'], primary: ['--accent', 'primary'], onPrimary: ['--on-accent', 'onPrimary'], primaryContainer: ['--accent-soft', 'primaryContainer'], secondaryContainer: ['--navigation-indicator', 'navigationIndicator'], tertiary: ['--signal', 'signal'], error: ['--danger', 'error'] };
   for (const mode of ['light', 'dark']) {
     const scheme = palette('defaultPalette', mode), vars = variables(mode);

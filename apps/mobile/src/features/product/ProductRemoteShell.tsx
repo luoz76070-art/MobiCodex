@@ -1,39 +1,13 @@
 import { useBackLayer } from "../../shared/BackLayers";
 import { useEffect, useState, type ReactNode } from "react";
-import { MessageCircle, Monitor, Settings } from "lucide-react";
-import { applyProductAppearance, isKelivoHost, navigateProduct, ProductHost, productAppearanceChanged, productBeforeNavigate, productOpenUpdates, setProductSettingsLaunch, type ProductAppearance } from "./host";
+import { productBeforeNavigate, productOpenUpdates } from "./host";
 import { ProductUpdatesPage } from "./ProductUpdatesPage";
 import { startStandaloneAppearance } from "./standalone";
-import type { ProductHandoff } from './handoff';
 
-export function ProductRemoteShell({ children, onComputerSettings, onHandoff, notice }: { children: ReactNode; notice?: ReactNode; onComputerSettings: () => void; onHandoff: (value: ProductHandoff | null) => void }) {
-  const [ready, setReady] = useState(!isKelivoHost), [error, setError] = useState("");
+/** The app frame: follows the system appearance, hosts the update page and shows an optional notice below the content. */
+export function ProductRemoteShell({ children, notice }: { children: ReactNode; notice?: ReactNode }) {
   const [updates, setUpdates] = useState(false);
-  useEffect(() => isKelivoHost ? undefined : startStandaloneAppearance(), []);
-  useEffect(() => {
-    if (!isKelivoHost) return;
-    let active = true;
-    let appearanceUpdates = 0;
-    const update = (event: Event) => {
-      const appearance = (event as CustomEvent<ProductAppearance>).detail;
-      if (active && appearance && typeof appearance.dark === 'boolean') {
-        appearanceUpdates++;
-        applyProductAppearance(appearance);
-      }
-    };
-    window.addEventListener(productAppearanceChanged, update);
-    ProductHost.getState().then(state => {
-      if (!active) return;
-      if (state.revision !== 1) throw new Error("入口版本不匹配，请重新安装整合预览。");
-      setProductSettingsLaunch(Boolean(state.openSettings));
-      setUpdates(Boolean(state.openUpdates));
-      if (state.openSettings) onComputerSettings();
-      onHandoff(state.handoff ?? null);
-      if (!appearanceUpdates) applyProductAppearance(state.appearance);
-      setReady(true);
-    }).catch(() => { if (active) setError("电脑入口暂时无法初始化，请返回后重试。"); });
-    return () => { active = false; window.removeEventListener(productAppearanceChanged, update); };
-  }, [onComputerSettings, onHandoff]);
+  useEffect(() => startStandaloneAppearance(), []);
   useEffect(() => {
     const open = () => {
       if (window.dispatchEvent(new Event(productBeforeNavigate, { cancelable: true }))) setUpdates(true);
@@ -41,27 +15,12 @@ export function ProductRemoteShell({ children, onComputerSettings, onHandoff, no
     window.addEventListener(productOpenUpdates, open);
     return () => { window.removeEventListener(productOpenUpdates, open); };
   }, [updates]);
-  useBackLayer(updates, () => { if (isKelivoHost) void navigate("settings"); else leaveUpdates(); }, 300);
+  useBackLayer(updates, () => leaveUpdates(), 300);
   function leaveUpdates() {
     if (window.dispatchEvent(new Event(productBeforeNavigate, { cancelable: true }))) setUpdates(false);
   }
-  // The standalone app keeps the same page frame, without Kelivo's AI and settings tabs.
-  if (!isKelivoHost) return <div className="product-remote-shell product-standalone">
+  return <div className="product-remote-shell product-standalone">
     <div className="product-remote-content">{updates ? <ProductUpdatesPage onBack={leaveUpdates} /> : children}</div>
     {notice}
-  </div>;
-  async function navigate(tab: "ai" | "settings") {
-    try { setError(""); await navigateProduct(tab); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "切换失败，请重试。"); }
-  }
-  return <div className="product-remote-shell">
-    <div className="product-remote-content">{ready ? updates ? <ProductUpdatesPage onBack={() => void navigate("settings")} /> : children : <p className="inline-loading">正在打开…</p>}</div>
-    {notice}
-    {error && <p className="product-navigation-error" role="alert">{error}</p>}
-    <nav className="product-navigation" aria-label="主导航">
-      <button onClick={() => void navigate("ai")}><span><MessageCircle size={24} /></span><label>AI</label></button>
-      <button aria-current={updates ? undefined : "page"} onClick={() => { if (updates && window.dispatchEvent(new Event(productBeforeNavigate, { cancelable: true }))) setUpdates(false); }}><span><Monitor size={24} /></span><label>电脑</label></button>
-      <button aria-current={updates ? "page" : undefined} onClick={() => void navigate("settings")}><span><Settings size={24} /></span><label>设置</label></button>
-    </nav>
   </div>;
 }

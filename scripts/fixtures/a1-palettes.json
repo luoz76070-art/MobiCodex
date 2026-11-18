@@ -156,5 +156,50 @@
       "inversePrimary": "#b6c4ff",
       "surfaceTint": "#b6c4ff"
     }
-  }
+  },
+  "computerPage": {
+    "light": {
+      "background": "#f6f4ef",
+      "panel": "#fffffe",
+      "fill": "#ebe9e4",
+      "text": "#16181d",
+      "muted": "#5e6066",
+      "primary": "#1f2228",
+      "onPrimary": "#f5f1ea",
+      "primaryContainer": "#e7e3da",
+      "signal": "#b45309",
+      "error": "#b42318",
+      "userBubble": "#e5e3df",
+      "avatar": "#e1dfdb",
+      "composer": "#f2f0eb",
+      "composerOutline": "#c5c3bf",
+      "secondaryText": "#5e6066",
+      "messageAuthor": "#595a5c",
+      "navigationIndicator": "#ece8df",
+      "navigationText": "#16181d",
+      "outline": "#dddbd7"
+    },
+    "dark": {
+      "background": "#111317",
+      "panel": "#292b2e",
+      "fill": "#353739",
+      "text": "#f5f1ea",
+      "muted": "#b9b6ae",
+      "primary": "#f5f1ea",
+      "onPrimary": "#16181d",
+      "primaryContainer": "#2a2e37",
+      "signal": "#f59e0b",
+      "error": "#f97066",
+      "userBubble": "#333437",
+      "avatar": "#28292c",
+      "composer": "#212326",
+      "composerOutline": "#28292c",
+      "secondaryText": "#b9b6ae",
+      "messageAuthor": "#b1aeab",
+      "navigationIndicator": "#2a2e37",
+      "navigationText": "#f5f1ea",
+      "outline": "#2e3033"
+    }
+  },
+  "computerPageSource": "Computer-page colour roles the Kelivo host sent for the MobiCodex theme (formerly scripts/fixtures/product-host.js, at tag archive/pre-cleanup-2026-11)."
 }

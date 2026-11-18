@@ -1,7 +1,6 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_KELIVO_HOST?: string;
   readonly VITE_MOBILE_CODEX_UPDATE_MANIFEST_URL?: string;
   readonly VITE_MOBILE_CODEX_HOT_MANIFEST_URL?: string;
 }
