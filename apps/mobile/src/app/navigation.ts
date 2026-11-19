@@ -45,6 +45,29 @@ export function loadNavigation(scope: string, migrateLegacy = true): Navigation 
   return agentPicker();
 }
 
+const launchKey = "mobileCodexLaunchV1";
+
+/**
+ * Whether this page load continues one that already ran in the same WebView.
+ * A cold start (opened from the launcher, or after the system ended the process)
+ * gets an empty sessionStorage; a reload in the same process (hot update, page
+ * refresh) keeps it. Call once per page load.
+ */
+export function continuesLaunch(storage?: Pick<Storage, "getItem" | "setItem">): boolean {
+  try {
+    const store = storage ?? globalThis.sessionStorage;
+    if (!store) return false;
+    const seen = store.getItem(launchKey) === "1";
+    store.setItem(launchKey, "1");
+    return seen;
+  } catch { return false; }
+}
+
+/** A cold start opens the agent picker (#42); a reload restores the saved page. */
+export function initialNavigation(scope: string, resumed: boolean): Navigation {
+  return resumed ? loadNavigation(scope) : agentPicker();
+}
+
 export function saveNavigation(scope: string, value: Navigation) {
   try { localStorage.setItem(key(scope), JSON.stringify(value)); } catch { /* Navigation remains usable in memory. */ }
 }

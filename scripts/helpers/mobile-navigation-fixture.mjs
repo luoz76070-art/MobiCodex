@@ -47,6 +47,9 @@ export function appNavigationFixture(initial = navigationModel.agentPicker(), en
     useCallback(callback, deps) { const index = cursor++, old = slots[index]; if (!old || deps.some((v, i) => v !== old.deps[i])) slots[index] = { value: callback, deps }; return slots[index].value; },
     useEffect(setup, deps) { const index = cursor++, old = slots[index]; if (!old || deps.some((v, i) => v !== old.deps[i])) effects.push(() => { old?.cleanup?.(); slots[index] = { deps, cleanup: setup() }; }); },
     loadNavigation: (...args) => withStorage(storage, () => navigationModel.loadNavigation(...args)),
+    initialNavigation: (...args) => withStorage(storage, () => navigationModel.initialNavigation(...args)),
+    // Most cases model a page that is already running; coldStart models opening the app.
+    resumedLaunch: !options.coldStart,
     saveNavigation: (...args) => withStorage(storage, () => navigationModel.saveNavigation(...args)),
     sessionTargetNavigation: (...args) => withStorage(storage, () => navigationModel.sessionTargetNavigation(...args)),
     requestNavigationBack() { events.dispatchEvent(new Event('product-back', { cancelable: true })); },
