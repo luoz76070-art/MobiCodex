@@ -19,3 +19,20 @@
 1. 用下载页的安装包覆盖安装 0.4.4 或更早的版本（同一签名，数据保留）。
 2. 要直接提交 issue：电脑上先 `gh auth login`；按[网关管理](../../../../plugins/mobile-codex/README.md)用本版源码构建网关（`corepack pnpm build:plugin`），沿用原配置和工作目录切换到新程序；在 `gateway.json` 里加 `feedback.github` 后重启网关。
 3. 从 0.4.1 或更早升级并且用 Claude CLI：同样要用本版源码重新构建网关。
+
+## 发布结果
+
+2026-11-19 发布。
+
+- **GitHub Release** `mobicodex-v0.4.5`（Actions run 44429036933，成功）。同一提交的 CI run 44428279838 第一次失败：Android 任务里检查 JDK 版本的 `java -version` 超过 5 秒没返回，和代码无关；重跑这一项后通过。
+- **安装包** `mobile-codex-0.4.5-7774b6514f40.apk`，3,443,934 字节，SHA-256 `7774b6514f4035439553f6daa58f7e0be171f86e32887437ffe450503cf27393`，versionCode 48。
+  - 签名证书 SHA-256 `3ffb81f3524a590f469b80476951a22fbc6e441a470b9270079a8c1d452c4a38`，与 0.4.4 相同，可以直接覆盖安装。
+  - 安装包和界面包里都有新的反馈界面（「提交到」、预览、`/api/feedback/targets`），没有截图选择框，版本号是 `0.4.5`。安装包字节数和 0.4.4 相同是对齐填充造成的，内容不同（网页资源 666,651 字节，0.4.4 是 664,816）。
+- **下载页** https://zyzlz.xin/mobile-codex/releases/android/preview/index.html 已换成 0.4.5（旧页面在服务器上备份）。
+  - 更新清单 `preview/latest.json` 指向 0.4.5（code 48），0.4.4 的清单移到 `previous.json`。
+  - 服务器上只留 0.4.4 和 0.4.5 两个安装包；0.4.3 的安装包已从服务器移除，GitHub Releases 上的同名文件仍可下载。
+  - 界面更新通道（`hot/latest.json`）没有改。
+- **电脑端插件**：`codex-plugin` 分支已更新到 0.4.5 的构建，网关包含反馈提交 GitHub 的部分，插件说明多了 `feedback.github` 一节。
+- **发布后核对**：从公网下载的 APK 与 CI 产物逐字节相同；分段下载返回 206；线上清单为 0.4.5 / 48，`previous.json` 为 0.4.4 / 47。
+- **还要确认**：真机上在「反馈问题」里选 MobiCodex → 预览 → 确认提交，看「我的反馈」里出现可以点开的 issue 编号。
+
