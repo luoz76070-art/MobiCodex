@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
-import { RolloutIndex } from "./rolloutIndex.js";
+import { RolloutIndex, type RolloutFile } from "./rolloutIndex.js";
 import { readJsonlWindow } from "./jsonl.js";
 import { turnProgress, type TurnProgress } from "./turnActivity.js";
 import { LastTurnCache, type LastTurn } from "./lastTurn.js";
@@ -65,7 +65,6 @@ type RolloutLine = {
 export class CodexStore {
   private readonly turnResults = new LastTurnCache();
   private readonly imageReferences = new RolloutImageReferences((value, offset) => this.toMessage(value as RolloutLine, offset));
-  private readonly rolloutPathCache = new Map<string, string>();
 
   private readonly index: RolloutIndex;
   private indexRows: { signature: string; rows: SessionIndexRow[] } | null = null;
@@ -92,7 +91,7 @@ export class CodexStore {
 
   async listThreads(limit = 50, offset = 0, query = "", since = 0): Promise<CodexThreadSummary[]> {
     const [rows, files] = await Promise.all([this.readSessionIndex(), this.index.files()]);
-    const candidates = new Map<string, { id: string; name: string | null; updatedAt: number; file: string | null }>();
+    const candidates = new Map<string, { id: string; name: string | null; updatedAt: number; file: string | null; rollout?: RolloutFile }>();
     for (const row of rows) {
       if (!row.id) continue;
       candidates.set(row.id, { id: row.id, name: row.thread_name ?? null, updatedAt: Date.parse(row.updated_at ?? "") || 0, file: null });
@@ -100,11 +99,9 @@ export class CodexStore {
     for (const entry of files) {
       const id = extractThreadIdFromRolloutName(entry.file) ?? (await this.readSessionMeta(entry.file))?.id;
       if (!id) continue;
-      const previous = candidates.get(id);
-      candidates.set(id, { id, name: previous?.name ?? null, file: entry.file, updatedAt: Math.max(entry.mtimeMs, previous?.updatedAt ?? 0) });
-      this.rolloutPathCache.set(id, entry.file);
+      const previous = candidates.get(id), rollout = laterRollout(previous?.rollout, entry);
+      candidates.set(id, { id, name: previous?.name ?? null, file: rollout.file, rollout, updatedAt: Math.max(entry.mtimeMs, previous?.updatedAt ?? 0) });
     }
-    while (this.rolloutPathCache.size > 10000) this.rolloutPathCache.delete(this.rolloutPathCache.keys().next().value!);
     const needle = query.trim().toLowerCase();
     const ordered = [...candidates.values()].filter(candidate => candidate.updatedAt >= since).sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
     const matching = [];
@@ -233,14 +230,11 @@ export class CodexStore {
     return this.indexRead;
   }
 
+  /** The index is kept current by file notifications, so this also notices a segment created while the gateway runs. */
   private async findRolloutPath(threadId: string): Promise<string | null> {
-    const cached = this.rolloutPathCache.get(threadId);
-    if (cached && (await fileExists(cached))) return cached;
-    const files = await this.index.files();
-    const found = files.find(({ file }) => path.basename(file).includes(threadId))?.file ?? null;
-    if (found) this.rolloutPathCache.set(threadId, found);
-    if (this.rolloutPathCache.size > 10000) this.rolloutPathCache.delete(this.rolloutPathCache.keys().next().value!);
-    return found;
+    let found: RolloutFile | undefined;
+    for (const entry of await this.index.files()) if (path.basename(entry.file).includes(threadId)) found = laterRollout(found, entry);
+    return found?.file ?? null;
   }
 
   private async readSessionMeta(rolloutPath: string): Promise<Record<string, string> | null> {
@@ -492,9 +486,23 @@ function isContextOrGeneratedThreadName(value: string): boolean {
   );
 }
 
+const uuid = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+/** `rollout-<time>-<thread>.jsonl`, or a continuation segment `rollout-<time>-<thread>_<segment>.jsonl`. */
 function extractThreadIdFromRolloutName(file: string): string | null {
-  const match = path.basename(file).match(/(?:^rollout-|^rollout-.+-)([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i);
+  const match = path.basename(file).match(new RegExp(`(?:^rollout-|^rollout-.+-)(${uuid})(?:_${uuid})?\\.jsonl$`, "i"));
   return match?.[1] ?? null;
+}
+
+/**
+ * Codex continues a long thread in a new segment file and keeps writing only there,
+ * so the newest segment holds the current tail and the latest turn result.
+ * The start time in the name orders segments; mtime breaks ties and unnamed files.
+ */
+function laterRollout(current: RolloutFile | undefined, candidate: RolloutFile): RolloutFile {
+  if (!current) return candidate;
+  const started = (file: string) => path.basename(file).match(/^rollout-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})/)?.[1] ?? "";
+  const order = started(candidate.file).localeCompare(started(current.file)) || candidate.mtimeMs - current.mtimeMs;
+  return order > 0 ? candidate : current;
 }
 
 function isDisplayableUserText(text: string): boolean {
@@ -520,11 +528,3 @@ function isDesktopThread(thread: CodexThreadSummary): boolean {
   return thread.source === "vscode" || thread.originator?.toLowerCase().includes("desktop") === true;
 }
 
-async function fileExists(file: string): Promise<boolean> {
-  try {
-    const stat = await fs.stat(file);
-    return stat.isFile();
-  } catch {
-    return false;
-  }
-}

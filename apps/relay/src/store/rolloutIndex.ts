@@ -2,7 +2,7 @@ import { watch, type FSWatcher } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-type RolloutFile = { file: string; mtimeMs: number };
+export type RolloutFile = { file: string; mtimeMs: number };
 
 /** One cold inventory, file notifications for changes, and periodic reconciliation. */
 export class RolloutIndex {

@@ -40,6 +40,11 @@ test('429 in any form is rate_limited: app-server error info, the rollout messag
   assert.equal(codexReason({ codexErrorInfo: { responseTooManyFailedAttempts: { httpStatusCode: 502 } } }), 'provider_error');
   assert.equal(codexReason('exceeded retry limit, last status: 502 Bad Gateway'), 'provider_error');
   assert.equal(codexReason({ codexErrorInfo: 'contextWindowExceeded', message: '429 tokens' }), 'token_limit');
+  // A local proxy wraps every upstream refusal as http_connection_failed; the text and status keep the real cause.
+  const proxied = (status, cause) => ({ message: `unexpected status ${status}: local proxy failed while handling /responses. cause: ${cause}`, codex_error_info: { http_connection_failed: { http_status_code: Number(status.split(' ')[0]) } } });
+  assert.equal(codexReason(proxied('403 Forbidden', 'Request rejected by channel content protection (request id: synthetic)')), 'content_blocked');
+  assert.equal(codexReason(proxied('403 Forbidden', 'invalid api key')), 'invalid_request');
+  assert.equal(codexReason(proxied('502 Bad Gateway', 'upstream connect failed: dns error')), 'transport_error');
   // As stored in a rollout's task_complete.
   assert.equal(codexReason({ message: 'request failed', codex_error_info: { response_too_many_failed_attempts: { http_status_code: 429 } } }), 'rate_limited');
   assert.equal(codexReason({ message: 'x', codex_error_info: 'context_window_exceeded' }), 'token_limit');
