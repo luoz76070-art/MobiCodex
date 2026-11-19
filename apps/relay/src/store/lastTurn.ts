@@ -13,6 +13,7 @@ export const turnReasons = {
   rate_limited: "这个渠道的额度用完或请求受限。可以换个渠道接着做，或稍后重试。",
   token_limit: "本轮已达到上下文或输出限制，未正常完成。",
   blocked: "本轮被阻止，未正常完成。",
+  content_blocked: "请求被模型服务或中转的内容审核拦下，本轮没有执行。可以改写内容后再试，或换个渠道。",
   engine_exited: "执行引擎已退出，本轮未正常完成。",
 } as const;
 export type TurnReasonCode = keyof typeof turnReasons;
@@ -48,6 +49,9 @@ export function codexReason(error: unknown): TurnReasonCode {
   if (kind === "serverOverloaded") return "model_unavailable";
   if (kind === "badRequest" || kind === "unauthorized") return "invalid_request";
   if (kind === "cyberPolicy" || kind === "sandboxError") return "blocked";
+  // A local proxy (such as CC Switch) reports any upstream refusal as a connection failure; its text and status tell what happened.
+  if (/content protection|content[_ ]policy|moderation|内容审核|内容安全/i.test(message)) return "content_blocked";
+  if (kind === "httpConnectionFailed" && (httpStatus === 401 || httpStatus === 403)) return "invalid_request";
   if (kind && /^(httpConnectionFailed|responseStreamConnectionFailed|responseStreamDisconnected)$/.test(kind)) return "transport_error";
   if (!kind && /\b429\b|too many requests|usage limit|quota exceeded|quota_exceeded/i.test(message)) return "rate_limited";
   return "provider_error";
