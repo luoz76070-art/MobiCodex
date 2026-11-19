@@ -199,6 +199,8 @@ export function seedSyntheticStorage({ origin, theme, initial, threads, threadId
     localStorage.setItem('productRemoteMode', 'codex');
     const scope = `${profile.id}:${profile.cacheNamespace}:${origin}`;
     localStorage.setItem(`mobileCodexWorkspaceV1:${scope}`, JSON.stringify({ threads, selectedId: threadId, isNewThread: false }));
+    // A cold start opens the agent picker; screenshots continue a running app instead.
+    sessionStorage.setItem('mobileCodexLaunchV1', '1');
   }
   localStorage.setItem('syntheticAppInitialized', '1');
 }

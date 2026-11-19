@@ -124,6 +124,39 @@ test('valid scoped navigation overrides old keys; invalid records and versions g
     }
   });
 });
+test('#42 a fresh WebView is a cold start; a reload in the same process continues it', () => {
+  const session = memoryStorage();
+  assert.equal(m.continuesLaunch(session), false, 'first load after opening the app');
+  assert.equal(m.continuesLaunch(session), true, 'hot update or refresh keeps sessionStorage');
+  assert.equal(m.continuesLaunch({ getItem() { throw new Error('blocked'); }, setItem() {} }), false);
+  assert.equal(m.continuesLaunch(), false, 'no sessionStorage counts as a cold start');
+  withStorage(memoryStorage(), () => {
+    m.saveNavigation('one', m.agentSession('deepseek', 'first'));
+    assert.deepEqual(m.initialNavigation('one', false), m.agentPicker());
+    assert.deepEqual(m.initialNavigation('one', true), m.agentSession('deepseek', 'first'));
+  });
+});
+test('#42 cold start shows the picker and keeps cached Codex state and drafts', t => {
+  const cache = ['mobileCodexWorkspaceV1:test:fixed:', JSON.stringify({ threads: [{ id: 'old', threadName: '合成线程' }], selectedId: 'old' })];
+  const draft = ['synthetic-draft', 'keep me'];
+  const f = appNavigationFixture(m.agentSession('claude', 'previous'), [cache, draft], { coldStart: true }); t.after(() => f.stop());
+  assert.ok(find(f.render(), 'Picker'));
+  assert.equal(find(f.render(), 'AgentWorkspace'), undefined);
+  assert.equal(f.storage.get(cache[0]), cache[1]);
+  assert.equal(f.storage.get(draft[0]), draft[1]);
+  find(f.render(), 'Picker').props.onSelect('codex'); f.render();
+  assert.equal(find(f.render(), 'Workspace').props.navigation.agentId, 'codex');
+});
+for (const [name, options, expected] of [
+  ['notification', { coldNotification: { agentId: 'ccdesk', sessionId: 'notified', title: '合成提醒' } }, m.agentSession('ccdesk', 'notified')],
+  ['thread shortcut', { coldShortcut: { target: 'thread', key: 'agent:deepseek:recent' } }, m.agentSession('deepseek', 'recent')],
+]) {
+  test(`#42 a cold start from a ${name} still goes straight to its target`, async t => {
+    const f = appNavigationFixture(m.agentSession('claude', 'previous'), [], { coldStart: true, ...options }); t.after(() => f.stop());
+    await f.settle();
+    assert.deepEqual(find(f.render(), 'AgentWorkspace').props.navigation, expected);
+  });
+}
 test('connection changes restore each scope before rendering, never persist the outgoing page to the incoming scope', () => {
   const f = appNavigationFixture(m.agentSession('claude', 'original'));
   const next = { id: 'second', cacheNamespace: 'fixed', endpoint: '', token: '', name: '另一合成连接' };

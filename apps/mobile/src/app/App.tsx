@@ -2,7 +2,7 @@ import { FeedbackHost } from '../features/feedback/FeedbackHost';
 import { SessionTargetError, sessionTargetNavigation, type SessionTarget, type OpenSessionTarget } from "./sessionTargets";
 import type { Agent } from "../features/agents/catalog";
 import { AgentPicker } from "../features/agents/AgentPicker";
-import { agentList, agentPicker, agentSession, handleNavigationBack, loadNavigation, saveNavigation, requestNavigationBack, type Navigation } from "./navigation";
+import { agentList, agentPicker, agentSession, continuesLaunch, handleNavigationBack, initialNavigation, loadNavigation, saveNavigation, requestNavigationBack, type Navigation } from "./navigation";
 import { BackLayer, BackLayersContext, createBackLayers, useBackLayer } from "../shared/BackLayers";
 import { WorkspaceHeader } from "../shared/WorkspaceHeader";
 import { GlobalSettings, type CodexPreferences, type CodexSettingsTools } from "./GlobalSettings";
@@ -79,6 +79,9 @@ type IntakeShortcut = { id: number; payload: ShortcutPayload };
 
 type CaptureInitialDraft = NonNullable<React.ComponentProps<typeof CapturePanel>["initialDraft"]>;
 
+// Decided once per page load, before the first render (StrictMode renders twice).
+const resumedLaunch = continuesLaunch();
+
 export function App() {
   const [connection, setConnection] = useState<ConnectionProfile>(() => {
     const profiles = loadConnectionProfiles();
@@ -113,7 +116,7 @@ export function App() {
   }, []);
   const [itemsOpen, setItemsOpen] = useState(false), [openItemUid, setOpenItemUid] = useState<string | null>(null);
   const recoveredVoice = useVoiceRecovery(scope, normalizeEndpoint(connection.endpoint), connection.token);
-  const [navigationState, setNavigationState] = useState(() => ({ scope, value: loadNavigation(scope) }));
+  const [navigationState, setNavigationState] = useState(() => ({ scope, value: initialNavigation(scope, resumedLaunch) }));
   let currentNavigation = navigationState;
   if (navigationState.scope !== scope) {
     currentNavigation = { scope, value: loadNavigation(scope, false) };

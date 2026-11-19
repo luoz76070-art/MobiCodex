@@ -140,6 +140,12 @@ try {
     await screen.page.reload({ waitUntil: 'domcontentloaded' });
     await assertClaudeSession();
   });
+  await step('f-冷启动进入选择Agent', async () => {
+    // Opening the app gives a fresh WebView: sessionStorage is empty, the saved page and drafts stay.
+    await screen.page.evaluate(() => sessionStorage.clear());
+    await screen.page.reload({ waitUntil: 'domcontentloaded' });
+    await assertPicker();
+  });
 
   // attention.ts only registers Attention.open on native platforms. App has no
   // exported window notification entry in web builds. Do not invent one or use
