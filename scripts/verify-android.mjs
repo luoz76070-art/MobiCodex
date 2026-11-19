@@ -16,7 +16,8 @@ export function javaMajor(output) {
 // java -version writes to stderr even on success.
 function javaVersion(home) {
   if (!home || !existsSync(path.join(home, 'bin', javaExe))) return null;
-  const result = spawnSync(path.join(home, 'bin', javaExe), ['-version'], { encoding: 'utf8', timeout: 5000 });
+  // A cold JVM on a busy CI runner can take several seconds just to print its version.
+  const result = spawnSync(path.join(home, 'bin', javaExe), ['-version'], { encoding: 'utf8', timeout: 30_000 });
   return result.status === 0 ? javaMajor(result.stdout + result.stderr) : null;
 }
 
