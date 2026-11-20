@@ -12,19 +12,57 @@ function localFileName(destination: string) {
   return path.replace(/\\/gu, "/").replace(/(?:#L\d+(?:-L?\d+)?|:\d+(?::\d+)?)$/u, "").split("/").filter(Boolean).at(-1) || null;
 }
 
+// Web addresses only (#58). ASCII characters, so a URL never swallows the Chinese text or
+// full-width punctuation around it; trailing sentence punctuation stays outside the link.
+const urlPattern = /https?:\/\/[A-Za-z0-9][A-Za-z0-9\-._~:/?#[\]@!$&'*+,;=%]*/gu;
+
+function webUrl(candidate: string) {
+  try {
+    const url = new URL(candidate);
+    return (url.protocol === "http:" || url.protocol === "https:") && url.hostname ? url.href : null;
+  } catch { return null; }
+}
+
+function trimUrl(raw: string) {
+  let url = raw.replace(/[.,;:!?'*]+$/u, "");
+  // A closing bracket without its opener belongs to the surrounding text.
+  while (url.endsWith("]") && (url.match(/\[/gu)?.length ?? 0) < (url.match(/\]/gu)?.length ?? 0)) url = url.slice(0, -1).replace(/[.,;:!?'*]+$/u, "");
+  return url;
+}
+
+function linkify(text: string): ReactNode {
+  if (!/https?:\/\//iu.test(text)) return text;
+  const nodes: ReactNode[] = [];
+  let last = 0;
+  for (const match of text.matchAll(urlPattern)) {
+    const shown = trimUrl(match[0]), href = webUrl(shown), start = match.index ?? 0;
+    if (!href) continue;
+    if (start > last) nodes.push(text.slice(last, start));
+    nodes.push(<a key={start} href={href} target="_blank" rel="noreferrer">{shown}</a>);
+    last = start + shown.length;
+  }
+  if (!nodes.length) return text;
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes;
+}
+
 function inline(text: string): ReactNode[] {
   // Bound inline matching work on unusually long or malformed Markdown lines.
   if (text.length > 8192) return [text];
   // Raw HTML is rendered as text. Delimiters must hug their text (GFM flanking), so `2 * 3 * 4`
   // stays literal. Odd split indexes are the captured inline tokens.
   return text.split(/(`[^`\n]+`|!\[[^\]\n]*\]\(\s*(?:<[^>\n]+>|(?:[^()\n]|\([^()\n]*\))+?)\s*\)|\*\*[^*\s](?:[^*\n]*[^*\s])?\*\*|~~[^~\s](?:[^~\n]*[^~\s])?~~|\*[^*\s](?:[^*\n]*[^*\s])?\*|\[[^\]\n]+\]\(\s*(?:<[^>\n]+>|(?:[^()\n]|\([^()\n]*\))+?)\s*\))/g).map((part, index) => {
-    if (index % 2 === 0) return part;
-    if (part.startsWith("`")) return <code key={index}>{part.slice(1, -1)}</code>;
+    if (index % 2 === 0) return <Fragment key={index}>{linkify(part)}</Fragment>;
+    if (part.startsWith("`")) {
+      // A web address written as inline code is still a link (#58); other code stays literal.
+      const code = part.slice(1, -1), href = /^https?:\/\/\S+$/iu.test(code.trim()) ? webUrl(code.trim()) : null;
+      return href ? <a key={index} href={href} target="_blank" rel="noreferrer"><code>{code}</code></a> : <code key={index}>{code}</code>;
+    }
     const image = /^!\[([^\]\n]*)\]\(\s*(.*?)\s*\)$/u.exec(part);
     if (image) return <MessageImage key={index} source={image[2]} alt={image[1]} />;
-    if (part.startsWith("**")) return <strong key={index}>{part.slice(2, -2)}</strong>;
-    if (part.startsWith("~~")) return <del key={index}>{part.slice(2, -2)}</del>;
-    if (part.startsWith("*")) return <em key={index}>{part.slice(1, -1)}</em>;
+    if (part.startsWith("**")) return <strong key={index}>{linkify(part.slice(2, -2))}</strong>;
+    if (part.startsWith("~~")) return <del key={index}>{linkify(part.slice(2, -2))}</del>;
+    if (part.startsWith("*")) return <em key={index}>{linkify(part.slice(1, -1))}</em>;
     const link = /^\[([^\]]+)\]\(\s*(.*?)\s*\)$/u.exec(part);
     if (!link) return part;
     const destination = link[2].replace(/^<|>$/gu, "");

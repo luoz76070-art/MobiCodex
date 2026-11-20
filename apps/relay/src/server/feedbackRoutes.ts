@@ -14,11 +14,15 @@ export function registerFeedbackRoutes(app: FastifyInstance, options: {
   const redact = createFeedbackRedactor({ hide: options.hide });
   const submitter = options.github ? createFeedbackSubmitter({ store, targets, redact, client: options.issueClient ?? ghIssueClient(options.github) }) : undefined;
   submitter?.start();
+  // Clean finished feedback shortly after start, then daily. A broken inbox is reported by the routes instead.
+  const prune = () => { void store.prune().catch(() => undefined); };
+  const firstPrune = setTimeout(prune, 30_000), dailyPrune = setInterval(prune, 24 * 3_600_000);
+  firstPrune.unref(); dailyPrune.unref();
   const guard = (request: FastifyRequest) => () => {
     if (!options.devices.has(options.owners.get(request) ?? '')) throw feedbackError('unauthorized', 401);
   };
   const target = (id: unknown) => typeof id === 'string' ? targets.get(id) : undefined;
-  app.addHook('onClose', async () => { await submitter?.stop(); await store.drain(); });
+  app.addHook('onClose', async () => { clearTimeout(firstPrune); clearInterval(dailyPrune); await submitter?.stop(); await store.drain(); });
   app.register(async routes => {
     routes.addHook('onSend', async (_request, reply, payload) => { reply.header('Cache-Control', 'no-store'); return payload; });
     routes.setErrorHandler((error, _request, reply) => {

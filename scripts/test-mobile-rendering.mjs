@@ -185,6 +185,26 @@ test('U10 file labels preserve HTTP links, literal code and unsupported schemes'
   assert.match(html, /\[bad\]\(javascript:alert\(1\)\)/);
 });
 
+test('#58 bare web addresses and addresses written as inline code are tappable links', () => {
+  const html = render(h(MessageContent, { text: '打开 https://example.com/a?b=1。再看`https://example.org/docs`，或者（https://example.net/x）\n\n页面https://example.com/中文后缀 和 **https://example.com/bold** 都行\n\n`pnpm test` 不是链接，`javascript:alert(1)` 也不是\n\n```\nhttps://example.com/in-block\n```\n\n[说明](https://example.com/md) https://example.com/end.' }));
+  const links = [...html.matchAll(/<a href="([^"]+)" target="_blank" rel="noreferrer">(.*?)<\/a>/g)].map(match => [match[1], match[2]]);
+  assert.deepEqual(links, [
+    ['https://example.com/a?b=1', 'https://example.com/a?b=1'],
+    ['https://example.org/docs', '<code>https://example.org/docs</code>'],
+    ['https://example.net/x', 'https://example.net/x'],
+    ['https://example.com/', 'https://example.com/'],
+    ['https://example.com/bold', 'https://example.com/bold'],
+    ['https://example.com/md', '说明'],
+    ['https://example.com/end', 'https://example.com/end'],
+  ]);
+  assert.match(html, /https:\/\/example.com\/a\?b=1<\/a>。/, 'sentence punctuation stays outside the link');
+  assert.match(html, /<\/a>中文后缀/, 'Chinese text after an address is not part of it');
+  assert.match(html, /<code>pnpm test<\/code>/);
+  assert.match(html, /<code>javascript:alert\(1\)<\/code>/);
+  assert.doesNotMatch(html, /href="https:\/\/example.com\/in-block"/, 'code blocks stay literal');
+  assert.doesNotMatch(render(h(MessageContent, { text: 'http://  和 https://-bad 不是地址' })), /<a /);
+});
+
 test('U12 GFM tables render as scrollable tables with alignment, inline Markdown and bounded cells', () => {
   const html = render(h(MessageContent, { text: '| 模块 | 状态 | 说明 |\n| :--- | :---: | ---: |\n| 网关 | **已上线** | `0.2.8` |\n| 桥接 | a \\| b |\n| 手机 | 待验收 | 安装 | 多余 |\n紧随段落' }));
   assert.match(html, /^<div class="message-content"><div class="table-scroll"><table><thead><tr><th>模块<\/th><th class="align-center">状态<\/th><th class="align-right">说明<\/th><\/tr><\/thead>/);
