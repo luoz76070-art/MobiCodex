@@ -41,6 +41,8 @@ type Receipt = z.infer<typeof receiptSchema>;
 export type FeedbackReceipt = Receipt;
 export const feedbackError = (code: string, statusCode = 503) => Object.assign(new Error(code), { statusCode });
 export const publicFeedbackReceipt = ({ owner: _owner, ...receipt }: Receipt) => receipt;
+/** Finished feedback (filed, fixed or dismissed) is removed this long after its last change (#59). */
+export const feedbackRetentionMs = 7 * 24 * 3_600_000;
 const waiting = (status: FeedbackStatus) => status.state === 'received' || status.state === 'retrying';
 async function writePrivate(file: string, data: string | Buffer) {
   const handle = await fs.open(file, 'wx', 0o600);
@@ -133,6 +135,24 @@ export class FeedbackStore {
         await fs.rename(temp, path.join(this.directory, `${id}.json`));
         return true;
       } finally { await fs.rm(temp, { force: true }); }
+    });
+    this.writes = run.catch(() => {}); return run;
+  }
+  /** Removes finished receipts, and their screenshots, untouched for `maxAgeMs`. Waiting ones always stay. */
+  prune(maxAgeMs = feedbackRetentionMs) {
+    const run = this.writes.then(async () => {
+      const cutoff = this.now() - maxAgeMs;
+      let removed = 0;
+      for (const entry of await this.receipts()) {
+        if (waiting(entry.status)) continue;
+        const file = path.join(this.directory, `${entry.id}.json`);
+        // A status edit rewrites the file, so its modification time is the last change.
+        if (Math.max(Date.parse(entry.createdAt), (await fs.lstat(file)).mtimeMs) > cutoff) continue;
+        for (const extension of ['png', 'jpg', 'webp']) await fs.rm(path.join(this.directory, `${entry.id}.${extension}`), { force: true });
+        await fs.rm(file, { force: true });
+        removed++;
+      }
+      return removed;
     });
     this.writes = run.catch(() => {}); return run;
   }
