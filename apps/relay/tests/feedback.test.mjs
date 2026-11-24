@@ -94,6 +94,28 @@ test('deduplication is scoped to a device and GET never returns another device o
     assert.equal('screenshotPath' in response.json().items[0], false);
   }
 });
+test('#59 finished feedback is removed a week after its last change; waiting feedback always stays', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'feedback-prune-')); t.after(() => fs.rm(root, { recursive: true, force: true }));
+  let now = Date.parse('2026-11-01T00:00:00.000Z');
+  const store = new FeedbackStore(root, () => now), dir = path.join(root, 'feedback');
+  const states = { received: { state: 'received' }, retrying: { state: 'retrying', reason: '连不上 GitHub' }, filed: { state: 'filed', issue: 3 },
+    fixed: { state: 'fixed', version: '0.4.6' }, dismissed: { state: 'dismissed', reason: '重复' }, recent: { state: 'filed', issue: 4 } };
+  const ids = {};
+  for (const [name, status] of Object.entries(states)) {
+    const receipt = await store.save(input({ text: name }), 'admin', () => {}); ids[name] = receipt.id;
+    const file = path.join(dir, `${receipt.id}.json`), stored = JSON.parse(await fs.readFile(file, 'utf8'));
+    await fs.writeFile(file, JSON.stringify({ ...stored, status }), { mode: 0o600 });
+    const changed = new Date(name === 'recent' ? now + 6 * 86_400_000 : now);
+    await fs.utimes(file, changed, changed);
+  }
+  await fs.writeFile(path.join(dir, `${ids.filed}.png`), png(), { mode: 0o600 });
+  now += 8 * 86_400_000;
+  assert.equal(await store.prune(), 3);
+  const left = (await store.list('admin', () => {})).map(item => item.text).sort();
+  assert.deepEqual(left, ['received', 'recent', 'retrying']);
+  await assert.rejects(fs.access(path.join(dir, `${ids.filed}.png`)), 'the screenshot goes with its receipt');
+  assert.equal(await store.prune(), 0);
+});
 test('per-device rolling hourly limit survives restart; duplicates do not count and other devices are independent', async t => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'feedback-limit-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));

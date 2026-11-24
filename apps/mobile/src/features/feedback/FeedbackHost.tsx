@@ -158,7 +158,7 @@ export function FeedbackSheet({ scope, endpoint, token, options, context, queued
           {busy ? (chosen ? '正在生成预览…' : '正在保存…') : chosen ? '预览' : '提交反馈'}</button>
       </>}
       {notice && <p role="status">{notice}</p>}{(error || storageError) && <p role="alert">{error || storageError}</p>}
-      <section aria-label="我的反馈"><h3>我的反馈</h3><button type="button" className="text-button" onClick={() => window.dispatchEvent(new Event('mobicodex-feedback-retry'))}>刷新状态 / 重试补发</button>
+      <section aria-label="我的反馈"><h3>我的反馈</h3><p>已提交、已修复或不处理的反馈，7 天没有变化后会从电脑上自动清理。</p><button type="button" className="text-button" onClick={() => window.dispatchEvent(new Event('mobicodex-feedback-retry'))}>刷新状态 / 重试补发</button>
         {listError && <p role="status">{listError}</p>}{queued.length > 0 && deliveryError && <p role="status">{deliveryError}</p>}
         {queued.filter(entry => !items.some(item => item.clientId === entry.input.clientId)).map(entry => <p key={entry.input.clientId}>{entry.input.text.slice(0, 80)} · 待发送（已保存在手机）</p>)}
         {items.map(item => { const url = feedbackIssueUrl(item.status), status = feedbackStatusText(item.status, item.target);
