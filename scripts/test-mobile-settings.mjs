@@ -94,6 +94,7 @@ function renderAgentWorkspace(agent, session, onOpenSettings) {
     groupByProject: () => [], checkingSummary: {}, offlineSummary: {}, projectGroupLabel: directory => directory.split('/').at(-1),
     WorkspaceHeader: 'Header', AgentChat: 'Chat', PullToRefresh: 'List', AgentPickRow: 'AgentRow', EmptyState: 'Empty',
     ProjectGroups: 'Projects', SessionRangeControl: 'Range', ListSkeleton: 'Skeleton',
+    useBackLayer() {}, SidebarScrim: 'Scrim', PanelLeft: 'PanelLeft', RefreshCcw: 'RefreshCcw', X: 'X',
   };
   return new Function(...Object.keys(hooks), agentJs + '; return AgentWorkspace;')(...Object.values(hooks))({
     navigation: session ? navigationModel.agentSession(agent.id, session.id) : navigationModel.agentList(agent.id), onNavigate() {}, onOpenAgents() {}, handoffTarget: null, onTargetOpened() {}, onCapture() {}, endpoint: '', token: '', scope: 'synthetic', onBack() {}, voiceRecovery: {}, onOpenSettings,

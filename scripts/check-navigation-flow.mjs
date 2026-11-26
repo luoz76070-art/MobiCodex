@@ -76,7 +76,7 @@ async function assertClaudeList() {
 }
 async function assertClaudeSession() {
   await assertNavigation('session', 'claude', claudeSession.id);
-  await assertHeader(claudeSession.title, '返回 Agent 会话列表');
+  await assertHeader(claudeSession.title, '打开会话列表');
   await screen.page.locator('.agent-chat').waitFor();
   await screen.page.getByRole('region', { name: 'Claude Code 权限请求' }).waitFor();
   await screen.page.waitForFunction(() => {
@@ -117,6 +117,31 @@ try {
   await step('c-返回仅关闭设置', async () => {
     await productBack();
     await screen.page.locator('.settings-sheet.open').waitFor({ state: 'detached' });
+    await assertClaudeSession();
+  });
+  // #56: inside a session the top-left button opens this Agent's list as a drawer, like Codex.
+  const drawer = () => screen.page.locator('.agent-session-drawer.open');
+  const drawerRow = name => drawer().locator('.agent-session-row').filter({ has: screen.page.getByText(name, { exact: true }) });
+  await step('c-会话内打开会话列表', async () => {
+    await header().getByRole('button', { name: '打开会话列表', exact: true }).click();
+    await drawerRow('整理城市列表').waitFor();
+    await assertClaudeSession();
+  });
+  await step('c-返回先关会话列表', async () => {
+    await productBack();
+    await drawer().waitFor({ state: 'detached' });
+    await assertClaudeSession();
+  });
+  await step('c-会话列表里切换会话', async () => {
+    await header().getByRole('button', { name: '打开会话列表', exact: true }).click();
+    await drawerRow('整理城市列表').click();
+    await assertNavigation('session', 'claude', syntheticData.sessions.claude[1].id);
+    await screen.page.getByText('城市列表已按拼音排序。').waitFor();
+    assert.equal(await drawer().count(), 0, 'switching closes the drawer');
+  });
+  await step('c-切回原会话', async () => {
+    await header().getByRole('button', { name: '打开会话列表', exact: true }).click();
+    await drawerRow(claudeSession.title).click();
     await assertClaudeSession();
   });
   await step('d-返回会话列表', async () => { await productBack(); await assertClaudeList(); });

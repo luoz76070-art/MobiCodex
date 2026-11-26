@@ -57,6 +57,13 @@ test('shared top bar has exactly four controls in the same order for every Agent
   assert.match(app, /workspaceProject = workspaceCwd \? projectGroupLabel\(workspaceCwd\)/);
   assert.doesNotMatch(app, /workspaceReady/);
 });
+test('#56 inside a session every Agent opens its list from the top-left button; the list page keeps back', () => {
+  assert.match(agents, /leading=\{selected \? "menu" : "back"\} leadingLabel=\{selected \? "打开会话列表" : "返回 Agent 列表"\}/);
+  assert.match(agents, /onLeading=\{selected \? openDrawer : onBack\}/);
+  assert.match(agents, /useBackLayer\(drawerOpen, closeDrawer, 38\)/);
+  assert.match(agents, /className=\{`thread-sidebar glass-surface agent-session-drawer/);
+  assert.match(agents, /loadAgents\(\)}>\n\s*\{sessionList\(\)\}\n\s*<\/PullToRefresh>/);
+});
 test('the Agent picker retains the same four slots, without a redundant switch button', () => {
   const html = m.renderToStaticMarkup(m.createElement(m.WorkspaceHeader, { agentId: '', title: '选择 Agent', subtitle: '同一连接',
     leading: 'none', leadingLabel: '', onLeading() {}, onOpenItems() {}, onOpenSettings() {} }));
@@ -77,7 +84,7 @@ test('refresh moved to pull-to-refresh (with a fallback in the thread drawer); s
   assert.match(drawer, /aria-label="刷新线程"/); assert.match(drawer, /onOpenSettings\(\)[^]*aria-label="设置"/);
 });
 test('Agent top bar uses the shared controls, retains back and switch guards and list refresh', () => {
-  assert.match(agents, /<WorkspaceHeader agentId={agent\?\.id \?\? ""}[^]*?onLeading={onBack} onSwitchAgent={switchAgent} onOpenItems={onCapture} onOpenSettings={onOpenSettings}/);
+  assert.match(agents, /<WorkspaceHeader agentId={agent\?\.id \?\? ""}[^]*?onLeading={selected \? openDrawer : onBack} onSwitchAgent={switchAgent} onOpenItems={onCapture} onOpenSettings={onOpenSettings}/);
   assert.doesNotMatch(agents, /<header className="topbar/);
   assert.match(agents, /<PullToRefresh className="agent-session-list" onRefresh={\(\) => agent \? loadSessions\(agent\) : loadAgents\(\)}>/);
   assert.match(agents, /function switchAgent\(\) { onOpenAgents\(\); }/);

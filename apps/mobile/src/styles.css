@@ -2255,6 +2255,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .agent-workspace { height: 100dvh; display: flex; flex-direction: column; background: var(--bg-0); color: var(--text); padding-top: env(safe-area-inset-top); overflow: hidden; }
 .agent-workspace h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-session-list { flex: 1; overflow-y: auto; min-height: 0; padding: var(--space-16) max(var(--space-16), calc((100% - 760px) / 2)); }
+/* #56: the in-session list drawer for every Agent other than Codex, at any width. */
+.agent-session-drawer { position: fixed; z-index: 30; left: 8px; top: calc(max(8px, env(safe-area-inset-top)) + 64px); bottom: max(8px, env(safe-area-inset-bottom)); width: min(340px, calc(100vw - 28px)); display: flex; flex-direction: column; transform: translateX(calc(-100% - 16px)); transition: transform 180ms ease; }
+.agent-session-drawer:not(.open) { pointer-events: none; visibility: hidden; transition: transform 180ms ease, visibility 0s 180ms; }
+.agent-session-drawer.open { transform: translateX(0); }
+.agent-session-drawer-list.agent-session-list { padding: 0; }
+.agent-workspace .mobile-scrim { position: fixed; z-index: 20; inset: 0; display: block; pointer-events: none; background: transparent; transition: background 180ms ease; }
+.agent-workspace .mobile-scrim.show { pointer-events: auto; background: var(--scrim); }
 .agent-session-row { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-8); width: 100%; min-height: 72px; margin: var(--space-8) 0; padding: var(--space-16); border: 0; border-radius: var(--radius-16); background: var(--panel-solid); color: var(--text); text-align: left; overflow-wrap: anywhere; }
 .agent-session-row strong { font-size: var(--font-size-17); }
 .agent-session-row small, .agent-session-row time { color: var(--muted); font-size: var(--font-size-13); }
