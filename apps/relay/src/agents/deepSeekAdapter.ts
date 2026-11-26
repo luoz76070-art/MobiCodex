@@ -1,5 +1,6 @@
 import type { AgentAdapter, AgentStatus } from "./agentGateway.js";
 import { DeepSeekClient } from "./deepSeekClient.js";
+import { defaultDeepSeekHostPaths, deepSeekIncompatibleMessage, deepSeekUnreachableMessage, deepSeekUnverifiedNotice, readDeepSeekInstall, type DeepSeekHostPaths } from "./deepSeekHost.js";
 import { deepSeekActivity, deepSeekDelivery, deepSeekHistory, deepSeekInfo, deepSeekSessionId, deepSeekSessions } from "./deepSeekProtocol.js";
 import { agentError, type AgentDelivery, type AgentOperation, type AgentSessionSnapshot, type SessionAdapter } from "./sessions.js";
 
@@ -10,25 +11,41 @@ const capabilities = { inspectLoadedSessions: false, sendMessage: false, steer: 
 export class DeepSeekAdapter implements AgentAdapter, SessionAdapter {
   readonly sessionApi: SessionAdapter = this;
   private state: AgentStatus = { id: "deepseek", label: "DeepSeek Harness", state: "unprobed", transport: "deepseek-cordis-http-sse", usesAccessibility: false,
-    sameDesktopThreadVerified: false, capabilities: { ...capabilities }, loadedSessions: null, checkedAt: null, errorCode: null };
+    sameDesktopThreadVerified: false, capabilities: { ...capabilities }, loadedSessions: null, checkedAt: null, errorCode: null, errorMessage: null, notice: null };
   private entries = new Map<string, Entry>();
   private stopped = false;
   private interactionLocks = new Map<string, "submitted" | "uncertain">();
   private interactionsAvailable = false;
   private probing: Promise<AgentStatus> | null = null;
-  constructor(private readonly client: DeepSeekClient) {}
+  private harness: { version: string; verified: boolean; missing: string[] } | null = null;
+  constructor(private readonly client: DeepSeekClient, private readonly hostPaths: DeepSeekHostPaths | null = defaultDeepSeekHostPaths()) {}
   validSessionId(id: string) { return deepSeekSessionId.safeParse(id).success; }
   snapshot() { return structuredClone(this.state); }
   runningCount() { return [...this.entries.values()].filter(entry => entry.snapshot?.connected && entry.snapshot.status === "running").length; }
   async refreshRunningCount() { return (await this.client.json("/activity", deepSeekActivity)).running; }
+  private probedAt = 0;
+  /** /api/agents carries the current reason (or caveat) without an admin probe: at most one probe per 30 s, and the
+   * list waits for it no longer than 3 s. */
+  async ready() {
+    if (this.stopped || Date.now() - this.probedAt < 30_000) return;
+    this.probedAt = Date.now();
+    let timer: NodeJS.Timeout | undefined;
+    await Promise.race([this.probe(), new Promise(resolve => { timer = setTimeout(resolve, 3000); })]).finally(() => clearTimeout(timer));
+  }
   probe(): Promise<AgentStatus> {
     if (this.probing) return this.probing;
     this.state = { ...this.state, state: "probing", errorCode: null };
+    this.harness = null;
     this.probing = this.listSessions().then(result => {
-      if (!this.stopped) this.state = { ...this.state, state: "connected", capabilities: { ...capabilities, inspectLoadedSessions: true, sendMessage: true, steer: true, interrupt: true, approve: this.interactionsAvailable }, loadedSessions: { count: result.sessions.length, hasMore: Boolean(result.cursor) }, checkedAt: new Date().toISOString() };
+      const notice = this.harness && !this.harness.verified ? deepSeekUnverifiedNotice(this.harness.version, this.interactionsAvailable) : null;
+      if (!this.stopped) this.state = { ...this.state, state: "connected", capabilities: { ...capabilities, inspectLoadedSessions: true, sendMessage: true, steer: true, interrupt: true, approve: this.interactionsAvailable }, loadedSessions: { count: result.sessions.length, hasMore: Boolean(result.cursor) }, checkedAt: new Date().toISOString(), errorMessage: null, notice };
       return this.snapshot();
-    }, error => {
-      if (!this.stopped) this.state = { ...this.state, state: "failed", capabilities: { ...capabilities }, errorCode: error.code ?? "DEEPSEEK_CONNECTION_FAILED", checkedAt: new Date().toISOString() };
+    }, async error => {
+      const errorCode: string = error.code ?? "DEEPSEEK_CONNECTION_FAILED";
+      // Says why on the phone: a DeepSeek update the installed plugin refuses, a changed host seam, or a closed app.
+      const errorMessage = errorCode === "DEEPSEEK_HOST_INCOMPATIBLE" && this.harness ? deepSeekIncompatibleMessage(this.harness.version, this.harness.missing)
+        : errorCode === "DEEPSEEK_CONNECTION_FAILED" ? deepSeekUnreachableMessage(await readDeepSeekInstall(this.hostPaths).catch(() => ({ harness: null, plugin: null }))) : null;
+      if (!this.stopped) this.state = { ...this.state, state: "failed", capabilities: { ...capabilities }, errorCode, errorMessage, notice: null, checkedAt: new Date().toISOString() };
       return this.snapshot();
     }).finally(() => { this.probing = null; });
     return this.probing;
@@ -36,6 +53,8 @@ export class DeepSeekAdapter implements AgentAdapter, SessionAdapter {
   private async verify() {
     if (this.stopped) throw agentError("DEEPSEEK_STOPPED", 503);
     const info = await this.client.json("/info", deepSeekInfo);
+    this.harness = { version: info.harnessVersion, verified: info.verified !== false, missing: info.missing ?? [] };
+    if (info.compatible === false) throw agentError("DEEPSEEK_HOST_INCOMPATIBLE", 503);
     if (this.client.config.scope === "all" && (info.scope !== "all" || info.history !== true)) throw agentError("DEEPSEEK_SCOPE_UNAVAILABLE", 409);
     this.interactionsAvailable = info.interactions === true;
   }

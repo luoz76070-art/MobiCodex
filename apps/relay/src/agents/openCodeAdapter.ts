@@ -4,10 +4,11 @@ import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { AgentAdapter, AgentStatus } from "./agentGateway.js";
 import { OpenCodeClient, type OpenCodeEvent } from "./openCodeClient.js";
-import { activeSchema, admittedSchema, formsSchema, interruptSchema, messagesSchema, messagesView, oneSessionSchema, openCodeVersion, permissionsSchema, serverInfoSchema, sessionIdSchema, sessionsSchema, sessionView } from "./openCodeProtocol.js";
+import { activeSchema, admittedSchema, formsSchema, interruptSchema, messagesSchema, messagesView, oneSessionSchema, openCodeVerifiedVersions, permissionsSchema, serverInfoSchema, sessionIdSchema, sessionsSchema, sessionView } from "./openCodeProtocol.js";
 import { openCodeFormReply, openCodeQuestionView } from "./openCodeForms.js";
 import { agentError, type AgentDelivery, type AgentOperation, type AgentPermission, type AgentQuestion, type AgentSessionSnapshot, type SessionAdapter } from "./sessions.js";
 import { OpenCodeStreamText } from "./openCodeStream.js";
+import { hostSupport } from "./hostVersions.js";
 
 type RequestState<T> = { sourceId: string; signature: string; source: unknown; view: T };
 type Listener = { snapshot: (snapshot: AgentSessionSnapshot) => void; disconnect: () => void };
@@ -32,8 +33,10 @@ export class OpenCodeAdapter implements AgentAdapter, SessionAdapter {
   private state: AgentStatus = {
     id: "opencode", label: "OpenCode", state: "unprobed", transport: "opencode-v2-http-sse",
     usesAccessibility: false, sameDesktopThreadVerified: false, capabilities: { ...emptyCapabilities },
-    loadedSessions: null, checkedAt: null, errorCode: null,
+    loadedSessions: null, checkedAt: null, errorCode: null, errorMessage: null, notice: null,
   };
+  private host: { version: string; verified: boolean } | null = null;
+  private readonly unverifiedReason = "这个 OpenCode 版本还没经过 MobiCodex 验证，请在电脑上处理。";
   private readonly entries = new Map<string, Entry>();
   private readonly submittedRequests = new Map<string, "submitted" | "uncertain">();
   private readonly submissions = new Map<string, Submission>();
@@ -54,6 +57,15 @@ export class OpenCodeAdapter implements AgentAdapter, SessionAdapter {
     return Object.keys(active.data).length;
   }
 
+  private probedAt = 0;
+  /** /api/agents carries the current reason (or caveat) without an admin probe: at most one probe per 30 s, and the
+   * list waits for it no longer than 3 s. */
+  async ready() {
+    if (this.stopped || Date.now() - this.probedAt < 30_000) return;
+    this.probedAt = Date.now();
+    let timer: NodeJS.Timeout | undefined;
+    await Promise.race([this.probe(), new Promise(resolve => { timer = setTimeout(resolve, 3000); })]).finally(() => clearTimeout(timer));
+  }
   probe(): Promise<AgentStatus> {
     if (this.probing) return this.probing;
     this.state = { ...this.state, state: "probing", errorCode: null };
@@ -74,9 +86,11 @@ export class OpenCodeAdapter implements AgentAdapter, SessionAdapter {
     const sessions = result.data.flatMap(session => {
       try { return [sessionView(session, this.client.config.directory)]; } catch { return []; }
     });
-    this.state = { ...this.state, state: "connected", errorCode: null, checkedAt: new Date().toISOString(),
+    const verified = this.host?.verified !== false;
+    this.state = { ...this.state, state: "connected", errorCode: null, errorMessage: null, checkedAt: new Date().toISOString(),
+      notice: verified ? null : `电脑上的 OpenCode ${this.host!.version.slice(0, 64)} 还没经过 MobiCodex 验证，查看会话和发消息照常可用，提问和审批暂时请在电脑上处理。`,
       loadedSessions: { count: sessions.length, hasMore: Boolean(result.cursor.next) },
-      capabilities: { inspectLoadedSessions: true, sendMessage: true, steer: true, interrupt: true, approve: true } };
+      capabilities: { inspectLoadedSessions: true, sendMessage: true, steer: true, interrupt: true, approve: verified } };
     return { sessions, cursor: result.cursor.next ?? null };
   }
 
@@ -184,6 +198,8 @@ export class OpenCodeAdapter implements AgentAdapter, SessionAdapter {
   async stop() { this.stopped = true; this.disconnect(true); this.client.stop(); this.results.clear(); }
 
   private async respond(sessionId: string, id: string, input: AgentOperation, kind: "question" | "permission", body: (request: RequestState<AgentQuestion> | RequestState<AgentPermission>) => unknown): Promise<AgentDelivery> {
+    // Answers write into the user's original OpenCode session; only verified builds take them from the phone.
+    if (this.host?.verified === false) throw agentError("OPENCODE_APPROVAL_UNVERIFIED", 409);
     const entry = this.lock(sessionId, input.controlToken);
     const requests = kind === "question" ? entry.questions : entry.permissions;
     const request = requests.get(id);
@@ -217,7 +233,9 @@ export class OpenCodeAdapter implements AgentAdapter, SessionAdapter {
     this.assertRunning();
     const info = await this.client.json("/api/info", serverInfoSchema);
     this.assertRunning();
-    if (info.version !== openCodeVersion) throw agentError("OPENCODE_VERSION_UNSUPPORTED");
+    const support = hostSupport(info.version, openCodeVerifiedVersions);
+    this.host = { version: info.version, verified: support === "verified" };
+    if (!support) throw agentError("OPENCODE_VERSION_UNSUPPORTED");
   }
   private async session(id: string) {
     this.assertRunning(); sessionIdSchema.parse(id);
@@ -359,14 +377,15 @@ export class OpenCodeAdapter implements AgentAdapter, SessionAdapter {
     if (entry.runKey && entry.runKey !== runKey) entry.token = randomUUID();
     entry.runKey = runKey;
     entry.questions = this.requests(entry, "question", questions.data, entry.questions, data => ({
-      id: randomUUID(), status: "pending", ...openCodeQuestionView(data),
+      id: randomUUID(), status: "pending", ...openCodeQuestionView(data), ...(this.host?.verified === false ? { unavailableReason: this.unverifiedReason } : {}),
     }));
     entry.permissions = this.requests(entry, "permission", permissions.data, entry.permissions, data => {
       const detail = JSON.stringify(data.metadata, null, 2);
-      const unavailableReason = !data.resources.length || detail.length > 16_000 ? "请求明细不完整或过长，请在电脑处理允许操作。" : null;
+      const unverified = this.host?.verified === false;
+      const unavailableReason = unverified ? this.unverifiedReason : !data.resources.length || detail.length > 16_000 ? "请求明细不完整或过长，请在电脑处理允许操作。" : null;
       return { id: randomUUID(), status: "pending", action: data.action, resources: data.resources, save: data.save,
         detail: detail.length > 16_000 ? "明细过长，请在电脑查看完整请求。" : detail, unavailableReason,
-        decisions: unavailableReason ? ["reject"] : data.save.length ? ["once", "always", "reject"] : ["once", "reject"] };
+        decisions: unverified ? [] : unavailableReason ? ["reject"] : data.save.length ? ["once", "always", "reject"] : ["once", "reject"] };
     });
     const submission = this.submissions.get(entry.id);
     if (submission?.messageId && view.some(m => m.id === submission.messageId && m.role === "user" && signature(m.text) === submission.textSignature)) submission.delivery = "confirmed";
@@ -428,7 +447,10 @@ export class OpenCodeAdapter implements AgentAdapter, SessionAdapter {
   private failed(error: unknown) {
     if (this.stopped) return;
     const code = (error as { code?: unknown })?.code;
-    this.state = { ...this.state, state: "failed", errorCode: typeof code === "string" && code.startsWith("OPENCODE_") ? code : "OPENCODE_CONNECTION_FAILED", capabilities: { ...emptyCapabilities }, checkedAt: new Date().toISOString() };
+    const errorCode = typeof code === "string" && code.startsWith("OPENCODE_") ? code : "OPENCODE_CONNECTION_FAILED";
+    const errorMessage = errorCode === "OPENCODE_VERSION_UNSUPPORTED" && this.host
+      ? `电脑上的 OpenCode ${this.host.version.slice(0, 64)} 不在 MobiCodex 支持的范围（2.0.x），需要等 MobiCodex 更新。` : null;
+    this.state = { ...this.state, state: "failed", errorCode, errorMessage, notice: null, capabilities: { ...emptyCapabilities }, checkedAt: new Date().toISOString() };
   }
   private disconnect(failed: boolean) {
     ++this.epoch;

@@ -1,6 +1,6 @@
 # Mobile Codex for DeepSeek Harness
 
-DeepSeek **官方** `dsh` 原进程 Cordis bundle，插件0.2.9精确支持 `0.2.1-rc.2`、`0.2.1-rc.3`、`0.2.1-rc.5`、`0.2.2-rc.1`、`0.2.2-rc.3` 与 `0.2.2-rc.5`。rc.3/rc.5已用本机桌面实际打包的运行时完成隔离复核，rc.2另用官方发布运行时复核；不因版本号相同就假定内部接口一致。官方安装器/profile使用engines版本门，不通过SDK或新CLI代替原线程。
+DeepSeek **官方** `dsh` 原进程 Cordis bundle。插件0.3.0支持 0.2 线（`>=0.2.1-rc.2 <0.3.0-0`），其中 `0.2.1-rc.2`、`0.2.1-rc.3`、`0.2.1-rc.5`、`0.2.2-rc.1`、`0.2.2-rc.3`、`0.2.2-rc.5` 已跑过官方隔离检查；其他 0.2.x 按“未验证”运行，启动时逐项核对核心接口，见[版本范围与逐项核对](#版本范围与逐项核对插件03062)。不因版本号相同就假定内部接口一致。官方安装器/profile使用engines版本门，不通过SDK或新CLI代替原线程。
 
 插件0.2.3将原生失败轮次显示为“DeepSeek Harness 运行提示”，包括模型暂不可用、请求被拒绝、网络连接失败等固定说明。实时与历史共用投影，重开不重复，不输出原始服务端错误或凭证；失败不标记为成功终稿，也不自动重发。沿用APK36现有消息协议，手机已送达的输入继续保留在会话中。
 
@@ -64,7 +64,7 @@ GUI进程通常不会继承终端export。先备份`~/.dsh/profiles/desktop/cord
     configFile: /absolute/private/deepseek-mobile.json
 ```
 
-官方桌面版允许自带CLI管理`desktop`的插件，但禁止通过普通`dsh --profile desktop`或`--dump-config`启动/检查这个保留profile。桌面HMR会监视profile manifest和patch；新插件可动态加载到原进程。检查桌面“插件”页启用状态及鉴权`/info`、`/sessions`的实际响应，不把安装命令成功当作已经加载。若宿主报告需要重启，等待原任务安全结束后正常重启，不为接入强停任务。2026-10-21本机动态加载及公网只读复核见[实际接入记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/deepseek-desktop-connect.md)。
+官方桌面版允许自带CLI管理`desktop`的插件，但禁止通过普通`dsh --profile desktop`或`--dump-config`启动/检查这个保留profile。桌面HMR会监视profile manifest和patch；新插件可动态加载到原进程。检查桌面“插件”页启用状态及鉴权`/info`、`/sessions`的实际响应，不把安装命令成功当作已经加载。如果宿主启动时已经拒绝过旧插件（例如 DeepSeek 先升级、插件后更新），换上新插件后不会自动重载：在“插件”页把 Mobile Codex 关掉再打开，或把 `cordis.patch.yml` 里该项的 `disabled` 改成 `true` 再改回 `false`（2026-11-26 本机实测）。若宿主报告需要重启，等待原任务安全结束后正常重启，不为接入强停任务。2026-10-21本机动态加载及公网只读复核见[实际接入记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/deepseek-desktop-connect.md)。
 
 网关的私有 `gateway.json` 加入：
 
@@ -85,7 +85,7 @@ GUI进程通常不会继承终端export。先备份`~/.dsh/profiles/desktop/cord
 
 `corepack pnpm test:deepseek` 使用合成Cordis上下文和随机端口，不运行真实模型。`node scripts/check-deepseek-history.mjs /absolute/isolated-runtime`另以当前安装包官方list/page/prompt算法、真实SessionStore/Query与合成持久化/resolver检查冷历史；不读取用户profile，不调用模型，也不能代替用户真实继续验收。
 
-另可显式运行 `node scripts/check-deepseek-runtime.mjs /absolute/isolated-runtime`；目录需已包含同版的官方`@deepseek-ai/dsh`、`@deepseek-ai/dsh-agent-loop-testkit`及其依赖（精确0.2.1-rc.2/rc.3/rc.5配Cordis4.0.5，或0.2.2-rc.1配Cordis4.1.0）。新版官方运行时须用Node >=24.9.0执行检查。检查器不安装依赖，使用临时profile验证bundle解析/版本门/CLI配置、Loader与内存Session/事件总线、依赖卸载/恢复和端口释放；再以官方生产AgentLoop及本地确定性adapter验证排队、追加、流与权威文本去重、中断保留Inbox和旧任务令牌拒绝。2026-10-21此13项及隔离回归22/22通过，3次本地响应、外部模型请求0次。最后清理自己的Context/profile；不读取用户配置或原会话。
+另可显式运行 `node scripts/check-deepseek-runtime.mjs /absolute/isolated-runtime`；目录需已包含同版的官方`@deepseek-ai/dsh`、`@deepseek-ai/dsh-agent-loop-testkit`及其依赖（0.2.1-rc.2/rc.3/rc.5配Cordis4.0.5，0.2.2-rc.1/rc.5配Cordis4.1.0）。新版官方运行时须用Node >=24.9.0执行检查。检查器不安装依赖，使用临时profile验证bundle解析/版本门/CLI配置、Loader与内存Session/事件总线、依赖卸载/恢复和端口释放；再以官方生产AgentLoop及本地确定性adapter验证排队、追加、流与权威文本去重、中断保留Inbox和旧任务令牌拒绝。2026-10-21此13项及隔离回归22/22通过，3次本地响应、外部模型请求0次。最后清理自己的Context/profile；不读取用户配置或原会话。
 
 插件0.1.1修复官方流的revision逐帧递增校验，拒绝旧revision、错attempt和错index，避免正文被全部过滤。APK21和网关无需更换；宿主需要显式加载此修复插件。安装、加载和原会话控制须分别验收，隔离检查不代表Android真实控制已经通过。
 
@@ -93,7 +93,7 @@ GUI进程通常不会继承终端export。先备份`~/.dsh/profiles/desktop/cord
 
 ## rc.3升级边界
 
-插件从宿主共享的`@deepseek-ai/dsh-llm/package.json`读取实际版本，经精确白名单校验后用于`/info.harnessVersion`。缺失/未知版本拒绝启动，不能硬编码rc.2让新版宿主伪装通过。对应网关也必须接受rc.3；只改插件或只改网关均不完整。APK36沿用，无需为本次桥接兼容重新安装。
+插件从宿主共享的`@deepseek-ai/dsh-llm/package.json`读取实际版本，用于`/info.harnessVersion`，不能硬编码rc.2让新版宿主伪装通过。0.2.9及以前按精确白名单校验，缺失/未知版本拒绝启动；0.3.0起改为范围加逐项核对，见末节。对应网关也必须接受rc.3；只改插件或只改网关均不完整。APK36沿用，无需为本次桥接兼容重新安装。
 
 本次两版官方隔离检查各通过13项运行时、8项问答审批和4项历史；只登记本地确定性adapter，不读取用户profile或调用外部模型。部署和原手机结果另记[rc.3验收记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-30/deepseek-rc3-compat.md)。
 
@@ -107,5 +107,18 @@ GUI进程通常不会继承终端export。先备份`~/.dsh/profiles/desktop/cord
 
 官方隔离检查（隔离运行时：本机桌面版 app.asar 只读提取的 dsh 0.2.2-rc.5 + npm 官方 dsh-agent-loop-testkit 0.2.2-rc.5，sha512 与 registry 一致；宿主自带 Node 24.21.0）：runtime 14、interactions 12、history 4，共 30 项通过；外部模型请求 0，夹具模型请求 3，未改用户 profile、未读原会话、未做真实审批。
 
-每次宿主升级都要这样重新适配，#62 会把版本名单改成范围加运行时逐项核对内部接口，审批指纹保持严格。
+这种逐版本适配在 0.3.0 改掉了，见下节。
+
+## 版本范围与逐项核对（插件0.3.0，#62）
+
+- **版本范围**：`engines.dsh` 改为 `>=0.2.1-rc.2 <0.3.0-0`。官方加载器比较时计入预发布版本，所以 0.2 线上的新版本直接加载；0.3 及以后仍被官方版本门拒绝。
+- **已验证名单**：`bridge.mjs` 的 `verifiedHarnessVersions` 只列跑过三个官方隔离检查的版本。其他 0.2.x 按“未验证”运行：`/info` 返回 `verified: false`，手机在 DeepSeek 旁提示“还没经过 MobiCodex 验证”。
+- **核心接口逐项核对**：启动时检查 `dsh-llm.createUserMessage`、`ctx.on`、`ctx.agents`、`ctx.sessionQuery.observeSession`。缺任何一项，或版本不在 0.2 线（只可能来自手动豁免），桥接只回答 `/info`（`compatible: false` 和缺失项），其余请求一律返回 503，不碰宿主；手机显示是哪项接口变了。
+- **可选能力单独停用**：问答和审批继续按官方方法源码指纹核对，对不上只停这部分（`interactions: false`），查看和发消息不受影响；历史分页继续单独检查 `sessionController`。
+- **连不上时说清原因**：网关只读本机 `/Applications/DeepSeek Harness.app` 的版本号和 `~/.dsh/profiles/desktop` 链接的插件版本与版本范围，区分“DeepSeek 已更新、插件不支持”“还没装插件”“需要把插件关掉再打开”和“DeepSeek 没开”。手机读取 Agent 列表时，网关最多每 30 秒刷新一次 DeepSeek 状态（只调 `/info` 和会话目录，不读会话正文）。
+- **网关握手**：接受插件给出的任意格式正确的版本号；旧插件不带 `verified` 时按已验证处理。
+
+DeepSeek 出新版本后，运行 `corepack pnpm check:host-versions` 查看本机 DeepSeek/OpenCode 是否在已验证名单（退出码 2 表示需要处理）；不在就按“验证与回退”跑三个隔离检查，通过后把版本加进 `verifiedHarnessVersions`。
+
+0.3.0 在 0.2.2-rc.5 隔离运行时复核：runtime 14、interactions 12、history 4 项全部通过，外部模型请求 0。
 

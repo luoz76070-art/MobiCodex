@@ -58,8 +58,12 @@ try {
   await fs.cp(fileURLToPath(new URL('../plugins/mobile-deepseek', import.meta.url)), plugin, { recursive: true });
   const pluginManifest = JSON.parse(await fs.readFile(path.join(plugin, 'package.json'), 'utf8'));
   assert.equal(boot.evaluatePluginCompatibility(pluginManifest, undefined, version), undefined);
-  for (const unsupported of ['0.2.1-rc.1', '0.2.1-rc.4', '0.2.1-rc.6', '0.2.1', '0.2.2', '0.2.2-rc.2', '0.2.2-rc.4', '0.2.2-rc.6']) {
-    assert.ok(boot.evaluatePluginCompatibility(pluginManifest, undefined, unsupported));
+  // engines.dsh admits the 0.2 line from the oldest verified build (#62); the bridge reports which builds are verified.
+  for (const accepted of ['0.2.1-rc.4', '0.2.1', '0.2.2', '0.2.2-rc.6', '0.2.3-rc.1', '0.2.9']) {
+    assert.equal(boot.evaluatePluginCompatibility(pluginManifest, undefined, accepted), undefined);
+  }
+  for (const refused of ['0.2.1-rc.1', '0.2.0', '0.3.0-rc.1', '0.3.0', '1.0.0']) {
+    assert.ok(boot.evaluatePluginCompatibility(pluginManifest, undefined, refused));
   }
   checks.officialVersionGate = true;
   // Dependencies resolve only from the supplied isolated official installation.
@@ -114,7 +118,7 @@ try {
     assert.equal(response.status, 200);
     return response.json();
   }
-  assert.deepEqual(await json('/info'), { protocol: 1, harnessVersion: version, messagePhases: true, toolMessages: 1, interactions: false });
+  assert.deepEqual(await json('/info'), { protocol: 1, harnessVersion: version, verified: true, compatible: true, messagePhases: true, toolMessages: 1, interactions: false });
   assert.deepEqual((await json('/sessions')).sessions, []);
   checks.officialLoaderActive = true;
 
@@ -176,7 +180,7 @@ try {
   await replacement.await();
   await entry.fiber.await();
   assert.equal(entry.fiber.state, activeState);
-  assert.deepEqual(await json('/info'), { protocol: 1, harnessVersion: version, messagePhases: true, toolMessages: 1, interactions: false });
+  assert.deepEqual(await json('/info'), { protocol: 1, harnessVersion: version, verified: true, compatible: true, messagePhases: true, toolMessages: 1, interactions: false });
   await loader.dispose();
   await assert.rejects(fetch(`${base}/info`, { signal: AbortSignal.timeout(2000) }));
   checks.reloadAndAsyncUnload = true;

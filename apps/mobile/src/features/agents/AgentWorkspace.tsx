@@ -194,6 +194,7 @@ export default function AgentWorkspace({ navigation, onNavigate, onOpenAgents, o
       leading={selected ? "menu" : "back"} leadingLabel={selected ? "打开会话列表" : "返回 Agent 列表"}
       onLeading={selected ? openDrawer : onBack} onSwitchAgent={switchAgent} onOpenItems={onCapture} onOpenSettings={onOpenSettings} />
     {agent?.errorMessage && <SystemNotice error>{agent.errorMessage}</SystemNotice>}
+    {agent?.notice && !agent.errorMessage && <SystemNotice>{agent.notice}</SystemNotice>}
     {(deviceRevoked || error) && <SystemNotice error>{deviceRevoked ? deviceRevokedMessage : error}</SystemNotice>}
     {selected && agent && <>
       <aside className={`thread-sidebar glass-surface agent-session-drawer ${drawerOpen ? "open" : ""}`} aria-label={`${agent.label} 会话列表`} aria-hidden={!drawerOpen} inert={!drawerOpen}>
