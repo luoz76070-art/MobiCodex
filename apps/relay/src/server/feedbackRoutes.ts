@@ -1,19 +1,22 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { DeviceRegistry } from './devices.js';
 import { z } from 'zod';
-import { FeedbackStore, feedbackError, feedbackImageBytes, feedbackPreviewSchema } from '../feedback/store.js';
+import { FeedbackStore, feedbackError, feedbackImageBytes, feedbackPreviewSchema, feedbackTargetId } from '../feedback/store.js';
+import { FeedbackTargets } from '../feedback/targets.js';
 import { createFeedbackRedactor, createFeedbackSubmitter, ghIssueClient, renderFeedbackIssue, type FeedbackGithubConfig, type FeedbackIssueClient } from '../feedback/github.js';
 
 export function registerFeedbackRoutes(app: FastifyInstance, options: {
   dataDirectory: string; owners: WeakMap<FastifyRequest, string>; devices: DeviceRegistry;
-  /** GitHub repos a phone may file to; none keeps every feedback in this inbox. */
+  /** gh settings and fixed repos. Phones add more repos themselves; with none, every feedback stays in this inbox. */
   github?: FeedbackGithubConfig; hide?: Array<string | undefined>; issueClient?: FeedbackIssueClient; submitWaitMs?: number;
 }) {
   const store = new FeedbackStore(options.dataDirectory);
-  const targets = new Map((options.github?.repos ?? []).map(target => [target.id, target]));
+  const targets = new FeedbackTargets(options.dataDirectory, options.github?.repos ?? []);
   const redact = createFeedbackRedactor({ hide: options.hide });
-  const submitter = options.github ? createFeedbackSubmitter({ store, targets, redact, client: options.issueClient ?? ghIssueClient(options.github) }) : undefined;
-  submitter?.start();
+  // Without settings, gh comes from PATH or the usual install places and uses this process's proxy variables.
+  const client = options.issueClient ?? ghIssueClient(options.github ?? {});
+  const submitter = createFeedbackSubmitter({ store, targets, redact, client });
+  submitter.start();
   // Clean finished feedback shortly after start, then daily. A broken inbox is reported by the routes instead.
   const prune = () => { void store.prune().catch(() => undefined); };
   const firstPrune = setTimeout(prune, 30_000), dailyPrune = setInterval(prune, 24 * 3_600_000);
@@ -21,8 +24,9 @@ export function registerFeedbackRoutes(app: FastifyInstance, options: {
   const guard = (request: FastifyRequest) => () => {
     if (!options.devices.has(options.owners.get(request) ?? '')) throw feedbackError('unauthorized', 401);
   };
-  const target = (id: unknown) => typeof id === 'string' ? targets.get(id) : undefined;
-  app.addHook('onClose', async () => { clearTimeout(firstPrune); clearInterval(dailyPrune); await submitter?.stop(); await store.drain(); });
+  const target = async (id: unknown) => typeof id === 'string' ? targets.get(id) : undefined;
+  const lookup = (repo: string) => client.lookup ? client.lookup(repo) : Promise.reject(new Error('lookup unavailable'));
+  app.addHook('onClose', async () => { clearTimeout(firstPrune); clearInterval(dailyPrune); await submitter.stop(); await store.drain(); });
   app.register(async routes => {
     routes.addHook('onSend', async (_request, reply, payload) => { reply.header('Cache-Control', 'no-store'); return payload; });
     routes.setErrorHandler((error, _request, reply) => {
@@ -34,20 +38,32 @@ export function registerFeedbackRoutes(app: FastifyInstance, options: {
     });
     routes.post('/api/feedback', { bodyLimit: 4 * Math.ceil(feedbackImageBytes / 3) + 32 * 1024 }, async request => {
       const check = guard(request), chosen = (request.body as { target?: unknown } | null)?.target;
-      if (chosen !== undefined && !target(chosen)) { check(); throw feedbackError('feedback_unknown_target', 400); }
+      if (chosen !== undefined) { check(); if (!await target(chosen)) throw feedbackError('feedback_unknown_target', 400); }
       const receipt = await store.save(request.body, options.owners.get(request)!, check);
-      if (!receipt.target || !submitter) return receipt;
+      if (!receipt.target) return receipt;
       // Usually done within seconds, so the phone shows the issue number straight away; otherwise it keeps retrying here.
       return await submitter.settle(receipt.id, options.submitWaitMs ?? 15_000) ?? receipt;
     });
     routes.get('/api/feedback', async request => ({ items: await store.list(options.owners.get(request)!, guard(request)) }));
     routes.get('/api/feedback/targets', async request => {
       guard(request)();
-      return { targets: [...targets.values()].map(({ id, label, repo, public: open }) => ({ id, label, repo, public: open })) };
+      // `manage` tells the phone this computer lets it add and remove repos.
+      return { targets: (await targets.list()).map(({ id, label, repo, public: open, removable }) => ({ id, label, repo, public: open, removable })), manage: true };
+    });
+    routes.post('/api/feedback/targets', { bodyLimit: 4096 }, async request => {
+      guard(request)();
+      const input = z.object({ repo: z.string().max(300), label: z.string().max(200).optional() }).strict().parse(request.body);
+      return { target: await targets.add(input, lookup) };
+    });
+    routes.delete('/api/feedback/targets/:id', async request => {
+      guard(request)();
+      const { id } = z.object({ id: feedbackTargetId }).parse(request.params);
+      await targets.remove(id);
+      return { ok: true };
     });
     routes.post('/api/feedback/preview', async request => {
       guard(request)();
-      const input = feedbackPreviewSchema.parse(request.body), chosen = target(input.target);
+      const input = feedbackPreviewSchema.parse(request.body), chosen = await target(input.target);
       if (!chosen) throw feedbackError('feedback_unknown_target', 400);
       return { target: { id: chosen.id, label: chosen.label, repo: chosen.repo, public: chosen.public }, ...renderFeedbackIssue(input, redact) };
     });

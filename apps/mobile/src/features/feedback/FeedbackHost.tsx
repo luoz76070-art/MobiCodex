@@ -4,11 +4,11 @@ import { X } from 'lucide-react';
 import type { Navigation } from '../../app/navigation';
 import { appVersionName, appVersionCode } from '../../app/config';
 import { useBackLayer } from '../../shared/BackLayers';
-import { apiGet, apiPost, buildUrl } from '../connection/http';
+import { apiDelete, apiGet, apiPost, buildUrl } from '../connection/http';
 import { relayAuthorization } from '../connection/authorization';
 import { VoiceInput } from '../voice/VoiceInput';
 import { useCaptureVoice } from '../capture/useCaptureVoice';
-import { chooseFeedbackTarget, collectFeedbackContext, feedbackIssueUrl, feedbackOpenEvent, feedbackStatusText, rememberFeedbackTarget, rememberedFeedbackTarget, validateFeedbackInput,
+import { chooseFeedbackTarget, collectFeedbackContext, feedbackIssueUrl, feedbackOpenEvent, feedbackStatusText, feedbackTargetErrorText, rememberFeedbackTarget, rememberedFeedbackTarget, validateFeedbackInput,
   type FeedbackContext, type FeedbackInput, type FeedbackItem, type FeedbackPreview, type FeedbackTarget, type OpenFeedbackOptions } from './model';
 import { lastFeedbackError, observeFeedbackErrors } from './lastError';
 import { createFeedbackSender, feedbackQueueStorage, type QueuedFeedback } from './queue';
@@ -66,6 +66,9 @@ export function FeedbackSheet({ scope, endpoint, token, options, context, queued
   const [busy, setBusy] = useState(false), lock = useRef(false), mounted = useRef(true);
   const [notice, setNotice] = useState(options.notice ?? ''), [error, setError] = useState(''), [listError, setListError] = useState(''), [items, setItems] = useState<FeedbackItem[]>([]);
   const [targets, setTargets] = useState<FeedbackTarget[]>([]), [target, setTarget] = useState(''), [preview, setPreview] = useState<FeedbackPreview | null>(null);
+  // Repo management, offered only by a computer that says so (`manage`).
+  const [manage, setManage] = useState(false), [managing, setManaging] = useState(false), [repoInput, setRepoInput] = useState(''), [labelInput, setLabelInput] = useState('');
+  const [manageBusy, setManageBusy] = useState(false), [manageError, setManageError] = useState(''), [removing, setRemoving] = useState('');
   const sheet = useRef<HTMLElement>(null);
   const chosen = targets.find(entry => entry.id === target);
   const recovery = useCaptureVoice(scope, endpoint, token, value => setText(current => current ? `${current}\n${value}` : value));
@@ -91,12 +94,46 @@ export function FeedbackSheet({ scope, endpoint, token, options, context, queued
   useEffect(() => {
     // An older computer offers no targets (or no such route): feedback then stays in its inbox as before.
     const controller = new AbortController();
-    if (endpoint && token && navigator.onLine !== false) void apiGet<{ targets?: FeedbackTarget[] }>(buildUrl(endpoint, '/api/feedback/targets'), token, controller.signal).then(result => {
+    if (endpoint && token && navigator.onLine !== false) void apiGet<{ targets?: FeedbackTarget[]; manage?: boolean }>(buildUrl(endpoint, '/api/feedback/targets'), token, controller.signal).then(result => {
       if (controller.signal.aborted || !Array.isArray(result.targets)) return;
-      setTargets(result.targets); setTarget(chooseFeedbackTarget(result.targets, rememberedFeedbackTarget(scope)));
+      setTargets(result.targets); setTarget(chooseFeedbackTarget(result.targets, rememberedFeedbackTarget(scope))); setManage(result.manage === true);
     }, () => {});
     return () => controller.abort();
   }, [scope, endpoint, token]);
+  async function addTarget() {
+    if (lock.current || !repoInput.trim()) return;
+    lock.current = true; setManageBusy(true); setManageError(''); setRemoving(''); setNotice('');
+    try {
+      if (!endpoint || !token || navigator.onLine === false) throw new Error('offline');
+      // The computer checks the repo with its own gh before saving it.
+      const { target: added } = await apiPost<{ target: FeedbackTarget }>(buildUrl(endpoint, '/api/feedback/targets'), token,
+        { repo: repoInput.trim(), ...(labelInput.trim() ? { label: labelInput.trim() } : {}) });
+      if (mounted.current) {
+        setTargets(current => [...current.filter(entry => entry.id !== added.id), added]);
+        setTarget(added.id); rememberFeedbackTarget(scope, added.id);
+        setRepoInput(''); setLabelInput(''); setNotice(`已添加 ${added.repo}${added.public ? '（公开仓库）' : ''}，「提交到」里可以选它了。`);
+      }
+    } catch (caught) { if (mounted.current) setManageError(feedbackTargetErrorText(caught)); }
+    finally { lock.current = false; if (mounted.current) setManageBusy(false); }
+  }
+  async function removeTarget(entry: FeedbackTarget) {
+    if (lock.current) return;
+    if (removing !== entry.id) { setRemoving(entry.id); setManageError(''); return; }
+    lock.current = true; setManageBusy(true); setManageError(''); setNotice('');
+    const drop = () => {
+      const rest = targets.filter(item => item.id !== entry.id);
+      setTargets(rest); setRemoving(''); if (target === entry.id) setTarget(chooseFeedbackTarget(rest, null));
+    };
+    try {
+      if (!endpoint || !token || navigator.onLine === false) throw new Error('offline');
+      await apiDelete(buildUrl(endpoint, `/api/feedback/targets/${encodeURIComponent(entry.id)}`), token);
+      if (mounted.current) { drop(); setNotice(`已从列表里删掉 ${entry.repo}；已经提交的 issue 不受影响。`); }
+    } catch (caught) {
+      if (!mounted.current) return;
+      if ((caught as { code?: unknown } | null)?.code === 'feedback_unknown_target') drop();
+      setManageError(feedbackTargetErrorText(caught));
+    } finally { lock.current = false; if (mounted.current) setManageBusy(false); }
+  }
   async function showPreview() {
     if (lock.current || !chosen) return;
     lock.current = true; setBusy(true); setError(''); setNotice('');
@@ -136,7 +173,7 @@ export function FeedbackSheet({ scope, endpoint, token, options, context, queued
       <header><strong>反馈问题</strong><button type="button" className="icon-button" aria-label="关闭反馈" disabled={busy} onClick={close}><X size={18} /></button></header>
       <p className="setting-description">{targets.length
         ? '选了仓库的反馈会先预览，确认后由电脑上的网关提交成 GitHub issue；提交前会隐藏本机路径、用户名、邮箱、网址、IP 地址和密钥。选「只存到电脑」就不会发到 GitHub。'
-        : '内容先存到电脑的本地收件箱，不会直接发布到 GitHub。请检查文字中是否有个人信息。'}</p>
+        : `内容先存到电脑的本地收件箱，不会直接发布到 GitHub。请检查文字中是否有个人信息。${manage ? '也可以添加 GitHub 仓库，由电脑直接提交成 issue。' : ''}`}</p>
       {preview ? <section className="feedback-preview" aria-label="提交前预览">
         <h3>提交前预览</h3>
         <p role="note">{preview.target.public ? `将公开发布到 ${preview.target.repo}，所有人都能看到。` : `将提交到 ${preview.target.repo}。`}</p>
@@ -153,6 +190,21 @@ export function FeedbackSheet({ scope, endpoint, token, options, context, queued
           {targets.map(entry => <option key={entry.id} value={entry.id}>{entry.label}（GitHub issue{entry.public ? '，公开' : ''}）</option>)}
           <option value="">只存到电脑</option>
         </select></label>}
+        {manage && <button type="button" className="text-button" aria-expanded={managing} disabled={busy || manageBusy} onClick={() => { setManaging(open => !open); setManageError(''); setRemoving(''); }}>
+          {managing ? '收起仓库管理' : targets.length ? '管理 GitHub 仓库' : '添加 GitHub 仓库'}</button>}
+        {manage && managing && <section className="feedback-repos" aria-label="GitHub 仓库">
+          <p className="setting-description">由电脑上登录的 gh 提交 issue。这个列表只存在这台电脑的网关里，不会跟着 App 给别人。</p>
+          {targets.length > 0 && <ul>{targets.map(entry => <li key={entry.id}>
+            <span>{entry.label}<small>{entry.repo}{entry.public ? ' · 公开' : ' · 私有'}</small></span>
+            {entry.removable === false ? <small>写在电脑的网关配置里</small>
+              : <button type="button" className="text-button" disabled={busy || manageBusy} onClick={() => void removeTarget(entry)}>{removing === entry.id ? '确认删除' : '删除'}</button>}
+          </li>)}</ul>}
+          <label>GitHub 仓库<input aria-label="GitHub 仓库" value={repoInput} placeholder="用户名/仓库名，或粘贴仓库链接" maxLength={300} autoCapitalize="none" autoCorrect="off" spellCheck={false}
+            disabled={busy || manageBusy} onChange={event => setRepoInput(event.target.value)} /></label>
+          <label>显示名称（可不填）<input aria-label="显示名称" value={labelInput} placeholder="不填就用仓库名" maxLength={40} disabled={busy || manageBusy} onChange={event => setLabelInput(event.target.value)} /></label>
+          <button type="button" className="action-button" disabled={busy || manageBusy || !repoInput.trim()} onClick={() => void addTarget()}>{manageBusy ? '正在核对仓库…' : '添加仓库'}</button>
+          {manageError && <p role="alert">{manageError}</p>}
+        </section>}
         <details open><summary>自动附带的信息</summary><dl className="feedback-context">{fields.map(([key, label]) => <div key={key}><dt>{label}</dt><dd>{String(context[key]) || '无'}</dd></div>)}</dl></details>
         <button type="button" className="action-button" disabled={busy || !text.trim() || text.length > 2000} onClick={() => void (chosen ? showPreview() : send())}>
           {busy ? (chosen ? '正在生成预览…' : '正在保存…') : chosen ? '预览' : '提交反馈'}</button>

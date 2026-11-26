@@ -14,7 +14,7 @@ test.after(() => fs.rm(dir, { recursive: true, force: true }));
 await build({ stdin: { contents: "export * from './apps/mobile/src/features/feedback/model'; export * from './apps/mobile/src/features/feedback/lastError'; export * from './apps/mobile/src/features/feedback/queue'; export * from './apps/mobile/src/features/intake/feedback'; export { shareText } from './apps/mobile/src/features/intake/plugin'; export { Capacitor } from '@capacitor/core';", resolveDir: process.cwd(), loader: 'ts' },
   bundle: true, platform: 'node', format: 'esm', outfile: path.join(dir,'model.mjs'), nodePaths: [path.resolve('apps/mobile/node_modules')], define: { 'import.meta.env': '{}' } });
 const model = await import(pathToFileURL(path.join(dir,'model.mjs')).href);
-const { collectFeedbackContext, parseFeedbackUserAgent, feedbackStatusText, redactFeedbackError, recordFeedbackError, lastFeedbackError, observeFeedbackErrors, createFeedbackSender, assertFeedbackQueueCapacity, validateFeedbackInput, openFeedback, chooseFeedbackTarget, feedbackIssueUrl } = model;
+const { collectFeedbackContext, parseFeedbackUserAgent, feedbackStatusText, redactFeedbackError, recordFeedbackError, lastFeedbackError, observeFeedbackErrors, createFeedbackSender, assertFeedbackQueueCapacity, validateFeedbackInput, openFeedback, chooseFeedbackTarget, feedbackIssueUrl, feedbackTargetErrorText } = model;
 const context = collectFeedbackContext({ version: '0.3.1', versionCode: 42, page: '会话', agentId: 'ccdesk', sessionId: 'synthetic-session', lastError: '请求超时' }, 'Android 16; TestPhone Build/TEST; wv)');
 const input = (extra = {}) => ({ clientId: randomUUID(), text: '返回后看不到会话', context, ...extra });
 function memoryQueue() {
@@ -124,7 +124,7 @@ function uiDriver(name,props,overrides={},source=ui) {
     useState(value){const i=cursor++;slots[i]??={value:typeof value==='function'?value():value};return[slots[i].value,next=>{const value=typeof next==='function'?next(slots[i].value):next;dirty||=value!==slots[i].value;slots[i].value=value;}];},
     useRef(value){return slots[cursor++]??={current:value};},useMemo(action,dependencies){const i=cursor++,old=slots[i];if(!old||dependencies.some((value,j)=>value!==old.dependencies[j]))slots[i]={value:action(),dependencies};return slots[i].value;},
     useEffect(setup,dependencies){const i=cursor++,old=slots[i];if(!old||dependencies.some((value,j)=>value!==old.dependencies[j]))effects.push(()=>{old?.cleanup?.();slots[i]={dependencies,cleanup:setup()};});},
-    apiGet:async()=>({items:[]}),apiPost:async(_url,_token,value)=>receipt(value),...overrides};
+    apiGet:async()=>({items:[]}),apiPost:async(_url,_token,value)=>receipt(value),apiDelete:async()=>({ok:true}),...overrides};
   const h=(type,props,...children)=>({type,props:{...props,children}});deps.h=h;
   const Component=new Function(...Object.keys(deps),source+`; return ${name};`)(...Object.values(deps));
   function render(){let attempts=0;do{if(++attempts>20)throw new Error('feedback UI did not settle');dirty=false;cursor=0;tree=Component(props);for(const run of effects.splice(0))run();}while(dirty);return tree;}
@@ -325,4 +325,53 @@ test('"computer only" skips the preview, an older computer without targets keeps
   const offline = uiDriver('FeedbackSheet', props, { apiGet: targetRoutes(), apiPost: async () => assert.fail('offline') }); t.after(() => offline.stop());
   await offline.settle(); offline.deps.navigator.onLine = false; offline.button('预览').props.onClick(); await offline.settle();
   assert.match(offline.text(), /预览要连着电脑/); assert.equal(sent.length, 1); assert.ok(offline.find(node => node.type === 'textarea'));
+});
+
+test('a computer that offers it lets the phone add a repo, which is then chosen; removing asks once more', async t => {
+  const posts = [], deletes = [], added = { id: 'tools', label: '工具', repo: 'example-owner/tools', public: false, removable: true };
+  const props = { scope: 'scope-a', endpoint: 'synthetic', token: 'synthetic', options: { text: '描述' }, context, queued: [], revision: 0, storageError: '', close() {}, submit: async () => {} };
+  const f = uiDriver('FeedbackSheet', props, {
+    apiGet: async route => route === '/api/feedback/targets' ? { targets: [], manage: true } : { items: [] },
+    apiPost: async (route, _token, value) => { posts.push([route, value]); return { target: added }; },
+    apiDelete: async route => { deletes.push(route); return { ok: true }; } });
+  t.after(() => f.stop()); await f.settle();
+  assert.equal(f.find(node => node.type === 'select'), undefined); assert.match(f.text(), /也可以添加 GitHub 仓库/);
+  f.button('添加 GitHub 仓库').props.onClick(); f.render();
+  const input = label => f.find(node => node.type === 'input' && node.props['aria-label'] === label);
+  assert.equal(f.button('添加仓库').props.disabled, true, 'nothing to add yet');
+  input('GitHub 仓库').props.onChange({ target: { value: ' https://github.com/example-owner/tools ' } }); input('显示名称').props.onChange({ target: { value: '工具' } }); f.render();
+  f.button('添加仓库').props.onClick(); await f.settle();
+  assert.deepEqual(posts, [['/api/feedback/targets', { repo: 'https://github.com/example-owner/tools', label: '工具' }]]);
+  assert.equal(f.find(node => node.type === 'select').props.value, 'tools'); assert.match(f.text(), /已添加 example-owner\/tools/);
+  assert.equal(input('GitHub 仓库').props.value, ''); assert.ok(f.text().includes('example-owner/tools · 私有'));
+  assert.ok(f.button('预览'), 'a repo is chosen, so the text is previewed first');
+  f.button('删除').props.onClick(); f.render(); assert.deepEqual(deletes, [], 'the first tap only asks');
+  f.button('确认删除').props.onClick(); await f.settle();
+  assert.deepEqual(deletes, ['/api/feedback/targets/tools']);
+  assert.equal(f.find(node => node.type === 'select'), undefined); assert.ok(f.button('提交反馈')); assert.match(f.text(), /已从列表里删掉 example-owner\/tools/);
+  f.button('收起仓库管理').props.onClick(); f.render(); assert.equal(input('GitHub 仓库'), undefined);
+});
+test('the computer\'s reason is shown in fixed words; fixed repos have no delete; older computers offer no management', async t => {
+  const fixed = { id: 'mobicodex', label: 'MobiCodex', repo: 'example-owner/example-repo', public: true, removable: false };
+  const props = { scope: 'scope-a', endpoint: 'synthetic', token: 'synthetic', options: { text: '描述' }, context, queued: [], revision: 0, storageError: '', close() {}, submit: async () => {} };
+  let failure = Object.assign(new Error('HTTP 409'), { status: 409, code: 'feedback_repo_permission' });
+  const f = uiDriver('FeedbackSheet', props, { apiGet: async route => route === '/api/feedback/targets' ? { targets: [fixed], manage: true } : { items: [] },
+    apiPost: async () => { throw failure; } });
+  t.after(() => f.stop()); await f.settle();
+  f.button('管理 GitHub 仓库').props.onClick(); f.render();
+  assert.match(f.text(), /写在电脑的网关配置里/); assert.equal(f.button('删除'), undefined);
+  const repoInput = () => f.find(node => node.type === 'input' && node.props['aria-label'] === 'GitHub 仓库');
+  repoInput().props.onChange({ target: { value: 'someone/readonly' } }); f.render();
+  f.button('添加仓库').props.onClick(); await f.settle();
+  assert.match(f.find(node => node.props?.role === 'alert').props.children.join(''), /只有只读权限/);
+  assert.equal(repoInput().props.value, 'someone/readonly', 'the typed repo stays for a fix');
+  failure = new TypeError('Failed to fetch'); f.button('添加仓库').props.onClick(); await f.settle();
+  assert.match(f.text(), /没连上电脑/);
+  assert.equal(feedbackTargetErrorText(Object.assign(new Error('x'), { code: 'feedback_gh_auth' })), '电脑上的 gh 还没登录 GitHub，请在电脑上运行 gh auth login。');
+  assert.equal(feedbackTargetErrorText(Object.assign(new Error('x'), { code: 'not_ours' })), '没连上电脑，请检查连接后重试。');
+  assert.equal(feedbackTargetErrorText(Object.assign(new Error('HTTP 400'), { status: 400, code: 'feedback_invalid_request' })), '电脑没能完成这次操作，请稍后再试。');
+  assert.equal(feedbackTargetErrorText(Object.assign(new Error('revoked'), { status: 401 })), '这台手机已不再配对，请重新连接电脑。');
+  const old = uiDriver('FeedbackSheet', props, { apiGet: async route => route === '/api/feedback/targets' ? { targets: [{ id: 'mobicodex', label: 'MobiCodex', repo: 'example-owner/example-repo', public: true }] } : { items: [] } });
+  t.after(() => old.stop()); await old.settle();
+  assert.ok(old.find(node => node.type === 'select')); assert.equal(old.button('管理 GitHub 仓库'), undefined); assert.equal(old.button('添加 GitHub 仓库'), undefined);
 });

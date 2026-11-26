@@ -10,3 +10,12 @@
 .feedback-preview pre { margin: 0; max-height: 40vh; overflow: auto; padding: var(--space-8); border: 1px solid var(--hairline); border-radius: var(--radius-8);
   background: var(--panel-soft); white-space: pre-wrap; font-size: var(--font-size-13); }
 .feedback-preview-actions { display: flex; justify-content: flex-end; gap: var(--space-8); }
+.feedback-repos { display: grid; gap: var(--space-8); margin-block: var(--space-8); padding: var(--space-12); border: 1px solid var(--hairline); border-radius: var(--radius-8); }
+.feedback-repos p { margin: 0; }
+.feedback-repos ul { display: grid; gap: var(--space-8); margin: 0; padding: 0; list-style: none; }
+.feedback-repos li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-8); min-width: 0; }
+.feedback-repos li > span { display: grid; min-width: 0; }
+.feedback-repos small { color: var(--muted); font-size: var(--font-size-13); }
+.feedback-sheet .feedback-repos label { margin: 0; }
+.feedback-repos input { width: 100%; min-width: 0; padding: var(--space-8) var(--space-12); border: 1px solid var(--hairline); border-radius: var(--radius-8);
+  background: var(--panel-soft); color: var(--text); font: inherit; }

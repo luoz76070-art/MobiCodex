@@ -8,6 +8,7 @@ import { defaultGatewayConfigPath, gatewayError, initializeGateway, pairingEndpo
 import { startManagedGateway } from "./managedGateway.js";
 import { MacGatewayService } from "./macService.js";
 import { ccDeskLogin, ccDeskLogout, ccDeskStatus } from "./ccDeskSetup.js";
+import { feedbackCommand, feedbackErrorMessages } from "./feedbackSetup.js";
 
 const statusSchema = z.object({ gateway: z.object({
   kind: z.literal("mobile-codex-gateway"), version: z.literal(1), instanceId: z.string().uuid(),
@@ -25,11 +26,16 @@ function parseArgs(args: string[]) {
     if (!["login", "logout", "status"].includes(args[1])) throw gatewayError("GATEWAY_USAGE");
     command = `ccdesk-${args[1]}`; optionStart = 2;
   }
+  if (command === "feedback") {
+    if (!["repos", "add", "remove"].includes(args[1])) throw gatewayError("GATEWAY_USAGE");
+    command = `feedback-${args[1]}`; optionStart = 2;
+  }
   const allowed: Record<string, string[]> = {
     init: ["config", "workspace", "codex-home", "port", "import-legacy"], start: ["config"], status: ["config"], stop: ["config"],
     pair: ["config"], devices: ["config"], revoke: ["config", "device"], daemon: ["config"], help: [],
     "service-install": ["config"], "service-status": ["config"], "service-uninstall": ["config"],
     "ccdesk-login": ["config", "url", "fingerprint"], "ccdesk-logout": ["config"], "ccdesk-status": ["config"],
+    "feedback-repos": ["config"], "feedback-add": ["config", "repo", "label"], "feedback-remove": ["config", "id"],
   };
   if (!allowed[command]) throw gatewayError("GATEWAY_USAGE");
   const options: Record<string, string> = {};
@@ -92,7 +98,7 @@ async function api(config: ManagedConfig, route: string, init?: LocalRequest) {
 
 export async function runGatewayCli(args: string[], entryFile: string, services: { macService?: MacGatewayService } = {}): Promise<unknown> {
   const { command, options, file } = parseArgs(args);
-  if (command === "help") return { commands: ["init --workspace <absolute-path> [--codex-home <path>] [--port <port>] [--import-legacy <file>]", "start", "status", "stop", "pair", "devices", "revoke --device <id>", "service install|status|uninstall (macOS)", "ccdesk login [--url <wss>] [--fingerprint <sha256>] | logout | status"], configOption: "--config <file>", runtime: "Node.js >= 20", note: "插件加载不会启动网关。pair仅生成一次性配对信息。service install须显式启用。" };
+  if (command === "help") return { commands: ["init --workspace <absolute-path> [--codex-home <path>] [--port <port>] [--import-legacy <file>]", "start", "status", "stop", "pair", "devices", "revoke --device <id>", "service install|status|uninstall (macOS)", "ccdesk login [--url <wss>] [--fingerprint <sha256>] | logout | status", "feedback repos | add --repo <owner/name 或仓库链接> [--label <显示名称>] | remove --id <id>"], configOption: "--config <file>", runtime: "Node.js >= 20", note: "插件加载不会启动网关。pair仅生成一次性配对信息。service install须显式启用。" };
   if (command === "init") {
     if (!options.workspace || !path.isAbsolute(options.workspace)) throw gatewayError("GATEWAY_WORKSPACE_REQUIRED");
     await initializeGateway(file, {
@@ -108,6 +114,7 @@ export async function runGatewayCli(args: string[], entryFile: string, services:
   if (command === "service-status") return serviceManager.status(file);
   if (command === "service-uninstall") return serviceManager.uninstall(file);
   const config = await readManagedConfig(file);
+  if (command.startsWith("feedback-")) return feedbackCommand(command, options, config, path.dirname(file));
   if (command === "service-install") {
     if (await inspectGateway(config)) throw gatewayError("GATEWAY_SERVICE_GATEWAY_RUNNING");
     const service = await serviceManager.install(file, config, entryFile);
@@ -241,7 +248,8 @@ export function gatewayErrorMessage(error: unknown) {
     CCDESK_CERT_MISMATCH: "CC Desk 服务证书与指纹不符，没有发送凭据；请核对服务地址和指纹。",
     CCDESK_PROTOCOL_UNSUPPORTED: "CC Desk 服务版本不受支持（只支持 0.3.2）。",
     CCDESK_CONNECTION_FAILED: "连不上 CC Desk 服务，请检查网络和服务地址。",
+    ...feedbackErrorMessages,
   };
-  const safeCode = code && (code.startsWith("GATEWAY_") || code.startsWith("CCDESK_")) ? code : "GATEWAY_FAILED";
+  const safeCode = code && (code.startsWith("GATEWAY_") || code.startsWith("CCDESK_") || Object.hasOwn(feedbackErrorMessages, code)) ? code : "GATEWAY_FAILED";
   return { error: safeCode, message: messages[safeCode] ?? "操作失败，请检查本地配置和运行状态。" };
 }

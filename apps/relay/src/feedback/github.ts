@@ -6,8 +6,9 @@ import { feedbackTargetId, githubRepoName, publicFeedbackReceipt, type FeedbackC
 
 export const feedbackConfigSchema = z.object({
   github: z.object({
+    /** Fixed repos the phone cannot remove. More can be added from the phone or the CLI (feedback-targets.json). */
     repos: z.array(z.object({ id: feedbackTargetId, repo: githubRepoName, label: z.string().trim().min(1).max(40), public: z.boolean() }).strict())
-      .min(1).max(10).refine(repos => new Set(repos.map(repo => repo.id)).size === repos.length, { message: 'duplicate feedback target id' }),
+      .max(10).refine(repos => new Set(repos.map(repo => repo.id)).size === repos.length, { message: 'duplicate feedback target id' }).optional(),
     /** Absolute path of the GitHub CLI; the gateway may run without the login shell's PATH. */
     gh: z.string().refine(value => path.isAbsolute(value)).optional(),
     /** HTTPS proxy for gh only, when this computer reaches GitHub through one. */
@@ -16,7 +17,9 @@ export const feedbackConfigSchema = z.object({
 }).strict();
 export type FeedbackConfig = z.infer<typeof feedbackConfigSchema>;
 export type FeedbackGithubConfig = NonNullable<FeedbackConfig['github']>;
-export type FeedbackTarget = FeedbackGithubConfig['repos'][number];
+export type FeedbackTarget = NonNullable<FeedbackGithubConfig['repos']>[number];
+/** What gh reports about a repo someone wants to add. */
+export type FeedbackRepoInfo = { repo: string; public: boolean; issues: boolean; permission: string };
 
 export type FeedbackRedactor = (value: string) => string;
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -68,6 +71,8 @@ export type FeedbackIssueClient = {
   /** The issue an earlier attempt already filed for this marker, if any. */
   find(repo: string, marker: string): Promise<number | undefined>;
   create(repo: string, issue: { title: string; body: string }): Promise<number>;
+  /** Needed only to add repos. */
+  lookup?(repo: string): Promise<FeedbackRepoInfo>;
 };
 type IssueFailure = 'gh_missing' | 'gh_auth' | 'gh_repo' | 'gh_network' | 'gh_timeout' | 'gh_failed';
 export class FeedbackIssueError extends Error { constructor(readonly reason: IssueFailure) { super(reason); } }
@@ -101,6 +106,7 @@ export function ghIssueClient(options: { gh?: string; proxy?: string; timeoutMs?
     child.stdin.on('error', () => {}); child.stdin.end(input);
   });
   const listed = z.array(z.object({ number: z.number().int().positive(), body: z.string() }).passthrough());
+  const viewed = z.object({ nameWithOwner: z.string(), visibility: z.string(), hasIssuesEnabled: z.boolean(), viewerPermission: z.string().nullable().optional() }).passthrough();
   const labelled = new Set<string>();
   return {
     async find(repo, marker) {
@@ -120,18 +126,27 @@ export function ghIssueClient(options: { gh?: string; proxy?: string; timeoutMs?
       if (!match) throw new FeedbackIssueError('gh_failed');
       return Number(match[1]);
     },
+    async lookup(repo) {
+      let info: z.infer<typeof viewed>;
+      try { info = viewed.parse(JSON.parse(await run(['repo', 'view', repo, '--json', 'nameWithOwner,visibility,hasIssuesEnabled,viewerPermission']))); }
+      catch (error) { throw error instanceof FeedbackIssueError ? error : new FeedbackIssueError('gh_failed'); }
+      return { repo: info.nameWithOwner, public: info.visibility.toUpperCase() === 'PUBLIC', issues: info.hasIssuesEnabled, permission: info.viewerPermission ?? '' };
+    },
   };
 }
 
 /** Files receipts that chose a GitHub target; retries until filed or a person triages them. */
-export function createFeedbackSubmitter(options: { store: FeedbackStore; targets: Map<string, FeedbackTarget>; client: FeedbackIssueClient; redact: FeedbackRedactor;
+export function createFeedbackSubmitter(options: { store: FeedbackStore; targets: { get(id: string): FeedbackTarget | undefined | Promise<FeedbackTarget | undefined> };
+  client: FeedbackIssueClient; redact: FeedbackRedactor;
   firstSweepMs?: number; sweepMs?: number }) {
   const running = new Map<string, Promise<void>>();
   let stopped = false, first: NodeJS.Timeout | undefined, every: NodeJS.Timeout | undefined;
   async function submit(id: string) {
     const receipt = await options.store.get(id);
     if (!receipt?.target || (receipt.status.state !== 'received' && receipt.status.state !== 'retrying')) return;
-    const target = options.targets.get(receipt.target);
+    let target: FeedbackTarget | undefined;
+    try { target = await options.targets.get(receipt.target); }
+    catch { if (!stopped) await options.store.transition(id, { state: 'retrying', reason: '电脑上的仓库列表读不出来' }); return; }
     if (!target) { await options.store.transition(id, { state: 'retrying', reason: '电脑上的网关没有配置这个仓库' }); return; }
     try {
       const marker = feedbackIssueMarker(id), issue = renderFeedbackIssue(receipt, options.redact);

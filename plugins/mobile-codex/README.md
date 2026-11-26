@@ -94,24 +94,37 @@ url只接受`http://127.0.0.1:<port>`或`http://[::1]:<port>`根地址，不接�
 
 ## 可选：手机反馈直接提交成 GitHub issue
 
-默认情况下，手机上「反馈问题」的内容只存到网关数据目录里的 `feedback/`，不会离开这台电脑。在 `gateway.json` 里加上 `feedback.github`，手机反馈面板就会多一个「提交到」选项（手机端也要升级到带这个功能的版本）：
+默认情况下，手机上「反馈问题」的内容只存到网关数据目录里的 `feedback/`，不会离开这台电脑。要让反馈直接变成 GitHub issue，先在这台电脑上装好 GitHub CLI 并运行 `gh auth login`，再添加仓库（手机端要升级到带这个功能的版本）：
+
+- 在手机上：打开「反馈问题」，点「添加 GitHub 仓库」（已经有仓库时是「管理 GitHub 仓库」），填 `用户名/仓库名` 或粘贴仓库链接，显示名称可不填。
+- 在电脑上：
+
+```sh
+node <插件目录>/scripts/mobile-codex.mjs feedback add --repo 用户名/仓库名 --label 显示名称
+node <插件目录>/scripts/mobile-codex.mjs feedback repos
+node <插件目录>/scripts/mobile-codex.mjs feedback remove --id <id>
+```
+
+添加时网关先用 gh 核对：仓库存在、开着 issue、gh 登录的账号有 triage 及以上权限（提交时要加 `from-phone` 标签）。仓库是否公开以 GitHub 为准，公开仓库在预览时会提醒“将公开发布”。列表存在网关数据目录里的 `feedback-targets.json`（权限 0600），连同下面的固定仓库最多 10 个；它不在 App 和插件里，别人装 MobiCodex 不会连到你的仓库。增删马上生效，不用重启网关。删掉一个仓库后，已经提交的 issue 不受影响，还在等着提交到它的反馈会停下并写明原因。
+
+`gateway.json` 里的 `feedback.github` 都是可选的：
 
 ```json
 "feedback": {
   "github": {
-    "repos": [{ "id": "mobicodex", "repo": "luoz76070-art/MobiCodex", "label": "MobiCodex", "public": true }],
-    "gh": "/opt/homebrew/bin/gh"
+    "gh": "/opt/homebrew/bin/gh",
+    "proxy": "http://127.0.0.1:端口"
   }
 }
 ```
 
-- `repos`：手机上能选的仓库，最多 10 个。`id` 只用小写字母、数字和连字符；`label` 是手机上显示的名字；`public` 为 `true` 时，预览会提醒“将公开发布”。
-- `gh`（可选）：GitHub CLI 的绝对路径。网关在后台运行时可能拿不到登录 shell 的 PATH，建议写上。这台电脑要先 `gh auth login`，账号要能在这些仓库里建 issue 和标签。
-- `proxy`（可选）：这台电脑要经代理才能连 GitHub 时填，例如 `"http://127.0.0.1:端口"`，只对 gh 生效。
+- `gh`：GitHub CLI 的绝对路径。不写时网关在 PATH 和 `/opt/homebrew/bin`、`/usr/local/bin`、`~/.local/bin` 里找；网关在后台运行时可能拿不到登录 shell 的 PATH，找不到时写上。
+- `proxy`：这台电脑要经代理才能连 GitHub 时填，只对 gh 生效。不写时沿用网关进程的 `HTTPS_PROXY`。
+- `repos`：固定的仓库（早期的写法，仍然支持），例如 `[{ "id": "my-app", "repo": "用户名/仓库名", "label": "显示名称", "public": true }]`。`id` 只用小写字母、数字和连字符，`public` 要自己填。固定仓库在手机上删不掉。
 
 手机上选好仓库后要先点「预览」：网关生成标题和正文，隐藏本机路径、用户名、电脑名、邮箱、网址、IP 地址、密钥，以及网关自己的令牌和服务器地址；确认后才提交。网关用 gh 建 issue，加 `from-phone` 标签，正文末尾有一行看不见的编号，重试前先按编号查，不会重复建。提交失败每 10 分钟重试一次，手机上「我的反馈」会显示原因；收件箱里人工改过状态的反馈，网关不再动。反馈不带截图。
 
 已提交（filed）、已修复（fixed）、不处理（dismissed）的反馈，7 天没有变化后网关会自动删掉（网关启动后半分钟清理一次，之后每天一次）；还在等待提交或重试的不会删。
 
-改完配置，重启网关后生效。
+改 `gateway.json` 要重启网关才生效；在手机上或用 `feedback` 命令增删仓库不用重启。
 
