@@ -7,19 +7,35 @@ import { mobileQueueSnapshot, queuedMobileInput } from './queue.mjs';
 import path from 'node:path';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 
-export const supportedHarnessVersions = Object.freeze(['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-rc.1', '0.2.2-rc.3', '0.2.2-rc.5']);
+// Builds that passed the official isolated checks (scripts/check-deepseek-*.mjs).
+export const verifiedHarnessVersions = Object.freeze(['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-rc.1', '0.2.2-rc.3', '0.2.2-rc.5']);
+// engines.dsh admits the whole 0.2 line; a build outside it gets here only through a manual loader exemption.
+const harnessLine = /^0\.2\.\d{1,9}(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
+export const harnessSupport = version => verifiedHarnessVersions.includes(version) ? 'verified'
+  : typeof version === 'string' && harnessLine.test(version) ? 'unverified' : null;
+/** Host seams every route relies on. Optional ones (questions, approvals, history) are vetted where they are used. */
+export function missingHostSeams(ctx, createUserMessage) {
+  const fn = value => typeof value === 'function', missing = [];
+  if (!fn(createUserMessage)) missing.push('dsh-llm.createUserMessage');
+  if (!fn(ctx?.on)) missing.push('ctx.on');
+  if (!fn(ctx?.agents?.get) || !fn(ctx?.agents?.list)) missing.push('ctx.agents');
+  if (!fn(ctx?.sessionQuery?.observeSession)) missing.push('ctx.sessionQuery.observeSession');
+  return missing;
+}
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/u;
 const fail = (code, status = 409) => Object.assign(new Error(`DEEPSEEK_${code}`), { status });
 const iso = value => new Date(Number.isSafeInteger(value) && value >= 0 && value <= 8.64e15 ? value : Date.now()).toISOString();
 
 /** Original dsh process; only an explicit cold-session message may restore its Agent. */
 export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVersion) {
-  if (!supportedHarnessVersions.includes(harnessVersion)) throw fail('VERSION_UNSUPPORTED', 400);
   if (!config || Object.keys(config).some(key => !['port', 'token', 'directory', 'scope'].includes(key))
     || !Number.isInteger(config.port) || config.port < 0 || config.port > 65535
     || typeof config.token !== 'string' || !/^[A-Za-z0-9_-]{32,512}$/u.test(config.token)
     || typeof config.directory !== 'string' || !path.isAbsolute(config.directory)
     || (config.scope !== undefined && !['directory', 'all'].includes(config.scope))) throw fail('CONFIG_INVALID', 400);
+  const support = harnessSupport(harnessVersion), missing = support ? missingHostSeams(ctx, createUserMessage) : [];
+  // Touches nothing in the host; only tells the gateway why the phone cannot use this build.
+  if (!support || missing.length) return reportOnlyBridge(config, typeof harnessVersion === 'string' && /^[0-9A-Za-z.+-]{1,64}$/u.test(harnessVersion) ? harnessVersion : '', missing);
   const directory = path.resolve(config.directory), aliases = new Map(), ids = new WeakMap(), entries = new Map(), disposers = [];
   const catalog = config.scope === 'all' ? createDeepSeekCatalog(ctx, config.token, id => Boolean(entries.get(id)?.clients.size || entries.get(id)?.submission)) : null;
   const requests = new Set();
@@ -346,10 +362,7 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
     if (entry) { clearTimeout(entry.timer); clearInterval(entry.poll); for (const res of entry.clients) res.destroy(); entries.delete(id); }
     aliases.delete(id);
   });
-  function authorized(req) {
-    const got = Buffer.from(req.headers.authorization ?? ''), expected = Buffer.from(`Bearer ${config.token}`);
-    return req.headers.origin === undefined && ['127.0.0.1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress) && got.length === expected.length && timingSafeEqual(got, expected);
-  }
+  const authorized = req => authorizedRequest(req, config.token);
   const server = http.createServer(async (req, res) => {
     const controller = new AbortController(); requests.add(controller); res.once('close', () => { controller.abort(); requests.delete(controller); });
     const json = (value, status = 200) => { if (!res.destroyed && !res.headersSent) { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(value)); } };
@@ -358,7 +371,7 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
       const url = new URL(req.url, 'http://127.0.0.1');
       const queryRoute = catalog && (url.pathname === '/sessions' || /\/history$/u.test(url.pathname));
       if (url.hash || (url.search && !queryRoute) || [...url.searchParams.keys()].some(key => !['search', 'cursor', 'range'].includes(key))) throw fail('INPUT_INVALID', 400);
-      if (req.method === 'GET' && url.pathname === '/info') return json({ protocol: 1, harnessVersion, messagePhases: true, toolMessages: 1, interactions: interactions.available(), ...(catalog ? { scope: 'all', history: true } : {}) });
+      if (req.method === 'GET' && url.pathname === '/info') return json({ protocol: 1, harnessVersion, verified: support === 'verified', compatible: true, messagePhases: true, toolMessages: 1, interactions: interactions.available(), ...(catalog ? { scope: 'all', history: true } : {}) });
       // F5 observes the host's live status without opening logs or activating cold sessions.
       if (req.method === 'GET' && url.pathname === '/activity') return json({ running: ctx.agents.list().filter(allowed).filter(agent => agent.status === 'running').length });
       if (req.method === 'GET' && url.pathname === '/sessions') {
@@ -380,10 +393,7 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
       return json(await operate(match[1], match[3] ? 'question' : match[4] ? 'permission' : match[5] ? 'queue-cancel' : match[2] === 'messages' ? 'message' : 'interrupt', input, match[3] ?? match[4] ?? match[5], controller.signal));
     } catch (error) { json({ error: error.message?.startsWith('DEEPSEEK_') ? error.message : 'DEEPSEEK_BRIDGE_FAILED' }, error.status ?? 500); if (res.headersSent && !res.writableEnded) res.destroy(); }
   });
-  server.requestTimeout = 10000; server.headersTimeout = 10000; server.maxConnections = 32;
-  const ready = new Promise((resolve, reject) => { server.once('error', reject); server.listen(config.port, '127.0.0.1', () => resolve(server.address())); });
-  // Startup errors are observable to apply/tests without an unhandled rejection.
-  ready.catch(() => {});
+  const ready = listen(server, config.port);
   return { ready, async stop() {
     stopped = true; for (const dispose of disposers) dispose?.();
     for (const entry of entries.values()) { clearTimeout(entry.timer); clearInterval(entry.poll); for (const res of entry.clients) res.destroy(); }
@@ -391,4 +401,27 @@ export function createDeepSeekBridge(ctx, config, createUserMessage, harnessVers
     entries.clear(); aliases.clear(); results.clear(); catalog?.stop();
     await new Promise(resolve => { server.close(resolve); server.closeAllConnections(); });
   } };
+}
+
+function authorizedRequest(req, token) {
+  const got = Buffer.from(req.headers.authorization ?? ''), expected = Buffer.from(`Bearer ${token}`);
+  return req.headers.origin === undefined && ['127.0.0.1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress) && got.length === expected.length && timingSafeEqual(got, expected);
+}
+function listen(server, port) {
+  server.requestTimeout = 10000; server.headersTimeout = 10000; server.maxConnections = 32;
+  const ready = new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', () => resolve(server.address())); });
+  // Startup errors are observable to apply/tests without an unhandled rejection.
+  ready.catch(() => {});
+  return ready;
+}
+/** Outside the supported line or missing a core seam: answer /info with the reason and refuse every other route. */
+function reportOnlyBridge(config, harnessVersion, missing) {
+  const server = http.createServer((req, res) => {
+    const json = (value, status = 200) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(value)); };
+    if (!authorizedRequest(req, config.token)) return json({ error: 'DEEPSEEK_AUTH_FAILED' }, 403);
+    if (req.method === 'GET' && req.url === '/info') return json({ protocol: 1, harnessVersion, verified: false, compatible: false, missing });
+    json({ error: 'DEEPSEEK_HOST_INCOMPATIBLE' }, 503);
+  });
+  const ready = listen(server, config.port);
+  return { ready, async stop() { await new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }); } };
 }

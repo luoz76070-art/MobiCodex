@@ -238,3 +238,13 @@ Relay复用设备鉴权、撤销、SSE配额和快照增量，新增：
 [候选交付](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/agent-gateway-candidate.md)已按同一源码重建APK/HTML/插件ZIP并更新hash；只是本地预览，未安装/发布。Claude本机版本仍不满足开发契约，真实宿主和Android待验收；不把固定源码与合成测试当作已接管本机OpenCode。
 
 2026-10-21问答回包复核：同步要求ok=true、异步steer要求原题turnId，额外核对outer method/owner和可选内层method。坏回包保持uncertain及提交锁，同代次权威移除优先，不重放。新增17项后问答44/44、综合后端227/227及两端类型/独立构建通过。只更新插件ZIP，APK/HTML与生产18保持；真实原会话应答及Android仍待验，详见[专项记录](https://github.com/luoz76070-art/MobiCodex/blob/archive/pre-cleanup-2026-11/docs/audits/2026-10-21/codex-question-ack.md)。
+
+## 宿主版本范围（2026-11-26，#62）
+
+DeepSeek Harness 自动升级到 0.2.2-rc.5 后，精确版本名单让手机整个连不上 DeepSeek。之后 DeepSeek 和 OpenCode 都改成“版本范围 + 逐项核对”：
+
+- DeepSeek：插件 0.3.0 接受 0.2 线，启动时核对核心接口，缺失时只报告原因；问答和审批仍按源码指纹单独核对。详见[DeepSeek 插件说明](../plugins/mobile-deepseek/README.md#版本范围与逐项核对插件03062)。
+- OpenCode：已验证 2.0.16；其他 2.0.x（不早于 2.0.16）按未验证运行，查看和发消息照常，每个接口的返回仍先按原结构校验；提问和审批只在电脑处理（手机不显示操作按钮，网关拒绝写入）。2.1 及以后或更早版本拒绝，并在手机上写明版本。
+- 网关在手机读取 Agent 列表时最多每 30 秒刷新一次这两个 Agent 的状态，`errorMessage` 写明不能用的原因，`notice` 写明“未验证”。
+- 每日复盘运行 `corepack pnpm check:host-versions`，发现未验证版本就跑对应的隔离检查。
+

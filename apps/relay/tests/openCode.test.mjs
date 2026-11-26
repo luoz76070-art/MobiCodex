@@ -160,9 +160,11 @@ test('probe checks 2.0.16 server info and list, authenticates Basic Auth and fil
   assert.equal(f.requests.some(request => request.path === '/api/health'), false);
 });
 
-for (const version of ['1.19.3', '2.0.17', 'unknown']) test(`unreviewed server ${version} cannot publish sessions or controls`, async t => {
+for (const version of ['1.19.3', '2.0.15', '2.1.0', 'unknown']) test(`unreviewed server ${version} cannot publish sessions or controls`, async t => {
   const f = await fixture(t, { version });
-  assert.equal((await f.adapter.probe()).errorCode, 'OPENCODE_VERSION_UNSUPPORTED');
+  const status = await f.adapter.probe();
+  assert.equal(status.errorCode, 'OPENCODE_VERSION_UNSUPPORTED');
+  assert.equal(status.errorMessage, `电脑上的 OpenCode ${version} 不在 MobiCodex 支持的范围（2.0.x），需要等 MobiCodex 更新。`);
   await assert.rejects(f.follow(), { code: 'OPENCODE_VERSION_UNSUPPORTED' });
   assert.equal(f.snapshots.length, 0); assert.equal(f.state.connections, 0);
   assert.ok(f.requests.every(request => request.path === '/api/info'));
@@ -389,6 +391,17 @@ test('request signatures include hidden origin and nested context without publis
   assert.equal(f.posts('/reply').length, 0);
 });
 
+test('unverified 2.0.x server keeps sessions working but answers stay on the computer', async t => {
+  const f = await fixture(t, { version: '2.0.17' });
+  const status = await f.adapter.probe();
+  assert.equal(status.state, 'connected'); assert.equal(status.capabilities.sendMessage, true); assert.equal(status.capabilities.approve, false);
+  assert.match(status.notice, /OpenCode 2\.0\.17 还没经过 MobiCodex 验证/u);
+  await f.follow(); const permission = f.latest().permissions[0];
+  assert.deepEqual(permission.decisions, []); assert.match(permission.unavailableReason, /请在电脑上处理/u);
+  await assert.rejects(f.adapter.respondPermission(sessionID, permission.id, { ...f.operation(), decision: 'once' }), { code: 'OPENCODE_APPROVAL_UNVERIFIED' });
+  assert.ok(f.requests.every(request => !request.path.endsWith('/reply')));
+});
+
 test('permission displays exact requested and saved scopes and cannot invent a saved rule', async t => {
   const f = await fixture(t); await f.follow(); let permission = f.latest().permissions[0];
   assert.deepEqual(permission.resources, ['/synthetic/project/file.txt']); assert.deepEqual(permission.save, ['/synthetic/project/**']);
@@ -442,7 +455,9 @@ test('Relay routes authenticate devices, bind SSE token to agent/session, dedupl
   await app.listen({ host: '127.0.0.1', port: 0 });
   const base = `http://127.0.0.1:${app.server.address().port}`, route = `/api/agents/opencode/sessions/${sessionID}`;
   const auth = { authorization: 'Bearer synthetic-admin' };
-  assert.equal((await app.inject({ url: '/api/agents', headers: auth })).statusCode, 200); assert.equal(f.requests.length, 0);
+  assert.equal((await app.inject({ url: '/api/agents', headers: auth })).statusCode, 200);
+  // Listing Agents refreshes status with read-only calls only (#62).
+  assert.ok(f.requests.every(request => ['/api/info', '/api/session'].includes(request.path)));
   const pairing = (await app.inject({ method: 'POST', url: '/api/pairing', headers: auth })).json();
   const device = (await app.inject({ method: 'POST', url: '/api/pairing/consume', payload: { code: pairing.code } })).json(); assert.ok(device.token);
   const deviceAuth = { authorization: `Bearer ${device.token}` };

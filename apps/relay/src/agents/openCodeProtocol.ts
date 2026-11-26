@@ -4,6 +4,8 @@ import { agentError, type AgentMessage, type AgentSession } from "./sessions.js"
 
 // OpenCode v2.0.16 protocol OpenAPI, /api/. One decoder owns the upstream shapes.
 export const openCodeVersion = "2.0.16";
+// Passed scripts/check-opencode-runtime.mjs. Later 2.0.x builds run unverified, without phone answers to questions or approvals.
+export const openCodeVerifiedVersions: readonly string[] = [openCodeVersion];
 export const serverInfoSchema = z.object({ version: z.string().max(128) });
 export const sessionIdSchema = z.string().regex(/^ses[a-zA-Z0-9_-]{1,128}$/u);
 const messageId = z.string().regex(/^msg_[a-zA-Z0-9_-]{1,128}$/u);

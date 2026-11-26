@@ -27,6 +27,8 @@ export type AgentStatus = {
   checkedAt: string | null;
   errorCode: string | null;
   errorMessage?: string | null;
+  /** Works, with a caveat the phone shows beside the Agent (an unverified host build). */
+  notice?: string | null;
   cliVersion?: string;
 };
 

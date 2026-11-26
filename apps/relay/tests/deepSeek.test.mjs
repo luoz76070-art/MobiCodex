@@ -14,6 +14,7 @@ import { turnResult } from '../../../plugins/mobile-deepseek/turnResult.mjs';
 import { DeepSeekClient } from '../dist/agents/deepSeekClient.js';
 import { DeepSeekAdapter } from '../dist/agents/deepSeekAdapter.js';
 import { deepSeekConfigSchema, deepSeekInfo, deepSeekSnapshot } from '../dist/agents/deepSeekProtocol.js';
+import { hostSupport, satisfiesRange } from '../dist/agents/hostVersions.js';
 import { parseManagedConfig } from '../dist/gateway/config.js';
 import { AgentGateway } from '../dist/agents/agentGateway.js';
 import { createRelayServer } from '../dist/server/createRelayServer.js';
@@ -382,18 +383,83 @@ for (const harnessVersion of ['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-r
   const info = await f.client.json('/info', deepSeekInfo);
   assert.equal(info.harnessVersion, harnessVersion);
   assert.equal(info.messagePhases, true);
-  assert.equal((await f.adapter.probe()).capabilities.approve, true);
+  assert.equal(info.verified, true); assert.equal(info.compatible, true);
+  const status = await f.adapter.probe();
+  assert.equal(status.capabilities.approve, true); assert.equal(status.notice, null); assert.equal(status.errorMessage, null);
   const close = await f.watch();
   assert.deepEqual(current(f).messages.map(message => message.text), ['用户记录', '公开输出']);
   assert.equal(f.calls.length, 0);
   close();
 });
 
-test('dsh missing or unverified runtime cannot start a bridge or pass the gateway handshake', () => {
-  for (const version of [undefined, '', '0.2.1-rc.1', '0.2.1-rc.4', '0.2.1-rc.6', '0.2.1', '0.2.2', '0.2.2-rc.2']) {
-    assert.throws(() => createDeepSeekBridge({}, { port: 0, token, directory }, user, version), /DEEPSEEK_VERSION_UNSUPPORTED/u);
-    assert.equal(deepSeekInfo.safeParse({ protocol: 1, harnessVersion: version }).success, false);
+test('dsh 0.2.x build not yet verified keeps sessions working and tells the phone', async t => {
+  const f = await fixture(t, { harnessVersion: '0.2.3', initial: true });
+  const info = await f.client.json('/info', deepSeekInfo);
+  assert.equal(info.verified, false); assert.equal(info.compatible, true);
+  const status = await f.adapter.probe();
+  assert.equal(status.state, 'connected'); assert.equal(status.capabilities.sendMessage, true);
+  // Questions and approvals stay behind their own source fingerprint, which this synthetic host matches.
+  assert.equal(status.capabilities.approve, true);
+  assert.match(status.notice, /DeepSeek 0\.2\.3 还没经过 MobiCodex 验证/u);
+  const close = await f.watch();
+  assert.deepEqual(current(f).messages.map(message => message.text), ['用户记录', '公开输出']);
+  close();
+});
+
+test('dsh build outside the 0.2 line or missing a core seam answers only /info, and the phone gets the reason', async t => {
+  const seams = { on: () => () => {}, agents: { get() {}, list: () => [] } };
+  for (const [version, ctx, missing] of [[undefined, {}, []], ['', {}, []], ['0.3.0 beta', {}, []], ['0.3.0', seams, []], ['1.0.0-rc.1', seams, []],
+    ['0.2.3', seams, ['ctx.sessionQuery.observeSession']], ['0.2.2-rc.5', {}, ['ctx.on', 'ctx.agents', 'ctx.sessionQuery.observeSession']]]) {
+    const bridge = createDeepSeekBridge(ctx, { port: 0, token, directory }, user, version), address = await bridge.ready;
+    const client = new DeepSeekClient({ url: `http://127.0.0.1:${address.port}/`, token, directory }, { timeoutMs: 2000 });
+    const adapter = new DeepSeekAdapter(client, null);
+    t.after(async () => { await adapter.stop(); await bridge.stop(); });
+    const info = await client.json('/info', deepSeekInfo);
+    assert.equal(info.compatible, false); assert.equal(info.verified, false); assert.deepEqual(info.missing, missing);
+    await assert.rejects(client.json('/sessions', z.unknown()), { code: 'DEEPSEEK_REQUEST_REJECTED' });
+    const status = await adapter.probe();
+    assert.equal(status.state, 'failed'); assert.equal(status.errorCode, 'DEEPSEEK_HOST_INCOMPATIBLE');
+    assert.match(status.errorMessage, missing.length ? new RegExp(missing.at(-1).replaceAll('.', '\\.'), 'u') : /0\.2\.x/u);
   }
+  assert.throws(() => createDeepSeekBridge({}, { port: 0, token, directory, unwanted: true }, user, '0.3.0'), /DEEPSEEK_CONFIG_INVALID/u);
+});
+
+test('gateway handshake takes any well-formed dsh version the plugin serves', () => {
+  for (const version of ['0.2.3', '0.2.10-rc.1', '0.2.2']) assert.equal(deepSeekInfo.safeParse({ protocol: 1, harnessVersion: version }).success, true, version);
+  for (const version of [undefined, '', 'unknown', '0.2', '<b>0.2.3</b>']) assert.equal(deepSeekInfo.safeParse({ protocol: 1, harnessVersion: version }).success, false, String(version));
+  assert.equal(deepSeekInfo.safeParse({ protocol: 1, harnessVersion: '', verified: false, compatible: false, missing: [] }).success, true);
+  assert.equal(deepSeekInfo.safeParse({ protocol: 1, harnessVersion: '0.3.0', compatible: false, missing: ['not a seam'] }).success, false);
+});
+
+test('host version ranges follow the dsh loader, prereleases included', () => {
+  const range = '>=0.2.1-rc.2 <0.3.0-0';
+  for (const version of ['0.2.1-rc.2', '0.2.1-rc.10', '0.2.1', '0.2.2-rc.5', '0.2.3', '0.2.99-beta.1']) assert.equal(satisfiesRange(version, range), true, version);
+  for (const version of ['0.2.1-rc.1', '0.2.0', '0.3.0-rc.1', '0.3.0', '1.0.0']) assert.equal(satisfiesRange(version, range), false, version);
+  assert.equal(satisfiesRange('0.2.2-rc.5', '=0.2.1-rc.2 || =0.2.2-rc.3'), false);
+  assert.equal(satisfiesRange('0.2.2-rc.3', '=0.2.1-rc.2 || =0.2.2-rc.3'), true);
+  assert.equal(satisfiesRange('0.2.2', 'workspace:*'), null); assert.equal(satisfiesRange('unknown', range), null);
+  assert.equal(hostSupport('2.0.16', ['2.0.16']), 'verified'); assert.equal(hostSupport('2.0.17', ['2.0.16']), 'unverified');
+  for (const version of ['2.0.15', '2.1.0', '1.19.3', 'unknown']) assert.equal(hostSupport(version, ['2.0.16']), null, version);
+});
+
+test('closed bridge: the gateway reads the installed DeepSeek and plugin to say why', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-dsh-install-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const app = path.join(root, 'DeepSeek Harness.app'), profile = path.join(root, 'profile'), linked = path.join(profile, 'node_modules', 'dsh-mobile-codex');
+  await fs.mkdir(path.join(app, 'Contents'), { recursive: true }); await fs.mkdir(linked, { recursive: true });
+  const closed = http.createServer(); closed.listen(0, '127.0.0.1'); await once(closed, 'listening');
+  const port = closed.address().port; await new Promise(resolve => closed.close(resolve));
+  const probe = async () => {
+    const adapter = new DeepSeekAdapter(new DeepSeekClient({ url: `http://127.0.0.1:${port}/`, token, directory }, { timeoutMs: 2000 }), { app, profile });
+    try { const status = await adapter.probe(); assert.equal(status.errorCode, 'DEEPSEEK_CONNECTION_FAILED'); return status.errorMessage; } finally { await adapter.stop(); }
+  };
+  assert.match(await probe(), /^连不上电脑上的 DeepSeek。/u);
+  await fs.writeFile(path.join(app, 'Contents', 'Info.plist'), '<?xml version="1.0"?><plist><dict><key>CFBundleShortVersionString</key>\n\t<string>0.2.2-rc.5</string></dict></plist>');
+  assert.match(await probe(), /DeepSeek（0\.2\.2-rc\.5）还没有装 MobiCodex 插件/u);
+  await fs.writeFile(path.join(linked, 'package.json'), JSON.stringify({ version: '0.2.8', engines: { dsh: '=0.2.1-rc.2 || =0.2.2-rc.3' } }));
+  assert.match(await probe(), /已更新到 0\.2\.2-rc\.5，已装的 MobiCodex 插件 0\.2\.8 不支持这个版本/u);
+  await fs.writeFile(path.join(linked, 'package.json'), JSON.stringify({ version: '0.3.0', engines: { dsh: '>=0.2.1-rc.2 <0.3.0-0' } }));
+  assert.match(await probe(), /把 Mobile Codex 关掉再打开/u);
 });
 
 test('dsh constructor/probe/list are passive; arbitrary host id has lifecycle UUID alias and exact scope', async t => {
@@ -575,7 +641,8 @@ test('dsh relay production factory registers configured adapter without an injec
   const headers = { authorization: 'Bearer synthetic-admin' };
   const listed = await app.inject({ url: '/api/agents', headers });
   assert.equal(listed.statusCode, 200);
-  assert.equal(listed.json().agents.find(agent => agent.id === 'deepseek')?.state, 'unprobed');
+  // Listing Agents refreshes DeepSeek's status passively (#62): /info and the catalog, never a session log.
+  assert.equal(listed.json().agents.find(agent => agent.id === 'deepseek')?.state, 'connected');
   assert.equal(f.stats().observations, 0);
   const sessions = await app.inject({ url: '/api/agents/deepseek/sessions', headers });
   assert.equal(sessions.statusCode, 200);

@@ -2,6 +2,7 @@ import { activityEvidenceSchema } from "../store/activityEvidence.js";
 import path from "node:path";
 import { z } from "zod";
 import { lastTurnSchema } from "../store/lastTurn.js";
+import { parseVersion } from "./hostVersions.js";
 
 export const deepSeekConfigSchema = z.object({
   url: z.string().max(2048).refine(value => {
@@ -18,7 +19,12 @@ export type DeepSeekConfig = z.infer<typeof deepSeekConfigSchema>;
 export const deepSeekSessionId = z.string().uuid();
 export const deepSeekActivity = z.object({ running: z.number().int().nonnegative() });
 const session = z.object({ id: deepSeekSessionId, title: z.string().max(256), directory: z.string().max(4096), updatedAt: z.string().datetime() });
-export const deepSeekInfo = z.object({ protocol: z.literal(1), harnessVersion: z.enum(["0.2.1-rc.2", "0.2.1-rc.3", "0.2.1-rc.5", "0.2.2-rc.1", "0.2.2-rc.3", "0.2.2-rc.5"]), messagePhases: z.boolean().optional(), toolMessages: z.literal(1).optional(), interactions: z.boolean().optional(), scope: z.literal("all").optional(), history: z.boolean().optional() });
+// The plugin decides which dsh builds it serves (#62): verified ones passed the isolated checks, others on the same line
+// run unverified, and a build missing a core seam answers only /info with compatible:false. Older plugins omit both flags.
+export const deepSeekInfo = z.object({ protocol: z.literal(1), harnessVersion: z.string().max(64).regex(/^[0-9A-Za-z.+-]*$/u),
+  verified: z.boolean().optional(), compatible: z.boolean().optional(), missing: z.array(z.string().max(128).regex(/^[A-Za-z0-9._-]+$/u)).max(32).optional(),
+  messagePhases: z.boolean().optional(), toolMessages: z.literal(1).optional(), interactions: z.boolean().optional(), scope: z.literal("all").optional(), history: z.boolean().optional() })
+  .refine(info => info.compatible === false || parseVersion(info.harnessVersion) !== null);
 export const deepSeekSessions = z.object({ sessions: z.array(session).max(128), cursor: z.string().uuid().nullable() });
 export const deepSeekDelivery = z.object({ ok: z.literal(true), delivery: z.enum(["submitted", "confirmed", "uncertain"]) });
 const messages = z.array(z.object({ id: z.string().max(512), timestamp: z.string().datetime(), role: z.enum(["user", "assistant", "tool"]), text: z.string().max(32768), kind: z.enum(["user_message", "agent_message", "function_call", "function_call_output"]), turnId: z.string().max(512).optional(), phase: z.enum(["commentary", "final_answer"]).optional() })).max(120);
