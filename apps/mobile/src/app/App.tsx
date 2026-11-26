@@ -98,6 +98,25 @@ export function App() {
   const handoffTarget = openedTarget?.scope === scope ? openedTarget.target : null;
   const targetOpened = useCallback(() => setOpenedTarget(null), []);
   const [captureOpen, setCaptureOpen] = useState(false);
+
+  // App-wide, not per page: since #42 a cold start opens the Agent picker, and a UI update that never
+  // confirms itself here is rolled back by the native side on the next launch.
+  useEffect(() => {
+    let failed = false;
+    const onError = () => { failed = true; };
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onError);
+    const readyTimer = window.setTimeout(() => {
+      if (!failed && Capacitor.isNativePlatform()) void NativeHotUpdate.markReady().catch(() => undefined);
+    }, 5000);
+    const stageTimer = window.setTimeout(() => void stageHotUpdate(appVersionCode), 8000);
+    return () => {
+      window.clearTimeout(readyTimer);
+      window.clearTimeout(stageTimer);
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onError);
+    };
+  }, []);
   const [entries, setEntries] = useState<SessionEntry[]>([]);
   const entrySequence = useRef(0);
   const seenShares = useRef(new Set<string>());
@@ -1662,24 +1681,6 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
     void refreshRelayStatus().catch(() => undefined);
     if (selected && !intakeShortcut && !handoffTarget) void openThread(selected);
     void loadThreads();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    let failed = false;
-    const onError = () => { failed = true; };
-    window.addEventListener("error", onError);
-    window.addEventListener("unhandledrejection", onError);
-    const readyTimer = window.setTimeout(() => {
-      if (!failed && Capacitor.isNativePlatform()) void NativeHotUpdate.markReady().catch(() => undefined);
-    }, 5000);
-    const stageTimer = window.setTimeout(() => void stageHotUpdate(appVersionCode), 8000);
-    return () => {
-      window.clearTimeout(readyTimer);
-      window.clearTimeout(stageTimer);
-      window.removeEventListener("error", onError);
-      window.removeEventListener("unhandledrejection", onError);
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -72,7 +72,7 @@ export function appNavigationFixture(initial = navigationModel.agentPicker(), en
       return options.readAgents ? options.readAgents(...args) : { agents: options.agents ?? ['claude', 'deepseek', 'ccdesk', 'opencode'].map(id => ({ id, sessionApi: 1, state: 'connected' })) };
     },
     buildUrl: (_endpoint, route) => route, newThreadId: '__new_thread__', SystemNotice: 'Notice', AbortController,
-    productBeforeNavigate: "product-before-navigate", localStorage: storage, window: events, Event,
+    productBeforeNavigate: "product-before-navigate", localStorage: storage, window: Object.assign(events, { setTimeout: () => 0, clearTimeout() {} }), Event,
     BackLayersContext: { Provider: 'Provider' }, BackLayer: 'BackLayer', AgentPicker: 'Picker',
     ProductRemoteShell: 'Shell', WorkItemsPage: 'Items', CapturePanel: 'Capture', AgentWorkspace: 'AgentWorkspace', Workspace: 'Workspace', GlobalSettings: 'Settings', FeedbackHost: 'FeedbackHost',
   };
