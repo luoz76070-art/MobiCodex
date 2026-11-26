@@ -25,8 +25,19 @@ export async function apiPost<T>(url: string, token: string, body: unknown, sign
   });
 }
 
+/**
+ * Sends an empty JSON object: Android's native HTTP gives a bodiless DELETE a non-JSON content type,
+ * which the gateway rejects with 415 before the route runs.
+ */
 export async function apiDelete<T>(url: string, token: string, signal?: AbortSignal): Promise<T> {
-  return requestJson<T>(url, { method: "DELETE", signal, headers: token ? authHeaders(token) : undefined, connectTimeout: 8000, readTimeout: 60000 });
+  return requestJson<T>(url, {
+    method: "DELETE",
+    signal,
+    headers: { ...(token ? authHeaders(token) : {}), "Content-Type": "application/json" },
+    body: {},
+    connectTimeout: 8000,
+    readTimeout: 60000,
+  });
 }
 
 export async function requestJson<T>(url: string, options: RequestJsonOptions = {}): Promise<T> {

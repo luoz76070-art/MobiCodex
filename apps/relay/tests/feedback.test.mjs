@@ -325,7 +325,8 @@ process.stdin.on('data', chunk => { input += chunk; }).on('end', () => {
 test('a phone adds and removes repos; the computer checks each with gh and keeps the list private', async t => {
   const fake = fakeIssues(), f = await fixture(t, { issues: fake.client }), { headers } = await f.pair();
   const add = (payload, h = headers) => f.app.inject({ method: 'POST', url: '/api/feedback/targets', headers: h, payload });
-  const remove = (id, h = headers) => f.app.inject({ method: 'DELETE', url: `/api/feedback/targets/${id}`, headers: h });
+  // The phone sends `{}` with JSON content type (see apiDelete); a bodiless DELETE works too.
+  const remove = (id, h = headers) => f.app.inject({ method: 'DELETE', url: `/api/feedback/targets/${id}`, headers: h, payload: {} });
   assert.deepEqual((await f.targets(headers)).json(), { targets: [], manage: true });
   const stranger = { authorization: 'Bearer not-a-device' };
   assert.equal((await add({ repo: 'o/r' }, stranger)).statusCode, 401); assert.equal((await remove('r', stranger)).statusCode, 401);

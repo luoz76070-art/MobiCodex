@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { apiGet, apiPost, assertSecureEndpoint, authHeaders, buildUrl, normalizeEndpoint, requestJson, toFriendlyFetchError } from "./http";
+import { apiDelete, apiGet, apiPost, assertSecureEndpoint, buildUrl, normalizeEndpoint, toFriendlyFetchError } from "./http";
 import { GatewayPanel } from "./GatewayPanel";
 
 type Device = { id: string; name: string; createdAt: string };
@@ -43,7 +43,7 @@ export function PairingPanel({ endpoint, token, onPaired }: { endpoint: string; 
   async function revoke(id: string) {
     setBusy(true);
     try {
-      await requestJson(buildUrl(endpoint, `/api/devices/${encodeURIComponent(id)}`), { method: "DELETE", headers: authHeaders(token) });
+      await apiDelete(buildUrl(endpoint, `/api/devices/${encodeURIComponent(id)}`), token);
       setDevices(current => current.filter(device => device.id !== id));
       setStatus(admin ? "已撤销设备，连接已关闭" : "当前设备已撤销，请重新配对");
     } catch (error) { setStatus(toFriendlyFetchError(error)); }
