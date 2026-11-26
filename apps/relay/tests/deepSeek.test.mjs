@@ -377,7 +377,7 @@ test('dsh accepted input followed by model failure remains delivered and shows o
   close();
 });
 
-for (const harnessVersion of ['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-rc.1', '0.2.2-rc.3']) test(`dsh ${harnessVersion} reports the loaded runtime and passes the gateway handshake`, async t => {
+for (const harnessVersion of ['0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.5', '0.2.2-rc.1', '0.2.2-rc.3', '0.2.2-rc.5']) test(`dsh ${harnessVersion} reports the loaded runtime and passes the gateway handshake`, async t => {
   const f = await fixture(t, { harnessVersion, initial: true });
   const info = await f.client.json('/info', deepSeekInfo);
   assert.equal(info.harnessVersion, harnessVersion);
