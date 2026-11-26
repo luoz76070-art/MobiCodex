@@ -81,6 +81,13 @@ const ccdesk = {
   control: { token: credential, canSend: true, canSteer: false, canInterrupt: false },
 };
 
+// A second, idle Claude session so the in-session drawer (#56) can switch sessions.
+const claudeIdle = {
+  ...approval, session: sessions.claude[1], status: 'idle', activeTurnId: null, permissions: [],
+  messages: [message('idle-user', 'user', '整理一下城市列表的排序。', 'user_message'),
+    message('idle-result', 'assistant', '城市列表已按拼音排序。', 'agent_message', 'final_answer')],
+  control: { token: credential, canSend: true, canSteer: false, canInterrupt: false },
+};
 export const syntheticData = { now, credential, threadId, sessionId, threads, desktop, agents, sessions, approval, ccdesk, workItems, attentionNotification, attentionItems };
 
 export function buildSyntheticApp() {
@@ -90,6 +97,7 @@ export function buildSyntheticApp() {
 function streamKind(route) {
   return route === `/api/desktop/threads/${threadId}/events` ? 'desktop'
     : route === `/api/agents/claude/sessions/${sessionId}/events` ? 'approval'
+      : route === `/api/agents/claude/sessions/${sessions.claude[1].id}/events` ? 'claude-idle'
       : route === `/api/agents/ccdesk/sessions/${ccdeskSession.id}/events` ? 'ccdesk'
         : route === '/api/work-items/events' ? 'work-items' : null;
 }
@@ -132,11 +140,12 @@ export async function startSyntheticServer({ distDirectory = dist } = {}) {
       // response open exercises the app's real stream-token + SSE connection.
       if (url.pathname.startsWith('/__screens/events/')) {
         const kind = url.pathname.split('/').at(-1);
-        assert.ok(['desktop', 'approval', 'ccdesk', 'work-items'].includes(kind));
+        assert.ok(['desktop', 'approval', 'claude-idle', 'ccdesk', 'work-items'].includes(kind));
         opened.set(kind, (opened.get(kind) ?? 0) + 1);
         res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
         if (kind === 'desktop') res.write(`event: desktop\ndata: ${JSON.stringify(desktop)}\n\n`);
         if (kind === 'approval') res.write(`event: agent-session\ndata: ${JSON.stringify(approval)}\n\n`);
+        if (kind === 'claude-idle') res.write(`event: agent-session\ndata: ${JSON.stringify(claudeIdle)}\n\n`);
         if (kind === 'ccdesk') res.write(`event: agent-session\ndata: ${JSON.stringify(ccdesk)}\n\n`);
         const ping = () => res.write(`event: ping\ndata: ${JSON.stringify(now)}\n\n`);
         ping();

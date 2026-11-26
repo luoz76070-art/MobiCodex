@@ -39,7 +39,7 @@ const snapshot = { agentId: agent.id, session, connected: true, updatedAt: sessi
 
 function driver(name, props, overrides = {}, code = workspaceSource) {
   const slots = [], effects = [], windowPort = new EventTarget(); let cursor = 0, dirty = true, tree, subscription;
-  const components = ['WorkspaceHeader', 'SystemNotice', 'PullToRefresh', 'ProjectGroups', 'EmptyState', 'AgentPickRow', 'ListSkeleton', 'MessageSkeleton', 'Loader2', 'SessionRangeControl', 'MessageMediaProvider', 'MessageTimeline', 'ComputerComposer', 'ComposerSessionStatus', 'AttachmentTray', 'VoiceInput', 'AgentQueue', 'ClaudeCliCreate', 'AgentQuestions', 'AgentSessionControls', 'AgentSessionRow', 'ArrowUp', 'MessageSquare'];
+  const components = ['SidebarScrim', 'PanelLeft', 'RefreshCcw', 'X', 'WorkspaceHeader', 'SystemNotice', 'PullToRefresh', 'ProjectGroups', 'EmptyState', 'AgentPickRow', 'ListSkeleton', 'MessageSkeleton', 'Loader2', 'SessionRangeControl', 'MessageMediaProvider', 'MessageTimeline', 'ComputerComposer', 'ComposerSessionStatus', 'AttachmentTray', 'VoiceInput', 'AgentQueue', 'ClaudeCliCreate', 'AgentQuestions', 'AgentSessionControls', 'AgentSessionRow', 'ArrowUp', 'MessageSquare'];
   const deps = { ...model, Fragment: "Fragment", revokeAttachmentPreviews() {}, ...Object.fromEntries(components.map(name => [name, name])),
     h: (type, props, ...children) => ({ type, props: { ...props, children } }),
     useState(value) { const i = cursor++; slots[i] ??= { value: typeof value === 'function' ? value() : value }; return [slots[i].value, next => { const value = typeof next === 'function' ? next(slots[i].value) : next; dirty ||= value !== slots[i].value; slots[i].value = value; }]; },
@@ -53,7 +53,7 @@ function driver(name, props, overrides = {}, code = workspaceSource) {
     authHeaders: () => ({ Authorization: 'synthetic' }), requestJson: (url, options) => overrides.apiPost(url, 'synthetic', options.body, options),
     requestAnimationFrame() {}, apiGet: async route => route === '/api/agents' ? { agents: [agent] } : { sessions: [session], cursor: null },
     apiPost: () => assert.fail('read-only UI must not write'),
-    haptic() {},
+    haptic() {}, useBackLayer() {},
     ...overrides,
   };
   const Component = new Function(...Object.keys(deps), code + `; return ${name};`)(...Object.values(deps));

@@ -13,7 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import { registerVoiceAgentDrafts } from "../voice/draftRecovery";
 import type { VoiceRecoveryPort } from "../voice/useVoiceRecovery";
 import { VoiceInput } from "../voice/VoiceInput";
-import { Loader2 } from "lucide-react";
+import { Loader2, PanelLeft, RefreshCcw, X } from "lucide-react";
 import { PullToRefresh } from "../../shared/PullToRefresh";
 import { EmptyState } from "../../shared/EmptyState";
 import { ListSkeleton, MessageSkeleton } from "../../shared/Skeleton";
@@ -38,6 +38,8 @@ import type { AgentDelivery, AgentPermission, AgentSession, AgentSessionSnapshot
 import { groupByProject, projectGroupLabel, sessionInRange, sessionListRefreshMs } from "../threads/model";
 import { ProjectGroups } from "../threads/ProjectGroups";
 import { AgentSessionRow } from "./AgentSessionRow";
+import { SidebarScrim } from "../threads/SidebarScrim";
+import { useBackLayer } from "../../shared/BackLayers";
 import { SessionRangeControl } from "../threads/SessionRangeControl";
 import { agentAttentionKey, attentionAfterSend, setAttentionViewing } from "../notify/attention";
 
@@ -156,14 +158,56 @@ export default function AgentWorkspace({ navigation, onNavigate, onOpenAgents, o
   useEffect(() => { setAttentionViewing(agent && selected ? agentAttentionKey(agent.id, selected.id) : null); }, [agent?.id, selected?.id]);
   useEffect(() => () => setAttentionViewing(null), []);
   function switchAgent() { onOpenAgents(); }
+  // #56: inside a session the top-left button opens this Agent's session list as a drawer, like Codex.
+  // It belongs to one session, so switching sessions or leaving closes it.
+  const sessionKey = agent && selected ? `${agent.id}:${selected.id}` : null;
+  const [drawerFor, setDrawerFor] = useState<string | null>(null);
+  const drawerOpen = sessionKey !== null && drawerFor === sessionKey;
+  const closeDrawer = () => setDrawerFor(null);
+  useBackLayer(drawerOpen, closeDrawer, 38);
+  function openDrawer() {
+    if (!agent || !sessionKey) return;
+    setDrawerFor(sessionKey);
+    void loadSessions(agent, false, range, sessions.length > 0);
+  }
+  // One session list for the list page and the drawer.
+  const sessionList = (picked?: () => void) => <>
+    {agent && <>
+      {agent.id === "claude-cli" && agent.enabled !== false && <ClaudeCliCreate endpoint={endpoint} token={token} disabled={deviceRevoked || Boolean(agent.errorCode)} onCreated={session => {
+        setSessionDetails(session); setSessions(current => [session, ...current]); if (onNavigate(agentSession(agent.id, session.id))) picked?.();
+      }} />}
+      {agent.id === "deepseek" && <SessionRangeControl range={range} disabled={loading} onChange={next => { setRange(next); void loadSessions(agent, false, next); }} />}
+      <form className="search-field" onSubmit={event => { event.preventDefault(); void loadSessions(agent); }}><input aria-label="搜索 Agent 会话" placeholder="搜索会话" value={query} maxLength={200} onChange={event => setQuery(event.target.value)} /><button type="submit" disabled={loading}>搜索</button></form>
+      {<ProjectGroups key={agent.id} scope={scope} agentId={agent.id} groups={groupByProject(sessions, session => session.directory)} search={query}>
+        {session => <AgentSessionRow key={session.id} session={session} onOpen={() => { if (onNavigate(agentSession(agent.id, session.id))) picked?.(); }} />}
+      </ProjectGroups>}
+      {!loading && !sessions.length && !error && <EmptyState compact title={agent.enabled === false ? "Claude CLI 未启用" : "没有会话"}>{agent.enabled === false ? "请在电脑网关配置 claudeCli.directories，选择允许读取的目录。" : agent.id === "claude-cli" ? "允许目录内没有匹配的本地会话。" : agent.id === "deepseek" ? range === "recent" ? "近 30 天没有匹配会话，可查看更早会话。" : "没有匹配的 DeepSeek 会话，请检查电脑插件连接或搜索条件。" : agent.id === "ccdesk" ? "CC Desk 服务上没有匹配的会话。" : agent.id === "claude" ? `尚无已连接的 ${agent.label} 会话，请先在电脑会话中加载并配置插件。` : "当前目录没有可用的现有会话。"}</EmptyState>}
+      {cursor && <button className="action-button" disabled={loading} onClick={() => void loadSessions(agent, true)}>加载更多会话</button>}
+    </>}
+    {loading && (agent ? !sessions.length : !agents.length) ? <ListSkeleton label="正在读取…" />
+      : loading && <p className="inline-loading" role="status"><Loader2 className="spin" size={18} />正在刷新…</p>}
+  </>;
   const title = selected?.title || agent?.label || "选择 Agent";
   const subtitle = selected ? `${agent?.label} · 原服务会话` : "同一连接，分别管理会话";
   return <main className="agent-workspace">
     <WorkspaceHeader agentId={agent?.id ?? ""} title={title} subtitle={subtitle} project={selected?.directory ? projectGroupLabel(selected.directory) : undefined}
-      leading="back" leadingLabel={selected ? "返回 Agent 会话列表" : "返回 Agent 列表"}
-      onLeading={onBack} onSwitchAgent={switchAgent} onOpenItems={onCapture} onOpenSettings={onOpenSettings} />
+      leading={selected ? "menu" : "back"} leadingLabel={selected ? "打开会话列表" : "返回 Agent 列表"}
+      onLeading={selected ? openDrawer : onBack} onSwitchAgent={switchAgent} onOpenItems={onCapture} onOpenSettings={onOpenSettings} />
     {agent?.errorMessage && <SystemNotice error>{agent.errorMessage}</SystemNotice>}
     {(deviceRevoked || error) && <SystemNotice error>{deviceRevoked ? deviceRevokedMessage : error}</SystemNotice>}
+    {selected && agent && <>
+      <aside className={`thread-sidebar glass-surface agent-session-drawer ${drawerOpen ? "open" : ""}`} aria-label={`${agent.label} 会话列表`} aria-hidden={!drawerOpen} inert={!drawerOpen}>
+        <div className="sidebar-top">
+          <div className="sidebar-title"><PanelLeft size={18} /><div><strong>{agent.label}</strong><span>点一个会话直接切换</span></div></div>
+          <div className="sidebar-actions">
+            <button type="button" className="icon-button" onClick={() => void loadSessions(agent)} aria-label="刷新会话" title="刷新会话" disabled={loading}><RefreshCcw size={18} className={loading ? "spin" : ""} /></button>
+            <button type="button" className="icon-button sidebar-close" onClick={closeDrawer} aria-label="关闭会话列表" title="关闭会话列表"><X size={18} /></button>
+          </div>
+        </div>
+        <div className="agent-session-list agent-session-drawer-list">{drawerOpen && sessionList(closeDrawer)}</div>
+      </aside>
+      <SidebarScrim open={drawerOpen} onClose={closeDrawer} />
+    </>}
     {selected && agent ? <AgentChat voiceRecovery={voiceRecovery} key={`${agent.id}:${selected.id}`} endpoint={endpoint} token={token} agent={agent} session={selected}
       scopeKey={scope} draft={drafts[`${agent.id}:${selected.id}`] ?? ""} onDraft={value => setDrafts(current => {
         const key = `${agent.id}:${selected.id}`, next = { ...current };
@@ -171,20 +215,7 @@ export default function AgentWorkspace({ navigation, onNavigate, onOpenAgents, o
         return { ...next, [key]: value };
       })} />
       : <PullToRefresh className="agent-session-list" onRefresh={() => agent ? loadSessions(agent) : loadAgents()}>
-        {agent && <>
-          {agent.id === "claude-cli" && agent.enabled !== false && <ClaudeCliCreate endpoint={endpoint} token={token} disabled={deviceRevoked || Boolean(agent.errorCode)} onCreated={session => {
-            setSessionDetails(session); setSessions(current => [session, ...current]); onNavigate(agentSession(agent.id, session.id));
-          }} />}
-          {agent.id === "deepseek" && <SessionRangeControl range={range} disabled={loading} onChange={next => { setRange(next); void loadSessions(agent, false, next); }} />}
-          <form className="search-field" onSubmit={event => { event.preventDefault(); void loadSessions(agent); }}><input aria-label="搜索 Agent 会话" placeholder="搜索会话" value={query} maxLength={200} onChange={event => setQuery(event.target.value)} /><button type="submit" disabled={loading}>搜索</button></form>
-          {<ProjectGroups key={agent.id} scope={scope} agentId={agent.id} groups={groupByProject(sessions, session => session.directory)} search={query}>
-            {session => <AgentSessionRow key={session.id} session={session} onOpen={() => { onNavigate(agentSession(agent.id, session.id)); }} />}
-          </ProjectGroups>}
-          {!loading && !sessions.length && !error && <EmptyState compact title={agent.enabled === false ? "Claude CLI 未启用" : "没有会话"}>{agent.enabled === false ? "请在电脑网关配置 claudeCli.directories，选择允许读取的目录。" : agent.id === "claude-cli" ? "允许目录内没有匹配的本地会话。" : agent.id === "deepseek" ? range === "recent" ? "近 30 天没有匹配会话，可查看更早会话。" : "没有匹配的 DeepSeek 会话，请检查电脑插件连接或搜索条件。" : agent.id === "ccdesk" ? "CC Desk 服务上没有匹配的会话。" : agent.id === "claude" ? `尚无已连接的 ${agent.label} 会话，请先在电脑会话中加载并配置插件。` : "当前目录没有可用的现有会话。"}</EmptyState>}
-          {cursor && <button className="action-button" disabled={loading} onClick={() => void loadSessions(agent, true)}>加载更多会话</button>}
-        </>}
-        {loading && (agent ? !sessions.length : !agents.length) ? <ListSkeleton label="正在读取…" />
-          : loading && <p className="inline-loading" role="status"><Loader2 className="spin" size={18} />正在刷新…</p>}
+        {sessionList()}
       </PullToRefresh>}
   </main>;
 }

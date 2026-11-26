@@ -14,7 +14,7 @@ function localFileName(destination: string) {
 
 // Web addresses only (#58). ASCII characters, so a URL never swallows the Chinese text or
 // full-width punctuation around it; trailing sentence punctuation stays outside the link.
-const urlPattern = /https?:\/\/[A-Za-z0-9][A-Za-z0-9\-._~:/?#[\]@!$&'*+,;=%]*/gu;
+const urlPattern = /https?:\/\/[A-Za-z0-9][A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]*/gu;
 
 function webUrl(candidate: string) {
   try {
@@ -23,10 +23,15 @@ function webUrl(candidate: string) {
   } catch { return null; }
 }
 
+const count = (text: string, character: string) => text.split(character).length - 1;
+
 function trimUrl(raw: string) {
   let url = raw.replace(/[.,;:!?'*]+$/u, "");
-  // A closing bracket without its opener belongs to the surrounding text.
-  while (url.endsWith("]") && (url.match(/\[/gu)?.length ?? 0) < (url.match(/\]/gu)?.length ?? 0)) url = url.slice(0, -1).replace(/[.,;:!?'*]+$/u, "");
+  // Balanced parentheses and brackets are part of the address (`/wiki/Foo_(bar)`); a closer
+  // without its opener belongs to the surrounding text (`(see https://…)`).
+  for (const [open, close] of [["(", ")"], ["[", "]"]] as const) {
+    while (url.endsWith(close) && count(url, open) < count(url, close)) url = url.slice(0, -1).replace(/[.,;:!?'*]+$/u, "");
+  }
   return url;
 }
 
