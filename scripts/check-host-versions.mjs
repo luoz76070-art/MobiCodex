@@ -2,8 +2,12 @@
 // Daily review (#62): are the installed DeepSeek Harness and OpenCode builds ones MobiCodex verified? Reads only.
 // Run through `corepack pnpm check:host-versions` (builds the relay first).
 // Exit 0: every installed host is verified or absent. Exit 2: run the isolated checks, or update the linked plugin.
+// codexDesktop is informational (#63): its version, and whether the desktop IPC or the shared daemon socket exists.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
+import net from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
 import { harnessSupport, verifiedHarnessVersions } from '../plugins/mobile-deepseek/bridge.mjs';
 
 const relay = new URL('../apps/relay/dist/agents/', import.meta.url);
@@ -31,6 +35,23 @@ const report = {
   },
   opencode: { installed: opencode, status: opencode ? hostSupport(opencode, openCodeVerifiedVersions) ?? 'unsupported' : 'absent', verified: openCodeVerifiedVersions },
 };
+// 'listening', 'stale' (a socket file nobody serves) or 'absent'. Connecting sends nothing.
+const socketState = async file => {
+  if (!await fs.stat(file).then(() => true, () => false)) return 'absent';
+  return new Promise(resolve => {
+    const socket = net.createConnection(file);
+    const done = state => { socket.destroy(); resolve(state); };
+    socket.once('connect', () => done('listening')); socket.once('error', () => done('stale')); socket.setTimeout(2000, () => done('stale'));
+  });
+};
+let codexDesktop = null;
+if (process.platform === 'darwin') {
+  const plist = await fs.readFile('/Applications/ChatGPT.app/Contents/Info.plist', 'utf8').catch(() => '');
+  const home = path.join(os.homedir(), '.codex');
+  codexDesktop = { installed: /<key>CFBundleShortVersionString<\/key>\s*<string>([^<]{1,64})<\/string>/u.exec(plist)?.[1] ?? null,
+    ipcSocket: await socketState(path.join(home, 'ipc', 'ipc.sock')), daemonSocket: await socketState(path.join(home, 'app-server-control', 'app-server-control.sock')) };
+}
+report.codexDesktop = codexDesktop;
 console.log(JSON.stringify(report, null, 2));
 const attention = [report.deepseek.status, report.opencode.status].some(status => status === 'unverified' || status === 'unsupported')
   || report.deepseek.linkedPluginAccepts === false;

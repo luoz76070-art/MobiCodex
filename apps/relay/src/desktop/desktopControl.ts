@@ -321,6 +321,9 @@ export class DesktopControl {
     capabilities: string[];
     following?: { threadId: string; state: FollowStatus["state"]; errorCode?: string }[];
     error?: string;
+    /** desktop_ipc_missing: nothing serves the desktop IPC socket. Codex desktop 26.1117+ runs its app-server
+     * privately unless told to use the shared daemon, so the phone can read desktop threads but not drive them (#63). */
+    reason?: "desktop_ipc_missing" | "desktop_ipc_failed";
   }> {
     if (process.platform === "darwin" && this.transport === "legacy") {
       await this.client.connect().catch(() => undefined);
@@ -354,10 +357,12 @@ export class DesktopControl {
       };
     } catch (error) {
       const activeThread = await this.store.getActiveDesktopThread().catch(() => null);
+      const ipc = this.client.getStatus();
       return {
         ok: false,
         mode: "desktop-ipc-follower-control",
-        ipc: this.client.getStatus(),
+        reason: /\b(ENOENT|ECONNREFUSED)\b/u.test(ipc.lastError ?? toErrorMessage(error)) ? "desktop_ipc_missing" : "desktop_ipc_failed",
+        ipc,
         activeThread,
         activeThreadSource: "session-index",
         activeStreamThreadId: this.activeConversationId,

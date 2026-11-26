@@ -50,7 +50,7 @@ export type RelayStatus = {
   uploadDir: string;
   codexExecutable?: string | { executable: string | null; source: string; searched: string[] };
   live?: { ok: boolean; mode: string; threadCount?: number; error?: string };
-  desktopControl?: { ok: boolean; mode: string; error?: string };
+  desktopControl?: { ok: boolean; mode: string; error?: string; reason?: string };
   activeDesktopThread?: ThreadSummary | null;
 };
 
