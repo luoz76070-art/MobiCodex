@@ -203,6 +203,10 @@ test('#58 bare web addresses and addresses written as inline code are tappable l
   assert.match(html, /<code>javascript:alert\(1\)<\/code>/);
   assert.doesNotMatch(html, /href="https:\/\/example.com\/in-block"/, 'code blocks stay literal');
   assert.doesNotMatch(render(h(MessageContent, { text: 'http://  和 https://-bad 不是地址' })), /<a /);
+  // Codex review on #60: a parenthesized path stays whole; a sentence's closing parenthesis does not join it.
+  const parens = render(h(MessageContent, { text: '见 https://example.com/wiki/Foo_(bar) 和 (see https://example.com/a)。' }));
+  assert.deepEqual([...parens.matchAll(/<a href="([^"]+)"/g)].map(match => match[1]), ['https://example.com/wiki/Foo_(bar)', 'https://example.com/a']);
+  assert.match(parens, /https:\/\/example.com\/a<\/a>\)。/);
 });
 
 test('U12 GFM tables render as scrollable tables with alignment, inline Markdown and bounded cells', () => {
