@@ -387,3 +387,15 @@ test('S2 native snapshots project only current active item metadata and invalida
   await until(() => latest()?.activeTurnId === 'new-turn'); assert.equal(latest().activityEvidence, null);
   f.disconnect(); await until(() => latest()?.changeType === 'disconnected'); assert.equal(latest().activityEvidence, null);
 });
+
+test('#63 a missing desktop IPC socket is reported as view-only, not as a sync delay', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mobile-desktop-missing-'));
+  const client = new DesktopIpcClient({ clientType: 'synthetic-native', pipePath: path.join(root, 'ipc.sock'), requestTimeoutMs: 60 });
+  const store = { getThreadSummary: async () => null, getActiveDesktopThread: async () => null, close() {} };
+  const control = new DesktopControl(store, { client, transport: 'native', confirmationMs: 20 });
+  t.after(async () => { await control.stop(); await fs.rm(root, { recursive: true, force: true }); });
+  const status = await control.status();
+  assert.equal(status.ok, false); assert.equal(status.reason, 'desktop_ipc_missing');
+  assert.deepEqual(status.capabilities, ['desktop-tail']);
+});
+

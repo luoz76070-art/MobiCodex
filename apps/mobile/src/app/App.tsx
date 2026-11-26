@@ -237,6 +237,8 @@ export function App() {
       </section></div>, document.body)}</BackLayer></ProductRemoteShell></BackLayersContext.Provider>;
 }
 
+const desktopViewOnlyText = "电脑上的 Codex 没有开放手机控制，这个桌面会话暂时只能查看";
+
 function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onOpenSettings, onSettingsTools, intakeShare, onShareDone, onCaptureIntake, intakeShortcut, onShortcutOpened, handoffTarget, onTargetOpened, onCapture, voiceRecovery, connection, scope, onOpenAgents }: { navigation: Navigation; onSelectSession: (id: string | null, internal?: boolean) => boolean; settingsOpen: boolean; preferences: CodexPreferences; onOpenSettings: () => void; onSettingsTools: (tools: CodexSettingsTools | null) => void; intakeShare: SharePayload | null; onShareDone: (id: string) => void; onCaptureIntake: (draft: CaptureInitialDraft) => void; intakeShortcut: IntakeShortcut | null; onShortcutOpened: (id: number) => void; handoffTarget: SessionTarget | null; onTargetOpened: () => void; onCapture: () => void; voiceRecovery: VoiceRecoveryPort; connection: ConnectionProfile; scope: string; onOpenAgents: () => void }) {
   const scopeAbortRef = useRef(new AbortController());
   const diagnosticJournalRef = useRef(createConnectionJournal());
@@ -367,6 +369,8 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
   const canUseDesktopIpc = Boolean(isDesktopWatch && selected?.id && (desktopCapability ? desktopCapability.token : !nativeDesktop && activeDesktopThreadId === selected.id));
   const canInterrupt = isDesktopWatch ? Boolean(desktopCapability?.canInterrupt && desktopCapability.token && desktopCapability.activeTurnId) : Boolean(activeRuntime.activeTurnId);
   const isDesktopHistoryOnly = Boolean(isDesktopWatch && selected?.id && !canUseDesktopIpc);
+  // #63: nothing on the computer accepts desktop control, so this is not a sync delay.
+  const desktopViewOnly = isDesktopHistoryOnly && relayStatus?.desktopControl?.reason === "desktop_ipc_missing";
   const isLiveTurnActive = activeRuntime.turnStatus === "starting" || activeRuntime.turnStatus === "inProgress";
   const quotaTurnId = activeRuntime.lastTurn?.turnId ?? "";
   const quotaKey = selected?.id && needsQuotaSwitch(activeRuntime.lastTurn, isLiveTurnActive) && !quotaDismissed(selected.id, quotaTurnId) ? `${selected.id}|${quotaTurnId}` : null;
@@ -405,6 +409,8 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
     ? activeRuntime.sending
       ? nativeDesktop ? "运行中，可选择引导或排队" : "运行中，可继续引导或打断"
       : "发送到所选桌面会话"
+    : desktopViewOnly
+      ? desktopViewOnlyText
     : isDesktopHistoryOnly
       ? "正在同步桌面控制状态"
     : isLiveTurnActive
@@ -898,7 +904,8 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
     if (selected.id !== threadKey || selectedRef.current?.id !== threadKey) return outcome('rejected');
     const control = desktopSendControl(activeRuntimeRef.current, relayStatus?.desktopControl?.mode);
     if (!control.ready || (handoffSubmission && !control.native)) {
-      const detail = "正在同步桌面控制状态，请稍后手动发送；草稿已保留。";
+      const detail = relayStatus?.desktopControl?.reason === "desktop_ipc_missing"
+        ? `${desktopViewOnlyText}；草稿已保留。` : "正在同步桌面控制状态，请稍后手动发送；草稿已保留。";
       patchRuntime(threadKey, { status: detail, desktopSendFeedback: detail });
       setStatus(detail);
       return outcome('rejected');
@@ -1764,7 +1771,7 @@ function Workspace({ navigation, onSelectSession, settingsOpen, preferences, onO
                   {isNewThread ? "手机新建" : sourceLabel(selected?.source ?? null)}
                 </span>
                 {canUseDesktopIpc && <span className="watch-chip">桌面可控</span>}
-                {isDesktopHistoryOnly && <span className="watch-chip warn">历史可接管</span>}
+                {isDesktopHistoryOnly && <span className="watch-chip warn">{desktopViewOnly ? "只能查看" : "历史可接管"}</span>}
                 {activeRuntime.watching && <span className="watch-chip live">同步中</span>}
               </div>
             </div>
