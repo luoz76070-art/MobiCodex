@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
@@ -257,4 +257,13 @@ test('background staging downloads only a new compatible bundle the user has not
   served = { ...manifest, sha256: 'bad' };
   assert.equal(await m.stageHotUpdate(40), null, 'an invalid manifest is ignored');
   assert.equal(staged.length, 1);
+});
+
+test('the UI update is confirmed and the next one fetched from the app root, whichever page opens first', async () => {
+  const source = await readFile('apps/mobile/src/app/App.tsx', 'utf8');
+  const body = name => { const start = source.indexOf(`function ${name}(`); const next = source.indexOf('\nfunction ', start + 1); return source.slice(start, next < 0 ? undefined : next); };
+  const root = body('App'), workspace = body('Workspace');
+  assert.ok(root.includes('NativeHotUpdate.markReady()') && root.includes('stageHotUpdate(appVersionCode)'), 'App root confirms and stages');
+  assert.ok(!workspace.includes('NativeHotUpdate.markReady()') && !workspace.includes('stageHotUpdate('), 'the Codex workspace no longer owns it');
+  assert.equal(source.split('stageHotUpdate(appVersionCode)').length, 2, 'scheduled exactly once');
 });
